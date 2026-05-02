@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Karate Quest</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --blue:  #1798d3;
+  --gold:  #ffd700;
+  --green: #00cc55;
+  --red:   #ff2244;
+  --dark:  #080818;
+  --panel: #10102a;
+}
+
+body {
+  background: var(--dark);
+  color: #fff;
+  font-family: 'Press Start 2P', monospace;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 10px;
+}
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(0deg,
+    transparent, transparent 2px,
+    rgba(0,0,0,0.07) 2px, rgba(0,0,0,0.07) 4px);
+  pointer-events: none;
+  z-index: 999;
+}
+
+/* ─── SCREENS ─────────────────────────────────────────────── */
+.screen { display: none; width: 100%; max-width: 580px; flex-direction: column; align-items: center; gap: 7px; }
+.screen.on { display: flex; }
+
+/* ─── TITLE ──────────────────────────────────────────────── */
+.game-title {
+  font-size: clamp(22px, 7vw, 40px);
+  color: var(--blue);
+  text-shadow: 4px 4px 0 #000, -1px -1px 0 #000;
+  text-align: center;
+  line-height: 1.4;
+}
+.game-sub { font-size: clamp(7px, 2.5vw, 10px); color: var(--gold); letter-spacing: 2px; }
+
+/* ─── BUTTONS ────────────────────────────────────────────── */
+.btn {
+  display: block; width: 100%;
+  padding: 13px 10px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(10px, 3vw, 14px);
+  border: 4px solid #fff;
+  background: var(--blue);
+  color: #fff;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  line-height: 1.6;
+  -webkit-tap-highlight-color: transparent;
+  transition: filter .1s, transform .1s;
+}
+.btn:active    { transform: scale(.96); filter: brightness(.75); }
+.btn-m         { background: #b84400; border-color: #ff8833; }
+.btn-e         { background: #5500bb; border-color: #aa66ff; }
+.btn-x         { background: #006644; border-color: #00ffaa; }
+.btn-grey      { background: #2a2a2a; border-color: #555; }
+
+/* ─── CHARACTER SELECT ───────────────────────────────────── */
+.char-label { font-size: clamp(7px, 2vw, 9px); color: #888; align-self: flex-start; margin-bottom: -2px; }
+.char-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  width: 100%;
+}
+.char-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 3px 8px;
+  background: var(--panel);
+  border: 3px solid #2a2a44;
+  color: #555;
+  cursor: pointer;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(5px, 1.5vw, 7px);
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color .12s, color .12s;
+}
+.char-btn.active { border-color: var(--gold); color: var(--gold); }
+.char-btn:active { transform: scale(.95); }
+.char-preview {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  width: 56px;
+  height: 68px;
+  display: block;
+}
+@media (max-width: 340px) { .char-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* ─── HOME BUTTON ────────────────────────────────────────── */
+.home-btn {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 200;
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+  background: #10102a;
+  border: 2px solid #333;
+  color: #666;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color .1s, color .1s;
+}
+.home-btn.visible { display: flex; }
+.home-btn:active  { border-color: var(--gold); color: var(--gold); }
+
+/* ─── BATTLE HUD ──────────────────────────────────────────── */
+.hud {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 6px;
+  align-items: start;
+  padding-top: 4px;
+}
+.fl     { font-size: clamp(6px, 2vw, 8px); color: var(--gold); margin-bottom: 3px; }
+.fl-r   { text-align: right; }
+.hpbg   { height: 13px; background: #222; border: 2px solid #444; }
+.hpfill { height: 100%; transition: width .4s ease; }
+.hp-p   { background: var(--green); }
+.hp-e   { background: var(--red); }
+.hearts { font-size: clamp(11px, 3.5vw, 16px); margin-top: 2px; line-height: 1; }
+.hud-mid { font-size: clamp(7px, 2.2vw, 10px); color: var(--blue); text-align: center; }
+.rings   { font-size: clamp(8px, 2.5vw, 11px); color: var(--gold); margin-top: 2px; }
+
+/* ─── BATTLE CANVAS ───────────────────────────────────────── */
+#bc {
+  width: 100%; max-width: 560px;
+  border: 4px solid var(--blue);
+  box-shadow: 0 0 16px var(--blue);
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+}
+
+/* ─── QUESTION ────────────────────────────────────────────── */
+.prog { font-size: clamp(7px, 2vw, 9px); color: #555; align-self: flex-start; }
+.qbox {
+  width: 100%;
+  background: var(--panel);
+  border: 3px solid var(--blue);
+  padding: 11px 13px;
+  font-size: clamp(10px, 3vw, 14px);
+  line-height: 2;
+  text-align: center;
+  white-space: pre-line;
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ─── ANSWER GRID ─────────────────────────────────────────── */
+.agrid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; width: 100%; }
+.abtn {
+  padding: 12px 6px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(9px, 2.8vw, 13px);
+  background: #14142a;
+  border: 3px solid #2a2a44;
+  color: #fff;
+  cursor: pointer;
+  line-height: 1.8;
+  min-height: 56px;
+  white-space: pre-line;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .1s, background .12s, border-color .12s;
+}
+.abtn:active         { transform: scale(.96); }
+.abtn.correct        { background: #00260e; border-color: #00ff66; color: #00ff66; }
+.abtn.wrong          { background: #2a0000; border-color: #ff3333; color: #ff4444; }
+.abtn:disabled       { cursor: default; }
+
+/* ─── RESULT SCREEN ───────────────────────────────────────── */
+.rhead { font-size: clamp(24px, 7vw, 40px); text-align: center; line-height: 1.3; }
+.rhead.win  { color: var(--gold); }
+.rhead.lose { color: var(--red); }
+.rring { font-size: clamp(13px, 4.5vw, 22px); color: var(--gold); }
+.rmsg  { font-size: clamp(9px, 2.8vw, 12px); color: #bbb; text-align: center; line-height: 2.3; white-space: pre-line; }
+
+/* ─── DOJO LABEL ──────────────────────────────────────────── */
+.dojo-label { font-size: clamp(7px, 2vw, 9px); color: #555; align-self: flex-start; margin-top: 2px; }
+
+/* ─── TOTAL RINGS BANK ────────────────────────────────────── */
+.bank {
+  width: 100%;
+  background: var(--panel);
+  border: 3px solid var(--gold);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.bank-label { font-size: clamp(6px, 1.8vw, 8px); color: #888; }
+.bank-total { font-size: clamp(13px, 4vw, 18px); color: var(--gold); }
+.bank-reset {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(5px, 1.5vw, 7px);
+  background: #1a1a1a;
+  border: 2px solid #444;
+  color: #555;
+  cursor: pointer;
+  padding: 4px 6px;
+  -webkit-tap-highlight-color: transparent;
+}
+.bank-reset:active { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  TITLE SCREEN                                             -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="screen on" id="sTitle">
+  <div class="game-title" id="gameTitle">KARATE QUEST</div>
+  <div class="game-sub">★ LEARNING EDITION ★</div>
+
+  <canvas id="tc" width="320" height="96"
+    style="max-width:320px;width:100%;image-rendering:pixelated;margin:2px 0;"></canvas>
+
+  <p class="char-label">CHOOSE YOUR FIGHTER:</p>
+  <div class="char-grid">
+    <button class="char-btn active" data-char="cat"      onclick="selectChar('cat')">
+      <canvas class="char-preview" id="prev-cat"></canvas>
+      <span>CAT</span>
+    </button>
+    <button class="char-btn" data-char="hedgehog" onclick="selectChar('hedgehog')">
+      <canvas class="char-preview" id="prev-hedgehog"></canvas>
+      <span>HEDGEHOG</span>
+    </button>
+    <button class="char-btn" data-char="robot"    onclick="selectChar('robot')">
+      <canvas class="char-preview" id="prev-robot"></canvas>
+      <span>ROBOT</span>
+    </button>
+    <button class="char-btn" data-char="ninja"    onclick="selectChar('ninja')">
+      <canvas class="char-preview" id="prev-ninja"></canvas>
+      <span>NINJA</span>
+    </button>
+  </div>
+
+  <div class="bank">
+    <div>
+      <div class="bank-label">TOTAL RINGS EARNED</div>
+      <div class="bank-total">🔵 <span id="bankTotal">0</span></div>
+    </div>
+    <button class="bank-reset" onclick="resetBank()" title="Reset after giving reward">RESET</button>
+  </div>
+
+  <p class="dojo-label">CHOOSE YOUR DOJO:</p>
+  <button class="btn btn-m" onclick="start('maths')">⚔  MATHS DOJO</button>
+  <button class="btn btn-e" onclick="start('english')">📖 ENGLISH DOJO</button>
+  <button class="btn btn-x" onclick="start('mixed')">🌟 MIXED + FUN</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  BATTLE SCREEN                                            -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="screen" id="sBattle">
+  <div class="hud">
+    <div>
+      <div class="fl" id="hudName">PLAYER</div>
+      <div class="hpbg"><div class="hpfill hp-p" id="pBar" style="width:100%"></div></div>
+      <div class="hearts" id="pH">❤️❤️❤️</div>
+    </div>
+    <div class="hud-mid">
+      VS
+      <div class="rings" id="rings">🔵 0</div>
+    </div>
+    <div>
+      <div class="fl fl-r">ENEMY</div>
+      <div class="hpbg"><div class="hpfill hp-e" id="eBar" style="width:100%"></div></div>
+      <div class="hearts" style="text-align:right" id="eH">❤️❤️❤️</div>
+    </div>
+  </div>
+
+  <canvas id="bc" width="560" height="148"></canvas>
+
+  <div class="prog" id="prog">Question 1 of 5</div>
+  <div class="qbox" id="qbox">…</div>
+
+  <div class="agrid">
+    <button class="abtn" id="a0" onclick="ans(0)"></button>
+    <button class="abtn" id="a1" onclick="ans(1)"></button>
+    <button class="abtn" id="a2" onclick="ans(2)"></button>
+    <button class="abtn" id="a3" onclick="ans(3)"></button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  RESULT SCREEN                                            -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="screen" id="sResult">
+  <div class="rhead" id="rHead">YOU WIN!</div>
+  <canvas id="rc" width="200" height="96"
+    style="max-width:200px;image-rendering:pixelated;"></canvas>
+  <div class="rring" id="rRings">🔵 0 RINGS!</div>
+  <div class="rmsg"  id="rMsg"></div>
+  <button class="btn"          onclick="start(lastSub)">▶ PLAY AGAIN</button>
+  <button class="btn btn-grey" onclick="goTitle()">↩ CHANGE DOJO</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  PERSISTENT HOME BUTTON (hidden on title)                 -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<button id="homeBtn" class="home-btn" onclick="goTitle()" aria-label="Home">⌂</button>
+
+<script src="questions.js"></script>
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════════
+//  CONFIG  ← Edit here to personalise the game
+// ═══════════════════════════════════════════════════════════════
+const PLAYER_NAME = 'Sam';   // ← Change this to your pupil's name
+
+// ─── SPRITE DATA ───────────────────────────────────────────────
+// 10 × 13 pixel grid. Palette indices:
+//   0=transparent  1=outline  2=body  3=eye  4=nose
+//   5=gi/suit      6=belt     7=accent
+const SPR = [
+  [0,0,1,1,0,0,1,1,0,0],  //  0  ears / top of head
+  [0,1,1,1,1,1,1,1,1,0],  //  1  head top
+  [0,1,2,2,2,2,2,2,1,0],  //  2  forehead
+  [0,1,2,3,2,2,3,2,1,0],  //  3  eyes
+  [0,1,2,2,4,2,2,2,1,0],  //  4  nose / muzzle
+  [0,1,2,2,2,2,2,2,1,0],  //  5  chin
+  [2,5,5,5,5,5,5,5,5,2],  //  6  shoulders (arms at sides)
+  [0,1,5,5,5,5,5,5,1,0],  //  7  gi body
+  [0,1,6,6,6,6,6,6,1,0],  //  8  belt
+  [0,1,5,5,0,0,5,5,1,0],  //  9  hips
+  [0,1,2,2,0,0,2,2,1,0],  // 10  upper legs
+  [0,1,2,2,0,0,2,2,1,0],  // 11  lower legs
+  [1,2,2,2,0,0,2,2,2,1],  // 12  feet
+];
+const SW = 10, SH = SPR.length;
+
+// Per-character head row overrides (rows 0 & 1 only)
+const SPR_OVERRIDES = {
+  hedgehog: {
+    0: [1,2,1,2,1,2,1,2,1,2],  // spiky top
+    1: [1,2,2,1,2,2,1,2,2,1],  // spike bases
+  },
+  robot: {
+    0: [0,0,0,0,1,1,0,0,0,0],  // antenna
+    1: [1,1,1,1,1,1,1,1,1,1],  // flat square head
+  },
+  ninja: {
+    0: [0,0,0,0,0,0,0,0,0,0],  // no ears
+    1: [0,1,1,7,7,7,7,1,1,0],  // headband with knot (index 7 = accent)
+  },
+};
+
+// Character palettes  [transparent, outline, body, eye, nose, gi, belt, accent]
+const PAL = {
+  cat:      ['transparent','#111','#f4a830','#111',   '#ff88aa','#ffffff','#1798d3','#f4a830'],
+  hedgehog: ['transparent','#111','#2277ee','#111',   '#ffaacc','#ffffff','#dd2200','#55ccff'],
+  robot:    ['transparent','#334','#aabbcc','#00ffdd','#00ffdd','#cce4ee','#667788','#00ffdd'],
+  ninja:    ['transparent','#111','#2a1040','#ff2244','#cc1133','#1a0a2e','#660099','#dd44ff'],
+  enemy:    ['transparent','#111','#778899','#111',   '#ff88aa','#dddddd','#cc1122','#778899'],
+};
+
+// ─── DRAW SPRITE ───────────────────────────────────────────────
+function drawSprite(ctx, x, y, sc, pal, flip, action, char) {
+  char = char || 'cat';
+  const ov = SPR_OVERRIDES[char] || {};
+
+  // Extended punch arm
+  if (action === 'attack') {
+    [[10,6],[11,5],[11,4]].forEach(([c,r]) => {
+      if (pal[2] === 'transparent') return;
+      ctx.fillStyle = pal[2];
+      const cx = flip ? -(c - SW + 1) : c;
+      ctx.fillRect(x + cx*sc, y + r*sc, sc, sc);
+    });
+  }
+
+  // Main body pixels
+  for (let r = 0; r < SH; r++) {
+    const row = ov[r] || SPR[r];
+    for (let c = 0; c < SW; c++) {
+      const idx = row[c];
+      if (idx === 0) continue;
+      ctx.fillStyle = pal[idx] || pal[1];
+      const cx = flip ? (SW - 1 - c) : c;
+      ctx.fillRect(x + cx*sc, y + r*sc, sc, sc);
+    }
+  }
+
+  // Robot: glowing eye aura
+  if (char === 'robot') {
+    ctx.save();
+    ctx.globalAlpha = 0.32;
+    ctx.fillStyle = pal[3];
+    ctx.fillRect(x + 2*sc, y + 3*sc, 2*sc, 2*sc);
+    ctx.fillRect(x + 5*sc, y + 3*sc, 2*sc, 2*sc);
+    ctx.restore();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Questions are loaded from questions.js
+//  Ask me (Claude) to add more questions to that file!
+// ═══════════════════════════════════════════════════════════════
+// ─── RING BANK (persistent via Google Sheets, localStorage fallback) ──
+const BANK_API = 'https://script.google.com/macros/s/AKfycby8roQ5f6_RnEXfpyKQCPJsZGS6bbVfIacKx-pXIHK8TKNzSwOQSXhekU6f4s8_NAX4RA/exec';
+
+async function callBank(params) {
+  try {
+    const r = await fetch(BANK_API + '?' + params, { redirect: 'follow' });
+    const d = await r.json();
+    const rings = typeof d.rings === 'number' ? d.rings
+                : typeof d.total === 'number' ? d.total : null;
+    if (rings !== null) {
+      localStorage.setItem('kq_rings', rings);
+      return rings;
+    }
+  } catch(e) {}
+  return parseInt(localStorage.getItem('kq_rings') || '0');
+}
+
+async function updateBankDisplay() {
+  const total = await callBank('action=get');
+  document.getElementById('bankTotal').textContent = total;
+}
+
+async function recordGame(rings, attempted, correct, minutes, subject) {
+  // Optimistic update so display changes immediately
+  const optimistic = parseInt(localStorage.getItem('kq_rings') || '0') + rings;
+  localStorage.setItem('kq_rings', optimistic);
+  document.getElementById('bankTotal').textContent = optimistic;
+  // Sync full session data to sheet in background
+  callBank(
+    'action=add' +
+    '&rings='     + rings +
+    '&attempted=' + attempted +
+    '&correct='   + correct +
+    '&minutes='   + minutes +
+    '&subject='   + encodeURIComponent(subject)
+  );
+}
+
+async function resetBank() {
+  if (confirm('Reset the ring total? Only do this after giving the reward!')) {
+    localStorage.setItem('kq_rings', '0');
+    document.getElementById('bankTotal').textContent = '0';
+    callBank('action=reset');
+  }
+}
+
+// ─── STATE ─────────────────────────────────────────────────────
+let G        = {};
+let lastSub  = 'mixed';
+let selectedChar = 'cat';
+
+// Animation
+let bCtx, raf = null, titleRaf = null, bobT = 0;
+let pAct = {n:'idle', t:0};
+let eAct = {n:'idle', t:0};
+let pFlash = false, eFlash = false;
+
+// ─── AUDIO ─────────────────────────────────────────────────────
+let aC = null;
+function sfx(type) {
+  try {
+    if (!aC) aC = new (window.AudioContext || window.webkitAudioContext)();
+    const o = aC.createOscillator(), g = aC.createGain();
+    o.connect(g); g.connect(aC.destination);
+    const t = aC.currentTime;
+    const cfg = {
+      correct: {t:'square',   f:[[523,0],[659,.1],[784,.2]],           d:.5 },
+      wrong:   {t:'sawtooth', f:[[220,0],[160,.15]],                   d:.4 },
+      win:     {t:'square',   f:[[523,0],[659,.15],[784,.3],[1047,.45]],d:.85},
+      lose:    {t:'sawtooth', f:[[300,0],[240,.2],[180,.4],[130,.6]],   d:.9 },
+      ring:    {t:'sine',     f:[[1100,0],[1380,.06]],                  d:.2 },
+    }[type];
+    if (!cfg) return;
+    o.type = cfg.t;
+    cfg.f.forEach(([f,w]) => o.frequency.setValueAtTime(f, t + w));
+    g.gain.setValueAtTime(0.22, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + cfg.d);
+    o.start(t); o.stop(t + cfg.d);
+  } catch(e) {}
+}
+
+// ─── CANVAS: BATTLE ───────────────────────────────────────────
+function initBattle() {
+  const c = document.getElementById('bc');
+  bCtx = c.getContext('2d');
+  c.width  = c.offsetWidth  || 560;
+  c.height = 148;
+  loop();
+}
+
+function loop() {
+  cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(tick);
+}
+
+function tick() {
+  const ctx = bCtx;
+  const W = ctx.canvas.width, H = ctx.canvas.height;
+  bobT += 0.06;
+
+  // Background
+  ctx.fillStyle = '#08082a';
+  ctx.fillRect(0, 0, W, H);
+
+  // Twinkling stars
+  [[28,10],[78,6],[155,16],[240,5],[325,19],[408,9],[482,14],[115,28],[362,25],[50,34]].forEach(([sx,sy],i) => {
+    const bright = Math.sin(bobT * 2 + i * .7) > .5;
+    ctx.fillStyle = bright ? '#fff' : '#888';
+    ctx.fillRect(sx, sy, bright ? 2 : 1, bright ? 2 : 1);
+  });
+
+  // Ground
+  const GY = H - 20;
+  ctx.fillStyle = '#1798d3';
+  ctx.fillRect(0, GY, W, 3);
+  for (let i = 0; i < W; i += 28) {
+    ctx.fillStyle = Math.floor(i/28) % 2 === 0 ? '#0d4466' : '#0b3a55';
+    ctx.fillRect(i, GY + 3, 28, H - GY - 3);
+  }
+
+  // Scale & base positions
+  const sc = Math.max(4, Math.min(6, Math.floor(W / 80)));
+  const sprH = SH * sc;
+  const baseY = GY - sprH;
+  const pb = Math.sin(bobT) * 2;
+  const eb = Math.sin(bobT + Math.PI) * 2;
+
+  // ── Compute offsets from actions ──────────────────────────────
+  let pOx = 0, pOy = 0, eOx = 0, eOy = 0;
+
+  if (pAct.n === 'attack') {
+    const p = 1 - pAct.t / 20;
+    pOx = Math.round(sc * 10 * Math.sin(p * Math.PI));       // lunge forward
+    pOy = Math.round(-sc * 5 * Math.sin(p * Math.PI));       // arc upward
+  }
+  if (eAct.n === 'attack') {
+    const p = 1 - eAct.t / 20;
+    eOx = -Math.round(sc * 10 * Math.sin(p * Math.PI));      // lunge toward player
+    eOy = Math.round(-sc * 5 * Math.sin(p * Math.PI));
+  }
+  if (pAct.n === 'hit') {
+    const decay = pAct.t / 18;
+    pOx = Math.round(-sc * 3 * Math.sin(pAct.t * 1.8) * decay);
+    pOy = Math.round(sc * 1.5 * Math.abs(Math.sin(pAct.t * 1.8)) * decay);
+  }
+  if (eAct.n === 'hit') {
+    const decay = eAct.t / 18;
+    eOx = Math.round(sc * 3 * Math.sin(eAct.t * 1.8) * decay);
+    eOy = Math.round(sc * 1.5 * Math.abs(Math.sin(eAct.t * 1.8)) * decay);
+  }
+
+  const pX = Math.round(W * 0.08) + pOx;
+  const eX = Math.round(W * 0.60) + eOx;
+  const pY = Math.round(baseY + pb) + pOy;
+  const eY = Math.round(baseY + eb) + eOy;
+
+  // ── Draw characters ───────────────────────────────────────────
+  drawSprite(ctx, pX, pY, sc, PAL[selectedChar], false, pAct.n, selectedChar);
+  drawSprite(ctx, eX, eY, sc, PAL.enemy,         true,  eAct.n, 'cat');
+
+  // ── Hit flash tint ────────────────────────────────────────────
+  if (pFlash && pAct.t > 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.45 * (pAct.t / 18);
+    ctx.fillStyle = '#ff4444';
+    ctx.fillRect(pX, pY, SW * sc, sprH);
+    ctx.restore();
+  }
+  if (eFlash && eAct.t > 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.45 * (eAct.t / 18);
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(eX, eY, SW * sc, sprH);
+    ctx.restore();
+  }
+
+  // ── Sparks ────────────────────────────────────────────────────
+  if (eFlash) sparks(ctx, eX + SW/2*sc, eY + 2*sc, '#ffd700');
+  if (pFlash) sparks(ctx, pX + SW/2*sc, pY + 2*sc, '#ff4444');
+
+  // ── Tick action timers ────────────────────────────────────────
+  if (pAct.t > 0 && --pAct.t === 0) { pAct.n = 'idle'; pFlash = false; }
+  if (eAct.t > 0 && --eAct.t === 0) { eAct.n = 'idle'; eFlash = false; }
+
+  raf = requestAnimationFrame(tick);
+}
+
+function sparks(ctx, x, y, color) {
+  ctx.fillStyle = color;
+  for (let i = 0; i < 7; i++) {
+    const rx = (Math.random() - .5) * 26, ry = (Math.random() - .5) * 24;
+    ctx.fillRect(x + rx, y + ry, 3, 3);
+  }
+}
+
+// ─── CANVAS: TITLE ────────────────────────────────────────────
+function titleAnim() {
+  cancelAnimationFrame(titleRaf);
+  const c = document.getElementById('tc');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  c.width  = c.offsetWidth || 320;
+  c.height = 96;
+  let t = 0;
+
+  (function draw() {
+    ctx.fillStyle = '#08082a';
+    ctx.fillRect(0, 0, c.width, c.height);
+    t += 0.05;
+    const sc = 4, H = SH * sc;
+    const baseY = 90 - H;
+    const b1 = Math.sin(t) * 3, b2 = Math.sin(t + Math.PI) * 3;
+
+    drawSprite(ctx, 14,              baseY + b1, sc, PAL[selectedChar], false, 'idle', selectedChar);
+    drawSprite(ctx, c.width - 14 - SW*sc, baseY + b2, sc, PAL.enemy,   true,  'idle', 'cat');
+
+    ctx.fillStyle = '#ffd700';
+    ctx.font = `bold ${Math.round(c.width * .08)}px 'Press Start 2P',monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText('VS', c.width / 2, 64);
+
+    titleRaf = requestAnimationFrame(draw);
+  })();
+}
+
+// ─── CANVAS: RESULT ───────────────────────────────────────────
+function resultAnim(won) {
+  const c = document.getElementById('rc');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  c.width = 200; c.height = 96;
+  const sc = 5, sprH = SH * sc;
+  let t = 0;
+  const charName = won ? selectedChar : 'cat';
+  const basePal  = won ? PAL[selectedChar] : PAL.enemy;
+
+  (function draw() {
+    ctx.fillStyle = '#08082a';
+    ctx.fillRect(0, 0, 200, 96);
+    t += 0.07;
+
+    const oy = won ? Math.abs(Math.sin(t * 2.2)) * -16 : Math.sin(t) * 3;
+    const y  = 96 - sprH + oy;
+
+    // Belt colour cycle on win
+    let pal = basePal;
+    if (won) {
+      pal = [...basePal];
+      const colors = ['#ffd700','#00ffee','#ff88ff','#ffd700'];
+      pal[6] = colors[Math.floor(t * 3) % colors.length];
+    }
+
+    drawSprite(ctx, 200/2 - (SW*sc)/2, y, sc, pal, false, won ? 'attack' : 'idle', charName);
+
+    if (won) {
+      // Orbiting stars
+      for (let i = 0; i < 5; i++) {
+        const angle = t * 2 + (i / 5) * Math.PI * 2;
+        const sx = 100 + Math.cos(angle) * 42;
+        const sy = 48  + Math.sin(angle) * 18;
+        ctx.fillStyle = i % 2 === 0 ? '#ffd700' : '#fff';
+        ctx.font = '11px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('★', sx, sy);
+      }
+    }
+
+    requestAnimationFrame(draw);
+  })();
+}
+
+// ─── CANVAS: CHARACTER PREVIEWS (static) ─────────────────────
+function drawCharPreviews() {
+  ['cat','hedgehog','robot','ninja'].forEach(name => {
+    const c = document.getElementById('prev-' + name);
+    if (!c) return;
+    c.width  = 56;
+    c.height = 68;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#08082a';
+    ctx.fillRect(0, 0, 56, 68);
+    // Centre the 10×13 sprite at sc=4 (40×52) inside 56×68
+    drawSprite(ctx, 8, 8, 4, PAL[name], false, 'idle', name);
+  });
+}
+
+// ─── GAME LOGIC ───────────────────────────────────────────────
+function shuffle(a) {
+  const b = [...a];
+  for (let i = b.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [b[i], b[j]] = [b[j], b[i]];
+  }
+  return b;
+}
+
+function getPool(sub) {
+  const raw = sub === 'mixed'
+    ? [...QS.maths, ...QS.english, ...QS.trivia]
+    : [...QS[sub]];
+  return shuffle(raw).slice(0, 5);
+}
+
+function start(sub) {
+  lastSub = sub;
+  G = { sub, pool: getPool(sub), idx: 0, pHP: 3, eHP: 3, rings: 0, locked: false, startTime: Date.now() };
+  pAct = {n:'idle', t:0}; eAct = {n:'idle', t:0};
+  pFlash = false; eFlash = false;
+  document.getElementById('hudName').textContent = PLAYER_NAME.toUpperCase();
+  show('sBattle');
+  setTimeout(() => { initBattle(); showQ(); }, 40);
+}
+
+function showQ() {
+  const q = G.pool[G.idx];
+  G.locked = false;
+  document.getElementById('prog').textContent = `Question ${G.idx + 1} of ${G.pool.length}`;
+  document.getElementById('qbox').textContent = q.q;
+
+  const order = shuffle([0,1,2,3]);
+  order.forEach((orig, btn) => {
+    const el = document.getElementById('a' + btn);
+    el.textContent = q.a[orig];
+    el.dataset.orig = orig;
+    el.className = 'abtn';
+    el.disabled = false;
+  });
+  hud();
+}
+
+function ans(btn) {
+  if (G.locked) return;
+  G.locked = true;
+
+  const el   = document.getElementById('a' + btn);
+  const orig = parseInt(el.dataset.orig);
+  const q    = G.pool[G.idx];
+  const ok   = orig === q.c;
+
+  for (let i = 0; i < 4; i++) document.getElementById('a' + i).disabled = true;
+  el.className = 'abtn ' + (ok ? 'correct' : 'wrong');
+  if (!ok) {
+    for (let i = 0; i < 4; i++) {
+      if (parseInt(document.getElementById('a'+i).dataset.orig) === q.c)
+        document.getElementById('a'+i).className = 'abtn correct';
+    }
+  }
+
+  if (ok) {
+    sfx('correct');
+    setTimeout(() => sfx('ring'), 170);
+    G.rings += 10;
+    pAct = {n:'attack', t:20};
+    setTimeout(() => {
+      eAct = {n:'hit', t:18}; eFlash = true;
+      G.eHP = Math.max(0, G.eHP - 1); hud();
+    }, 330);
+  } else {
+    sfx('wrong');
+    eAct = {n:'attack', t:20};
+    setTimeout(() => {
+      pAct = {n:'hit', t:18}; pFlash = true;
+      G.pHP = Math.max(0, G.pHP - 1); hud();
+    }, 330);
+  }
+
+  setTimeout(() => {
+    G.idx++;
+    if (G.pHP <= 0 || G.eHP <= 0 || G.idx >= G.pool.length) endGame();
+    else showQ();
+  }, 1500);
+}
+
+function hud() {
+  document.getElementById('pBar').style.width = (G.pHP / 3 * 100) + '%';
+  document.getElementById('eBar').style.width = (G.eHP / 3 * 100) + '%';
+  const h = n => '❤️'.repeat(n) + '🖤'.repeat(3 - n);
+  document.getElementById('pH').textContent = h(G.pHP);
+  document.getElementById('eH').textContent = h(G.eHP);
+  document.getElementById('rings').textContent = '🔵 ' + G.rings;
+}
+
+function endGame() {
+  cancelAnimationFrame(raf); raf = null;
+  const won = G.pHP >= G.eHP && G.pHP > 0;
+
+  // Record session to Google Sheets
+  const minutes  = Math.round((Date.now() - G.startTime) / 6000) / 10;
+  const correct  = Math.round(G.rings / 10);
+  const subjects = { maths: 'Maths', english: 'English', mixed: 'Mixed + Fun' };
+  recordGame(G.rings, G.idx, correct, minutes, subjects[G.sub] || G.sub);
+
+  const WINS = [
+    `AMAZING ${PLAYER_NAME}!\nYOU'RE A KARATE MASTER! 🥋`,
+    `BRILLIANT ${PLAYER_NAME}!\nYOU'RE A TOTAL SUPERSTAR! ⭐`,
+    `FANTASTIC ${PLAYER_NAME}!\nYOU ABSOLUTELY SMASHED IT! 💪`,
+    `WOW ${PLAYER_NAME}!\nINCREDIBLE WORK! KEEP IT UP! 🌟`,
+    `${PLAYER_NAME} YOU'RE ON FIRE!\nWELL DONE! 🔥`,
+  ];
+  const LOSES = [
+    `GOOD TRY ${PLAYER_NAME}!\nHAVE ANOTHER GO! 💪`,
+    `DON'T GIVE UP ${PLAYER_NAME}!\nYOU'RE GETTING BETTER! 🌟`,
+    `KEEP GOING ${PLAYER_NAME}!\nYOU'RE SO BRAVE! ❤️`,
+  ];
+
+  setTimeout(() => {
+    show('sResult');
+    const h = document.getElementById('rHead');
+    h.textContent = won ? '🏆 YOU WIN!' : '💪 TRY AGAIN!';
+    h.className   = 'rhead ' + (won ? 'win' : 'lose');
+    document.getElementById('rRings').textContent = `🔵 ${G.rings} RINGS!`;
+    const pool = won ? WINS : LOSES;
+    document.getElementById('rMsg').textContent = pool[Math.floor(Math.random() * pool.length)];
+    resultAnim(won);
+    sfx(won ? 'win' : 'lose');
+  }, 700);
+}
+
+// ─── SCREEN MANAGEMENT ────────────────────────────────────────
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  // Show home button everywhere except title
+  document.getElementById('homeBtn').classList.toggle('visible', id !== 'sTitle');
+}
+
+function goTitle() {
+  cancelAnimationFrame(raf);     raf     = null;
+  cancelAnimationFrame(titleRaf); titleRaf = null;
+  show('sTitle');
+  setTimeout(titleAnim, 30);
+}
+
+function selectChar(name) {
+  selectedChar = name;
+  document.querySelectorAll('.char-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.char === name);
+  });
+  // Refresh title VS animation to show new character
+  titleAnim();
+}
+
+// ─── BOOT ─────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  // Personalise title
+  document.title = `${PLAYER_NAME}'s Karate Quest`;
+  document.getElementById('gameTitle').textContent = `${PLAYER_NAME}'S\nKARATE QUEST`;
+
+  drawCharPreviews();
+  titleAnim();
+  updateBankDisplay();
+});
+</script>
+</body>
+</html>
