@@ -54,5 +54,9 @@ const GAMES = [
   {
     id: "word-search", label: "Word Search", icon: "🔍", path: "word-search/index.html",
     isAvailable: (year, term, week) => spGetWeekPool(year, term, week).words.length > 0
+  },
+  {
+    id: "letter-detective", label: "Letter Detective", icon: "🕵️", path: "letter-detective/index.html",
+    isAvailable: (year, term, week) => spGetWeekPool(year, term, week).words.length > 0
   }
 ];
