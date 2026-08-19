@@ -232,8 +232,18 @@
 </head>
 <body>
 
+  <!-- ══════════ LOADING SCREEN — shown while boot() resolves identity/roster,
+       so a QR/link that already carries y/t/w/u never flashes the setup
+       screen underneath it while waiting on the network. ══════════ -->
+  <section id="screen-loading" class="screen active">
+    <div class="brand">
+      <div class="kicker">Wallscourt Farm Academy · Spelling Games (prototype)</div>
+      <h1><span class="pop-emoji">🫧</span> Spelling Pop</h1>
+    </div>
+  </section>
+
   <!-- ══════════ SETUP SCREEN — pick year group + week ══════════ -->
-  <section id="screen-setup" class="screen active">
+  <section id="screen-setup" class="screen">
     <div class="brand">
       <div class="kicker">Wallscourt Farm Academy · Spelling Games (prototype)</div>
       <h1><span class="pop-emoji">🫧</span> Spelling Pop</h1>
@@ -553,6 +563,7 @@ function pressDigit(d) {
 function pressDelete() { pinBuffer = pinBuffer.slice(0, -1); renderPinDots(); }
 function checkPin() {
   if (pinBuffer === pendingPupil.pin) {
+    spSetVerifiedPupil(pendingPupil.id);
     beginAsPupil(pendingPupil);
   } else {
     $("pin-gate").classList.add("shake");
@@ -575,6 +586,7 @@ $("manual-submit").addEventListener("click", () => {
     $("manual-error").textContent = "That code and PIN don't match — check with your teacher.";
     return;
   }
+  spSetVerifiedPupil(pupil.id);
   beginAsPupil(pupil);
 });
 
@@ -584,6 +596,12 @@ function initAccessScreen() {
   if (qrCode) {
     pendingPupil = findPupil(qrCode);
     if (pendingPupil) {
+      // Already proved this pupil's PIN once in this tab (e.g. via the
+      // "My Spelling Games" hub) — go straight in instead of asking again.
+      if (spGetVerifiedPupilId() === pendingPupil.id.toUpperCase()) {
+        beginAsPupil(pendingPupil);
+        return;
+      }
       showPinGate(pendingPupil);
     } else {
       $("bad-code-banner").style.display = "block";
@@ -594,6 +612,7 @@ function initAccessScreen() {
 
 $("again-btn").addEventListener("click", () => { goTo("game"); startRound(); });
 $("menu-btn").addEventListener("click", () => {
+  spClearVerifiedPupil();
   renderLeaderboard("leaderboard-list", playerId);
   $("pin-gate").style.display = "none";
   $("guest-gate").style.display = "block";
@@ -601,6 +620,7 @@ $("menu-btn").addEventListener("click", () => {
 });
 
 function goTo(which) {
+  $("screen-loading").classList.toggle("active", false);
   $("screen-setup").classList.toggle("active", which === "setup");
   $("screen-start").classList.toggle("active", which === "start");
   $("screen-end").classList.toggle("active", which === "end");

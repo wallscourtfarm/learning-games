@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎯</text></svg>">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/wallscourtfarm/wfa-shared@main/web/wfa.css">
 <style>
-  :root { --max-w: 900px; }
+  :root { --max-w: 900px; --blue:#1798d3; --blue-dark:#0f6f9e; --navy:#12263a; --muted:#5b7a8a; --red:#e5484d; }
   .panel{
     background:#fff; border-radius:16px; padding:20px 22px 24px; margin-bottom:22px;
     box-shadow:0 8px 20px rgba(18,38,58,.08);
@@ -22,12 +22,48 @@
   .field-row{ display:flex; gap:12px; flex-wrap:wrap; }
   .field-row > div{ flex:1; min-width:160px; }
   label.field-label{ display:block; font-size:12.5px; font-weight:700; margin-bottom:5px; color:#5b7a8a; }
-  select{
+  select, input[type=text]{
     width:100%; font-size:16px; padding:11px 12px; border-radius:10px;
     border:2px solid #cfe2ec; outline:none; font-family:inherit; background:#fff; color:#12263a;
   }
-  select:focus{ border-color:#1798d3; }
+  select:focus, input[type=text]:focus{ border-color:#1798d3; }
   .week-note{ font-size:12px; color:#5b7a8a; margin-top:8px; }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    font-size:17px; font-weight:800; font-family:inherit;
+    padding:14px 22px; border-radius:14px; border:none; cursor:pointer;
+    width:100%; margin-top:16px;
+    background:var(--blue); color:#fff;
+    box-shadow:0 6px 0 var(--blue-dark);
+    transition:transform .05s;
+  }
+  .btn:active{ transform:translateY(4px); box-shadow:0 2px 0 var(--blue-dark); }
+
+  /* ── PIN keypad — same identity gate pattern as every game ── */
+  .pin-hello{ font-size:16px; font-weight:800; text-align:center; margin-bottom:16px; }
+  .pin-hello span{ color:var(--blue-dark); }
+  .pin-dots{ display:flex; justify-content:center; gap:14px; margin-bottom:10px; }
+  .pin-dots .dot{
+    width:18px; height:18px; border-radius:50%; border:2.5px solid #cfe2ec; background:#fff;
+    transition:background .15s, border-color .15s;
+  }
+  .pin-dots .dot.filled{ background:var(--blue); border-color:var(--blue); }
+  .pin-error{ text-align:center; font-size:13px; font-weight:700; color:var(--red); min-height:18px; margin-bottom:8px; }
+  #pin-gate.shake .pin-dots{ animation:shakeAnim .32s ease; }
+  @keyframes shakeAnim{ 20%{transform:translateX(-8px) rotate(-4deg);} 50%{transform:translateX(8px) rotate(4deg);} 80%{transform:translateX(-4px);} 100%{transform:translateX(0);} }
+  .keypad{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:280px; margin:6px auto 0; }
+  .keypad button{
+    font-size:22px; font-weight:800; font-family:inherit; padding:16px 0; border-radius:14px;
+    border:none; background:#eef5f9; color:var(--navy); cursor:pointer; box-shadow:0 4px 0 #d3e4ec;
+  }
+  .keypad button:active{ transform:translateY(3px); box-shadow:0 1px 0 #d3e4ec; }
+  .keypad button.wide{ font-size:15px; color:var(--muted); }
+
+  .setup-link{
+    display:block; text-align:center; width:100%; margin-top:14px; font-size:12.5px; color:var(--muted);
+    background:none; border:none; cursor:pointer; text-decoration:underline; font-family:inherit;
+  }
 
   .games-heading{ font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.8px; color:#5b7a8a; margin:0 0 10px; }
   a.card.off, div.card.off{
@@ -46,36 +82,68 @@
     <img class="logo" src="https://cdn.jsdelivr.net/gh/wallscourtfarm/wfa-shared@main/web/wfa_logo.webp" alt="Wallscourt Farm Academy">
     <div>
       <h1>🎯 My Spelling Games</h1>
-      <p>Pick your week, see everything you can play right now</p>
+      <p>Enter your details, then see everything you can play right now</p>
     </div>
   </div>
 </header>
 
 <main>
-  <div class="panel">
-    <div id="identity-banner" style="display:none;" class="banner-error"></div>
-    <div id="identity-hello" style="display:none;" class="hello">Hi <span id="identity-name"></span>!</div>
-    <p class="subtle" id="identity-sub"></p>
-
-    <div class="field-row">
-      <div id="year-field">
-        <label class="field-label" for="pick-year">Year group</label>
-        <select id="pick-year"><option value="">Choose…</option></select>
-      </div>
-      <div>
-        <label class="field-label" for="pick-term">Term</label>
-        <select id="pick-term"><option value="">Choose a year first…</option></select>
-      </div>
-      <div>
-        <label class="field-label" for="pick-week">Week</label>
-        <select id="pick-week"><option value="">Choose a term first…</option></select>
-      </div>
-    </div>
-    <div class="week-note" id="week-note"></div>
+  <!-- ══════════ LOADING — shown while boot() resolves the roster + who's
+       already verified in this tab, so nothing flashes underneath it. ══════════ -->
+  <div class="panel" id="loading-panel">
+    <p class="subtle" style="margin:0;">Loading…</p>
   </div>
 
-  <div class="games-heading">Games for this week</div>
-  <div class="grid" id="games-grid"></div>
+  <!-- ══════════ IDENTIFY — code + PIN, always required, matching every game ══════════ -->
+  <div class="panel" id="identify-panel" style="display:none;">
+    <div id="identify-banner" style="display:none;" class="banner-error"></div>
+
+    <!-- Shown when a QR scan (?u=CODE) already names a known pupil — PIN only -->
+    <div id="pin-gate" style="display:none;">
+      <div class="pin-hello">Hi <span id="pin-pupil-name"></span>! Enter your spelling PIN.</div>
+      <div class="pin-dots" id="pin-dots">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      </div>
+      <div class="pin-error" id="pin-error">&nbsp;</div>
+      <div class="keypad" id="keypad"></div>
+    </div>
+
+    <!-- Shown with no QR code, or one that wasn't recognised -->
+    <div id="guest-gate">
+      <p class="subtle" style="margin:0 0 14px;">Enter your code and PIN to see your games.</p>
+      <label class="field-label" for="manual-code">Your code</label>
+      <input type="text" id="manual-code" maxlength="6" placeholder="e.g. AM72" style="text-transform:uppercase;" autocomplete="off">
+      <label class="field-label" for="manual-pin" style="margin-top:10px;">Your PIN</label>
+      <input type="text" id="manual-pin" inputmode="numeric" maxlength="4" placeholder="4 digits" autocomplete="off">
+      <button class="btn" id="manual-submit">▶ See my games</button>
+      <div class="pin-error" id="manual-error">&nbsp;</div>
+    </div>
+  </div>
+
+  <!-- ══════════ MAIN — identified: pick a week (defaults to the current
+       one), then a game ══════════ -->
+  <div id="main-panel" style="display:none;">
+    <div class="panel">
+      <div class="hello">Hi <span id="identity-name"></span>!</div>
+      <p class="subtle" id="identity-sub"></p>
+
+      <div class="field-row">
+        <div>
+          <label class="field-label" for="pick-term">Term</label>
+          <select id="pick-term"><option value="">Choose…</option></select>
+        </div>
+        <div>
+          <label class="field-label" for="pick-week">Week</label>
+          <select id="pick-week"><option value="">Choose a term first…</option></select>
+        </div>
+      </div>
+      <div class="week-note" id="week-note"></div>
+      <button class="setup-link" id="change-player-link">Not you? Sign in as someone else</button>
+    </div>
+
+    <div class="games-heading">Games for this week</div>
+    <div class="grid" id="games-grid"></div>
+  </div>
 </main>
 
 <div class="footer">
@@ -90,30 +158,88 @@ const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 
 let identifiedPupil = null;
+let pendingPupil = null;
+let pinBuffer = "";
 
 function findPupil(code) {
   return (typeof ROSTER !== "undefined" ? ROSTER : []).find(p => p.id.toUpperCase() === code.toUpperCase());
 }
 
-function populateYearSelect(selectEl, selected) {
-  selectEl.innerHTML = '<option value="">Choose…</option>' +
-    spGetYears().map(y => `<option value="${y}" ${y === selected ? "selected" : ""}>${y.replace("Y", "Year ")}</option>`).join("");
+/* ── PIN keypad — same pattern as every game's QR-driven identity gate ── */
+function buildKeypad() {
+  const layout = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
+  const kp = $("keypad");
+  kp.innerHTML = "";
+  layout.forEach(k => {
+    const btn = document.createElement("button");
+    if (k === "") { btn.style.visibility = "hidden"; btn.disabled = true; }
+    else if (k === "⌫") { btn.textContent = k; btn.className = "wide"; btn.addEventListener("click", pressDelete); }
+    else { btn.textContent = k; btn.addEventListener("click", () => pressDigit(k)); }
+    kp.appendChild(btn);
+  });
 }
+function renderPinDots() {
+  document.querySelectorAll("#pin-dots .dot").forEach((d, i) => d.classList.toggle("filled", i < pinBuffer.length));
+}
+function pressDigit(d) {
+  if (!pendingPupil || pinBuffer.length >= 4) return;
+  pinBuffer += d;
+  renderPinDots();
+  $("pin-error").innerHTML = "&nbsp;";
+  if (pinBuffer.length === 4) checkPin();
+}
+function pressDelete() { pinBuffer = pinBuffer.slice(0, -1); renderPinDots(); }
+function checkPin() {
+  if (pinBuffer === pendingPupil.pin) {
+    identifyAs(pendingPupil);
+  } else {
+    $("pin-gate").classList.add("shake");
+    $("pin-error").textContent = "That's not quite right — try again.";
+    setTimeout(() => { pinBuffer = ""; renderPinDots(); $("pin-gate").classList.remove("shake"); }, 420);
+  }
+}
+buildKeypad();
 
-function populateTermWeek(year, selectedTerm, selectedWeek) {
-  const weeks = year ? spGetWeeksForYear(year) : [];
-  const terms = [...new Set(weeks.map(w => w.term))];
-  const termSel = $("pick-term");
-  if (!year) {
-    termSel.innerHTML = '<option value="">Choose a year first…</option>';
-    $("pick-week").innerHTML = '<option value="">…</option>';
+$("manual-submit").addEventListener("click", () => {
+  const code = $("manual-code").value.trim().toUpperCase();
+  const pin = $("manual-pin").value.trim();
+  const pupil = code ? findPupil(code) : null;
+  if (!pupil || pupil.pin !== pin) {
+    $("manual-error").textContent = "That code and PIN don't match — check with your teacher.";
     return;
   }
-  termSel.innerHTML = '<option value="">Choose…</option>' +
-    terms.map(t => `<option value="${t}" ${t === selectedTerm ? "selected" : ""}>${(spGetWeeksForYear(year).find(w => w.term === t).label).split(" — ")[0]}</option>`).join("");
-  populateWeekSelect(year, termSel.value || selectedTerm, selectedWeek);
+  identifyAs(pupil);
+});
+
+function identifyAs(pupil) {
+  identifiedPupil = pupil;
+  spSetVerifiedPupil(pupil.id);
+  enterMain();
 }
 
+$("change-player-link").addEventListener("click", () => {
+  spClearVerifiedPupil();
+  identifiedPupil = null;
+  pendingPupil = null;
+  pinBuffer = "";
+  $("manual-code").value = "";
+  $("manual-pin").value = "";
+  $("manual-error").innerHTML = "&nbsp;";
+  $("main-panel").style.display = "none";
+  $("identify-panel").style.display = "block";
+  $("pin-gate").style.display = "none";
+  $("guest-gate").style.display = "block";
+});
+
+/* ── Once identified: term/week (defaulting to the current week) + games ── */
+function populateTermWeek(year, selectedTerm, selectedWeek) {
+  const weeks = spGetWeeksForYear(year);
+  const terms = [...new Set(weeks.map(w => w.term))];
+  const termSel = $("pick-term");
+  termSel.innerHTML = '<option value="">Choose…</option>' +
+    terms.map(t => `<option value="${t}" ${t === selectedTerm ? "selected" : ""}>${(weeks.find(w => w.term === t).label).split(" — ")[0]}</option>`).join("");
+  populateWeekSelect(year, termSel.value || selectedTerm, selectedWeek);
+}
 function populateWeekSelect(year, term, selectedWeek) {
   const weekSel = $("pick-week");
   if (!term) { weekSel.innerHTML = '<option value="">Choose a term first…</option>'; return; }
@@ -122,21 +248,19 @@ function populateWeekSelect(year, term, selectedWeek) {
     weeksInTerm.map(w => `<option value="${w.week}" ${w.week === selectedWeek ? "selected" : ""}>${w.label.split(" — ")[1]}</option>`).join("");
 }
 
-function currentSelection() {
-  return { year: $("pick-year").value, term: $("pick-term").value, week: $("pick-week").value };
-}
-
 function renderGames() {
-  const { year, term, week } = currentSelection();
+  const year = identifiedPupil.year;
+  const term = $("pick-term").value;
+  const week = $("pick-week").value;
   const grid = $("games-grid");
-  if (!year || !term || !week) {
-    grid.innerHTML = '<p class="empty-hint">Pick a year group and week above to see what you can play.</p>';
+  if (!term || !week) {
+    grid.innerHTML = '<p class="empty-hint">Pick a week above to see what you can play.</p>';
     return;
   }
   grid.innerHTML = GAMES.map(game => {
     const available = !game.isAvailable || game.isAvailable(year, term, week);
     const target = new URL("../" + game.path, location.href);
-    if (identifiedPupil) target.searchParams.set("u", identifiedPupil.id);
+    target.searchParams.set("u", identifiedPupil.id);
     target.searchParams.set("y", year);
     target.searchParams.set("t", term);
     target.searchParams.set("w", week);
@@ -147,15 +271,30 @@ function renderGames() {
   }).join("");
 }
 
-$("pick-year").addEventListener("change", () => {
-  populateTermWeek($("pick-year").value, "", "");
-  renderGames();
-});
 $("pick-term").addEventListener("change", () => {
-  populateWeekSelect($("pick-year").value, $("pick-term").value, "");
+  populateWeekSelect(identifiedPupil.year, $("pick-term").value, "");
   renderGames();
 });
 $("pick-week").addEventListener("change", renderGames);
+
+function enterMain() {
+  $("loading-panel").style.display = "none";
+  $("identify-panel").style.display = "none";
+  $("main-panel").style.display = "block";
+  $("identity-name").textContent = identifiedPupil.name;
+  $("identity-sub").textContent = `Year ${identifiedPupil.year.replace("Y", "")} — here's what's ready for you to play.`;
+
+  // A printed card's QR can bake in the week it was printed for; otherwise
+  // default to the live current week so pupils don't have to know it.
+  const term = params.get("t") || CURRENT_WEEK.term;
+  const week = params.get("w") || CURRENT_WEEK.week;
+  populateTermWeek(identifiedPupil.year, term, week);
+  renderGames();
+
+  const weeks = spGetWeeksForYear(identifiedPupil.year);
+  const known = weeks.find(w => w.term === term && w.week === week);
+  $("week-note").textContent = known ? "" : "That week wasn't recognised — pick one from the list.";
+}
 
 (async function boot() {
   const live = await spFetchLiveRoster(BACKEND_URL);
@@ -164,37 +303,34 @@ $("pick-week").addEventListener("change", renderGames);
     if (live.currentWeek) CURRENT_WEEK = live.currentWeek;
   }
 
+  // Already proved a PIN once in this tab (e.g. came back from a game) —
+  // skip straight past identifying again.
+  const verifiedId = spGetVerifiedPupilId();
+  const verifiedPupil = verifiedId ? findPupil(verifiedId) : null;
+  if (verifiedPupil) {
+    identifiedPupil = verifiedPupil;
+    enterMain();
+    return;
+  }
+
+  $("loading-panel").style.display = "none";
+  $("identify-panel").style.display = "block";
+
   const uParam = (params.get("u") || "").trim().toUpperCase();
   if (uParam) {
-    identifiedPupil = findPupil(uParam);
-    if (identifiedPupil) {
-      $("identity-hello").style.display = "block";
-      $("identity-name").textContent = identifiedPupil.name;
-      $("identity-sub").textContent = `Year ${identifiedPupil.year.replace("Y", "")} — here's what's ready for you to play.`;
-      $("year-field").style.display = "none";
-    } else {
-      $("identity-banner").style.display = "block";
-      $("identity-banner").textContent = "We didn't recognise that code — pick your year group below instead.";
-      $("identity-sub").textContent = "Pick your year group and week to see your games.";
+    pendingPupil = findPupil(uParam);
+    if (pendingPupil) {
+      $("pin-pupil-name").textContent = pendingPupil.name;
+      $("guest-gate").style.display = "none";
+      $("pin-gate").style.display = "block";
+      pinBuffer = "";
+      renderPinDots();
+      return;
     }
-  } else {
-    $("identity-sub").textContent = "Pick your year group and week to see your games.";
+    $("identify-banner").style.display = "block";
+    $("identify-banner").textContent = "We didn't recognise that code — enter it below instead.";
   }
-
-  const paramYear = identifiedPupil ? identifiedPupil.year : (params.get("y") || "");
-  const paramTerm = params.get("t") || (paramYear ? CURRENT_WEEK.term : "");
-  const paramWeek = params.get("w") || (paramYear ? CURRENT_WEEK.week : "");
-
-  populateYearSelect($("pick-year"), paramYear);
-  if (identifiedPupil) $("pick-year").disabled = true;
-  populateTermWeek(paramYear, paramTerm, paramWeek);
-  renderGames();
-
-  if (paramYear && paramTerm && paramWeek) {
-    const weeks = spGetWeeksForYear(paramYear);
-    const known = weeks.find(w => w.term === paramTerm && w.week === paramWeek);
-    $("week-note").textContent = known ? "" : "That week wasn't recognised — pick one from the list.";
-  }
+  $("guest-gate").style.display = "block";
 })();
 </script>
 </body>
