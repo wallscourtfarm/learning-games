@@ -38,16 +38,13 @@
   .card .row b{ font-family:'Courier New',monospace; font-size:16px; letter-spacing:1.5px; color:var(--navy); font-weight:800; }
   .card .pin-val{ font-size:20px; }
 
-  .card .games{ display:flex; gap:14px; flex-wrap:wrap; flex:1; }
-  .card .game-qr{ text-align:center; flex:0 0 auto; }
-  .card .game-qr .qr{ width:82px; height:82px; margin:0 auto; }
-  .card .game-qr .qr svg{ width:100%; height:100%; display:block; }
-  .card .game-qr .glabel{ font-size:10.5px; font-weight:700; color:var(--muted); margin-top:4px; max-width:82px; }
-  .card .game-qr.off .qr{
-    display:flex; align-items:center; justify-content:center; border:2px dashed #d8e3ea; border-radius:10px;
-    color:#c3d2db; font-size:28px;
-  }
-  .card .game-qr.off .glabel{ color:#c3d2db; }
+  .card .qr-wrap{ text-align:center; flex:0 0 auto; }
+  .card .qr-wrap .qr{ width:100px; height:100px; margin:0 auto; }
+  .card .qr-wrap .qr svg{ width:100%; height:100%; display:block; }
+  .card .qr-wrap .glabel{ font-size:10.5px; font-weight:700; color:var(--muted); margin-top:4px; }
+  .card .games-note{ flex:1; font-size:12.5px; color:var(--muted); min-width:180px; }
+  .card .games-note b{ color:var(--navy); }
+  .card .games-note .unavailable{ color:#c3d2db; text-decoration:line-through; }
 
   footer.note{
     max-width:900px; margin:24px auto 0; font-size:12px; color:var(--muted); line-height:1.6;
@@ -67,7 +64,7 @@
   <div class="toolbar">
     <div>
       <h1>🎲 Spelling Games — Pupil Cards</h1>
-      <p id="week-label">Print, cut out and hand one card to each child. They scan a game's QR code (or open that game and type their code) then enter their PIN.</p>
+      <p id="week-label">Print, cut out and hand one card to each child. They scan their code (or open their page and type it) to see everything they can play this week.</p>
     </div>
     <button onclick="window.print()">🖨️ Print cards</button>
   </div>
@@ -75,7 +72,7 @@
   <div class="card-grid" id="card-grid"></div>
 
   <footer class="note">
-    Proof of concept — QR codes are generated in your browser using the <a href="https://github.com/kazuhikoarase/qrcode-generator" target="_blank" rel="noopener">qrcode-generator</a> library (MIT licence, vendored locally in <code>vendor/qrcode.js</code>, no external service or network call). Pupils and the current week come live from the "Roster" and "Settings" tabs in the backend Google Sheet — type a name in the Sheet and a code + PIN fill themselves in, no code or GitHub needed. <code>roster.js</code> is only the offline fallback used if that Sheet is unreachable. Each pupil's <code>year</code> and the current term/week are baked into every QR code, so scanning one opens that game already loaded with the right week's words — no picker needed. Add a new game to every pupil's card by adding one entry to the <code>GAMES</code> list in <code>roster.js</code> — nothing else on this page needs to change.
+    Proof of concept — QR codes are generated in your browser using the <a href="https://github.com/kazuhikoarase/qrcode-generator" target="_blank" rel="noopener">qrcode-generator</a> library (MIT licence, vendored locally in <code>vendor/qrcode.js</code>, no external service or network call). Pupils and the current week come live from the "Roster" and "Settings" tabs in the backend Google Sheet — type a name in the Sheet and a code + PIN fill themselves in, no code or GitHub needed. <code>roster.js</code> is only the offline fallback used if that Sheet is unreachable. Each card's QR code goes to <code>play/index.html</code> — a pupil's own page listing every game available for their year and the current week — rather than one QR per game, so a new game never means reprinting cards. Add a new game to that list by adding one entry to <code>GAMES</code> in <code>roster.js</code>.
   </footer>
 
 <script src="lessons-data.js"></script>
@@ -105,37 +102,31 @@
       (live ? " — from the Roster/Settings tabs. Reprint after editing them." : " — from roster.js (Sheet unreachable). Change CURRENT_WEEK there and reprint.");
 
     ROSTER.forEach(pupil => {
-    const gamesHtml = GAMES.map(game => {
-      const available = !game.isAvailable || game.isAvailable(pupil.year, CURRENT_WEEK.term, CURRENT_WEEK.week);
-      if (!available) {
-        return `
-          <div class="game-qr off">
-            <div class="qr">—</div>
-            <div class="glabel">${game.icon} ${game.label}<br>not this week</div>
-          </div>`;
-      }
-      const target = new URL(game.path, location.href);
+      const target = new URL("play/index.html", location.href);
       target.searchParams.set("u", pupil.id);
       target.searchParams.set("y", pupil.year);
       target.searchParams.set("t", CURRENT_WEEK.term);
       target.searchParams.set("w", CURRENT_WEEK.week);
-      return `
-        <div class="game-qr">
-          <div class="qr">${qrSvgFor(target.href)}</div>
-          <div class="glabel">${game.icon} ${game.label}</div>
-        </div>`;
-    }).join("");
 
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <div class="info">
-        <div class="kicker">Spelling Games · WFA · ${pupil.year}</div>
-        <div class="pname">${pupil.name}</div>
-        <div class="row">Code&nbsp;<b>${pupil.id}</b></div>
-        <div class="row">PIN&nbsp;<b class="pin-val">${pupil.pin}</b></div>
-      </div>
-      <div class="games">${gamesHtml}</div>`;
+      const gamesNote = GAMES.map(game => {
+        const available = !game.isAvailable || game.isAvailable(pupil.year, CURRENT_WEEK.term, CURRENT_WEEK.week);
+        return available ? `${game.icon} ${game.label}` : `<span class="unavailable">${game.icon} ${game.label}</span>`;
+      }).join(" &nbsp; ");
+
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `
+        <div class="info">
+          <div class="kicker">Spelling Games · WFA · ${pupil.year}</div>
+          <div class="pname">${pupil.name}</div>
+          <div class="row">Code&nbsp;<b>${pupil.id}</b></div>
+          <div class="row">PIN&nbsp;<b class="pin-val">${pupil.pin}</b></div>
+        </div>
+        <div class="qr-wrap">
+          <div class="qr">${qrSvgFor(target.href)}</div>
+          <div class="glabel">Scan for your games</div>
+        </div>
+        <div class="games-note"><b>This week:</b><br>${gamesNote}</div>`;
       grid.appendChild(card);
     });
   }
