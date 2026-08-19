@@ -50,5 +50,9 @@ const GAMES = [
   {
     id: "spelling-bee", label: "Spelling Bee", icon: "🐝", path: "spelling-bee/index.html",
     isAvailable: (year, term, week) => spGetWeekPool(year, term, week).words.length > 0
+  },
+  {
+    id: "word-search", label: "Word Search", icon: "🔍", path: "word-search/index.html",
+    isAvailable: (year, term, week) => spGetWeekPool(year, term, week).words.length > 0
   }
 ];
