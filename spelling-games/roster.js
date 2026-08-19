@@ -42,5 +42,9 @@ const GAMES = [
   {
     id: "grapheme-sort", label: "Grapheme Sort", icon: "🗂️", path: "grapheme-sort/index.html",
     isAvailable: (year, term, week) => !!spGetGraphemeBuckets(spGetWeekPool(year, term, week))
+  },
+  {
+    id: "look-write-check", label: "Look, Cover, Write, Check", icon: "✍️", path: "look-write-check/index.html",
+    isAvailable: (year, term, week) => spGetWeekPool(year, term, week).words.length > 0
   }
 ];
