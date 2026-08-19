@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Letter Detective — Wallscourt Farm Academy</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🕵️</text></svg>">
+<style>
+  :root{
+    --blue:#1798d3; --blue-dark:#0f6f9e; --navy:#12263a;
+    --green:#2fbf71; --red:#e5484d; --amber:#f5a524;
+    --bg1:#eaf6fd; --bg2:#dcf0fb;
+    --card:#ffffff; --muted:#5b7a8a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;
+    background:linear-gradient(160deg,var(--bg1),var(--bg2));
+    color:var(--navy);
+    display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+    min-height:100%;
+    overflow-x:hidden;
+    overflow-y:auto;
+    touch-action:manipulation;
+    user-select:none;
+  }
+  body.playing{ overflow-y:hidden; }
+
+  @keyframes shakeAnim{ 20%{transform:translateX(-8px) rotate(-4deg);} 50%{transform:translateX(8px) rotate(4deg);} 80%{transform:translateX(-4px);} 100%{transform:translateX(0);} }
+
+  /* ── Shared screen layout ── */
+  .screen{
+    width:100%; max-width:640px; margin:0 auto;
+    padding:20px 20px 32px;
+    display:none;
+  }
+  .screen.active{display:block;}
+
+  .brand{ text-align:center; padding-top:18px; }
+  .brand .kicker{
+    font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+    color:var(--blue-dark); opacity:.75;
+  }
+  .brand h1{ margin:4px 0 2px; font-size:clamp(28px,7vw,40px); font-weight:800; }
+  .brand h1 .pop-emoji{display:inline-block;}
+
+  .panel{
+    background:var(--card); border-radius:18px; padding:22px 22px 26px;
+    box-shadow:0 10px 30px rgba(18,38,58,.10);
+    margin-top:16px;
+  }
+
+  .rule-box{
+    background:#fff7e6; border:1.5px solid #f3d18a; border-radius:14px;
+    padding:14px 16px; margin-bottom:18px;
+  }
+  .rule-box .rule-label{
+    font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1px;
+    color:#a3720b; margin-bottom:4px;
+  }
+  .rule-box .rule-title{ font-size:17px; font-weight:800; margin-bottom:4px; }
+  .rule-box .rule-text{ font-size:13.5px; color:#5b4a1f; line-height:1.45; }
+
+  label.field-label{ display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--muted); }
+  input[type=text]{
+    width:100%; font-size:18px; padding:12px 14px; border-radius:12px;
+    border:2px solid #cfe2ec; outline:none; font-family:inherit;
+  }
+  input[type=text]:focus{ border-color:var(--blue); }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    font-size:17px; font-weight:800; font-family:inherit;
+    padding:14px 22px; border-radius:14px; border:none; cursor:pointer;
+    width:100%; margin-top:16px;
+    background:var(--blue); color:#fff;
+    box-shadow:0 6px 0 var(--blue-dark);
+    transition:transform .05s;
+  }
+  .btn:active{ transform:translateY(4px); box-shadow:0 2px 0 var(--blue-dark); }
+  .btn.secondary{ background:#eef5f9; color:var(--blue-dark); box-shadow:0 6px 0 #c9dde7; }
+  .btn.secondary:active{ box-shadow:0 2px 0 #c9dde7; }
+
+  /* ── Leaderboard ── */
+  .board-title{ font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin:22px 0 8px; }
+  .board-row{
+    display:flex; align-items:center; gap:10px;
+    padding:9px 4px; border-bottom:1px solid #eef3f6; font-size:14.5px;
+  }
+  .board-row .rank{ width:22px; font-weight:800; color:var(--muted); text-align:center; }
+  .board-row .rname{ flex:1; font-weight:700; }
+  .board-row .rscore{ font-weight:800; color:var(--blue-dark); }
+  .board-row.you{ background:#eaf8f0; border-radius:10px; }
+  .board-empty{ font-size:13.5px; color:var(--muted); padding:8px 4px; }
+
+  /* ── HUD ── */
+  .hud{
+    width:100%; max-width:640px; display:flex; align-items:center; gap:10px;
+    padding:10px 14px; z-index:5; flex-wrap:wrap; justify-content:center;
+  }
+  .hud-pill{
+    background:#fff; border-radius:12px; padding:8px 14px;
+    box-shadow:0 3px 10px rgba(18,38,58,.08);
+    font-weight:800; font-size:15px; display:flex; align-items:center; gap:6px;
+  }
+  .hud-pill.grow{ flex:1; justify-content:center; min-width:120px; }
+  .hud-pill .lab{ font-size:10px; font-weight:700; text-transform:uppercase; color:var(--muted); letter-spacing:.5px; }
+
+  /* ── Game screen: masked word + on-screen keyboard ── */
+  #game-wrap{ display:none; flex-direction:column; align-items:center; width:100%; padding:0 20px; }
+  #game-wrap.active{ display:flex; }
+  #ld-stage{
+    width:100%; max-width:480px; margin-top:16px; background:var(--card); border-radius:20px;
+    padding:30px 24px; text-align:center; box-shadow:0 10px 30px rgba(18,38,58,.10);
+  }
+  .ld-word-display{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin:6px 0 26px; }
+  .ld-letter-box{
+    width:36px; height:46px; display:flex; align-items:center; justify-content:center;
+    font-size:22px; font-weight:900; color:var(--navy); border-bottom:4px solid #cfe2ec; border-radius:4px;
+  }
+  .ld-letter-box.revealed{ border-bottom-color:var(--blue); }
+
+  .ld-keyboard{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px; max-width:420px; margin:0 auto; }
+  .ld-key{
+    width:32px; height:42px; border-radius:8px; border:none; background:#eef5f9; color:var(--navy);
+    font-weight:800; font-size:15px; cursor:pointer; box-shadow:0 3px 0 #c9dde7; font-family:inherit;
+  }
+  .ld-key:active{ transform:translateY(2px); box-shadow:0 1px 0 #c9dde7; }
+  .ld-key.correct{ background:var(--green); color:#fff; box-shadow:0 3px 0 #1f9c58; }
+  .ld-key.wrong{ background:var(--red); color:#fff; box-shadow:0 3px 0 #b23a3d; opacity:.55; }
+  .ld-key:disabled{ pointer-events:none; }
+
+  .ld-feedback-icon{ font-size:52px; margin-bottom:10px; }
+  .ld-feedback-text{ font-size:18px; font-weight:700; color:var(--navy); line-height:1.5; }
+  .ld-feedback-text .correct-word{ color:var(--green); font-weight:900; }
+
+  /* ── End screen stats ── */
+  .stat-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:6px; }
+  .stat-box{ background:#f5fafc; border-radius:12px; padding:14px 6px; text-align:center; }
+  .stat-box .num{ font-size:24px; font-weight:900; color:var(--blue-dark); }
+  .stat-box .lab{ font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-top:2px; }
+
+  footer.note{
+    max-width:640px; margin:18px auto 0; padding:0 20px 20px; font-size:11.5px; color:var(--muted); text-align:center; line-height:1.5;
+  }
+
+  /* ── QR / PIN access gate ── */
+  .banner-error{
+    background:#fdeceb; border:1.5px solid #f3b7b3; color:#a3231f;
+    border-radius:12px; padding:12px 14px; font-size:13.5px; font-weight:600;
+    margin-bottom:18px;
+  }
+  .pin-hello{ font-size:16px; font-weight:800; text-align:center; margin-bottom:16px; }
+  .pin-hello span{ color:var(--blue-dark); }
+  .pin-dots{ display:flex; justify-content:center; gap:14px; margin-bottom:10px; }
+  .pin-dots .dot{
+    width:18px; height:18px; border-radius:50%; border:2.5px solid #cfe2ec; background:#fff;
+    transition:background .15s, border-color .15s;
+  }
+  .pin-dots .dot.filled{ background:var(--blue); border-color:var(--blue); }
+  .pin-error{ text-align:center; font-size:13px; font-weight:700; color:var(--red); min-height:18px; margin-top:10px; margin-bottom:8px; }
+  #pin-gate.shake .pin-dots{ animation:shakeAnim .32s ease; }
+  .keypad{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:280px; margin:6px auto 0; }
+  .keypad button{
+    font-size:22px; font-weight:800; font-family:inherit; padding:16px 0; border-radius:14px;
+    border:none; background:#eef5f9; color:var(--navy); cursor:pointer; box-shadow:0 4px 0 #d3e4ec;
+  }
+  .keypad button:active{ transform:translateY(3px); box-shadow:0 1px 0 #d3e4ec; }
+  .keypad button.wide{ font-size:15px; color:var(--muted); }
+  .pin-back{
+    display:block; text-align:center; width:100%; margin-top:16px; font-size:13px; color:var(--muted);
+    background:none; border:none; cursor:pointer; text-decoration:underline; font-family:inherit;
+  }
+
+  /* ── Year / week setup screen ── */
+  select{
+    width:100%; font-size:17px; padding:12px 14px; border-radius:12px;
+    border:2px solid #cfe2ec; outline:none; font-family:inherit; background:#fff; color:var(--navy);
+  }
+  select:focus{ border-color:var(--blue); }
+  .rule-mini{
+    background:#fff7e6; border:1.5px solid #f3d18a; border-radius:12px;
+    padding:12px 14px; margin-bottom:10px; font-size:13.5px; color:#5b4a1f; line-height:1.4;
+  }
+  .rule-mini b{ display:block; font-size:14.5px; color:var(--navy); margin-bottom:3px; font-weight:800; }
+  .word-tags{ display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  .word-tag{
+    font-family:inherit; font-size:14px; font-weight:700; padding:9px 16px; border-radius:999px;
+    border:2px solid #cfe2ec; background:#fff; color:var(--navy);
+  }
+  .setup-link{
+    display:block; text-align:center; width:100%; margin-top:10px; font-size:12.5px; color:var(--muted);
+    background:none; border:none; cursor:pointer; text-decoration:underline; font-family:inherit;
+  }
+</style>
+</head>
+<body>
+
+  <!-- ══════════ LOADING SCREEN — shown while boot() resolves identity/roster,
+       so a QR/link that already carries y/t/w/u never flashes the setup
+       screen underneath it while waiting on the network. ══════════ -->
+  <section id="screen-loading" class="screen active">
+    <div class="brand">
+      <div class="kicker">Wallscourt Farm Academy · Spelling Games (prototype)</div>
+      <h1><span class="pop-emoji">🕵️</span> Letter Detective</h1>
+    </div>
+  </section>
+
+  <!-- ══════════ SETUP SCREEN — pick year group + week ══════════ -->
+  <section id="screen-setup" class="screen">
+    <div class="brand">
+      <div class="kicker">Wallscourt Farm Academy · Spelling Games (prototype)</div>
+      <h1><span class="pop-emoji">🕵️</span> Letter Detective</h1>
+    </div>
+    <div class="panel">
+      <p style="font-size:13.5px; color:var(--muted); margin:0 0 16px;">
+        Crack the word one letter at a time — guess wisely, you've only got 6 wrong guesses per word. Up to 8 words
+        per round. Works with any week's word list.
+      </p>
+      <label class="field-label" for="setup-year">Year group</label>
+      <select id="setup-year"><option value="">Choose…</option></select>
+
+      <label class="field-label" for="setup-week" style="margin-top:14px;">Week</label>
+      <select id="setup-week"><option value="">Choose a year group first…</option></select>
+
+      <div id="setup-pool" style="display:none; margin-top:20px;"></div>
+    </div>
+  </section>
+
+  <!-- ══════════ START SCREEN — identify the player ══════════ -->
+  <section id="screen-start" class="screen">
+    <div class="brand">
+      <div class="kicker">Wallscourt Farm Academy · Spelling Games (prototype)</div>
+      <h1><span class="pop-emoji">🕵️</span> Letter Detective</h1>
+    </div>
+
+    <div class="panel">
+      <div id="rule-box-list"></div>
+
+      <div id="bad-code-banner" class="banner-error" style="display:none;">
+        We didn't recognise that spelling code. Ask your teacher for a new card, or use the options below.
+      </div>
+
+      <!-- Shown once a pupil is identified, via QR scan or manual code -->
+      <div id="pin-gate" style="display:none;">
+        <div class="pin-hello">Hi <span id="pin-pupil-name"></span>! Enter your spelling PIN.</div>
+        <div class="pin-dots" id="pin-dots">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        </div>
+        <div class="pin-error" id="pin-error">&nbsp;</div>
+        <div class="keypad" id="keypad"></div>
+        <button class="pin-back" id="pin-back">Not you? Use a different way in</button>
+      </div>
+
+      <!-- Default entry: a personal code + PIN, always required — no
+           typed-name shortcut, since iPads get shared between children. -->
+      <div id="guest-gate">
+        <label class="field-label" for="manual-code">Your code</label>
+        <input type="text" id="manual-code" maxlength="6" placeholder="e.g. AM72" style="text-transform:uppercase;" autocomplete="off">
+        <label class="field-label" for="manual-pin" style="margin-top:10px;">Your PIN</label>
+        <input type="text" id="manual-pin" inputmode="numeric" maxlength="4" placeholder="4 digits" autocomplete="off">
+        <button class="btn" id="manual-submit">▶ Start playing</button>
+        <div class="pin-error" id="manual-error">&nbsp;</div>
+        <button class="setup-link" id="change-week-link">Not the right week? Change year/week</button>
+      </div>
+    </div>
+
+    <div class="board-title">🏆 Leaderboard — best scores on this device</div>
+    <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
+      <div id="leaderboard-list"></div>
+    </div>
+
+    <footer class="note">
+      Proof of concept — each pupil's card (see <code>../cards.html</code>) has a personal QR code and PIN, shared across every spelling game. Guessing a letter that isn't in the word costs one of six guesses; running out reveals the word and moves on, no score for that one. Scores sync to the same backend as Spelling Pop.
+    </footer>
+  </section>
+
+  <!-- ══════════ GAME SCREEN ══════════ -->
+  <div id="game-wrap">
+    <div class="hud">
+      <div class="hud-pill"><span class="lab">Score</span>&nbsp;<span id="hud-score">0</span></div>
+      <div class="hud-pill grow"><span class="lab">Word&nbsp;</span><span id="hud-progress">1 / 1</span></div>
+      <div class="hud-pill"><span class="lab">Guesses&nbsp;</span>❤️ <span id="hud-lives">6</span></div>
+    </div>
+
+    <div id="ld-stage">
+      <div id="ld-play-area">
+        <div class="ld-word-display" id="ld-word-display"></div>
+        <div class="ld-keyboard" id="ld-keyboard"></div>
+      </div>
+
+      <div id="ld-feedback" style="display:none;">
+        <div class="ld-feedback-icon" id="ld-feedback-icon"></div>
+        <div class="ld-feedback-text" id="ld-feedback-text"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ END SCREEN ══════════ -->
+  <section id="screen-end" class="screen">
+    <div class="brand">
+      <div class="kicker">Round complete</div>
+      <h1>🎉 Case closed!</h1>
+    </div>
+    <div class="panel">
+      <div class="stat-grid">
+        <div class="stat-box"><div class="num" id="end-score">0</div><div class="lab">Score</div></div>
+        <div class="stat-box"><div class="num" id="end-accuracy">0%</div><div class="lab">Accuracy</div></div>
+        <div class="stat-box"><div class="num" id="end-correct">0</div><div class="lab">Cracked</div></div>
+      </div>
+      <button class="btn" id="again-btn">🔁 Play again</button>
+      <button class="btn secondary" id="menu-btn">🚪 Exit — next player sign in</button>
+    </div>
+    <div class="board-title">🏆 Leaderboard — best scores on this device</div>
+    <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
+      <div id="leaderboard-list-end"></div>
+    </div>
+  </section>
+
+<script src="../lessons-data.js"></script>
+<script src="../spelling-pool.js"></script>
+<script src="../roster.js"></script>
+<script>
+/* ════════════════════════════════════════════════════════════════
+   GAME IDENTITY — used to tag scores; leave as-is per game.
+   ════════════════════════════════════════════════════════════════ */
+const GAME_ID = "letter-detective";
+const LAST_ID_KEY = "wfa-letter-detective-last-id";
+const MAX_ROUND_WORDS = 8;
+const MAX_WRONG_GUESSES = 6;
+/* BACKEND_URL, ROSTER and CURRENT_WEEK come from ../roster.js — the same
+   deployed backend as every other spelling game, since Code.gs keys rows
+   by game+rule. */
+/* ═══════════════════════════════════════════════════════════════ */
+
+const $ = id => document.getElementById(id);
+
+let WORDS = [];           // this week's word list, capped at MAX_ROUND_WORDS
+let RULES = [];
+let LEADERBOARD_KEY = "";
+let POOL_ID = "";
+let currentPool = null;
+
+let playerName = "";
+let playerId = null;
+let state = null;         // { score, solvedCount, idx, order, revealed:Set, wrong:Set, livesLeft, ending }
+
+/* ── Setup screen: year + week → word list ── */
+function populateYearSelect() {
+  const sel = $("setup-year");
+  sel.innerHTML = '<option value="">Choose…</option>' +
+    spGetYears().map(y => `<option value="${y}">${y.replace("Y", "Year ")}</option>`).join("");
+}
+function onSetupYearChange() {
+  const year = $("setup-year").value;
+  const weekSel = $("setup-week");
+  $("setup-pool").style.display = "none";
+  if (!year) { weekSel.innerHTML = '<option value="">Choose a year group first…</option>'; return; }
+  // Only the current week and earlier — never a week not yet taught.
+  const weeks = spGetAvailableWeeksForYear(year, CURRENT_WEEK);
+  weekSel.innerHTML = '<option value="">Choose…</option>' +
+    weeks.map(w => `<option value="${w.term}|${w.week}">${w.label}</option>`).join("");
+}
+function onSetupWeekChange() {
+  const year = $("setup-year").value;
+  const val = $("setup-week").value;
+  if (!year || !val) { $("setup-pool").style.display = "none"; return; }
+  const [term, week] = val.split("|");
+  loadPoolIntoSetup(year, term, week);
+}
+function loadPoolIntoSetup(year, term, week) {
+  currentPool = spGetWeekPool(year, term, week);
+  const box = $("setup-pool");
+
+  if (!currentPool.words.length) {
+    box.innerHTML = `<div class="banner-error">This week has no words recorded yet — try a different week.</div>`;
+    box.style.display = "block";
+    return;
+  }
+
+  const roundWords = currentPool.words.slice(0, MAX_ROUND_WORDS);
+  const rulesHtml = currentPool.rules.length
+    ? currentPool.rules.map(r => `<div class="rule-mini"><b>${escapeHtml(r.focus || "This week's pattern")}</b>${escapeHtml(r.explanation)}</div>`).join("")
+    : "";
+  box.innerHTML = `
+    ${rulesHtml}
+    <label class="field-label" style="margin-top:14px;">Words this round (${roundWords.length})</label>
+    <div class="word-tags">${roundWords.map(w => `<span class="word-tag">${escapeHtml(w)}</span>`).join("")}</div>
+    <button class="btn" id="setup-continue">Continue ▶</button>`;
+  box.style.display = "block";
+  $("setup-continue").addEventListener("click", () => {
+    activatePool(currentPool.year, currentPool.term, currentPool.week);
+  });
+}
+$("setup-year").addEventListener("change", onSetupYearChange);
+$("setup-week").addEventListener("change", onSetupWeekChange);
+populateYearSelect();
+
+/* ── Turn a chosen year/week into an active round ── */
+function activatePool(year, term, week) {
+  const pool = spGetWeekPool(year, term, week);
+  RULES = pool.rules;
+  WORDS = pool.words.slice(0, MAX_ROUND_WORDS);
+
+  POOL_ID = `${year}-${term}${week}`;
+  LEADERBOARD_KEY = "wfa-letter-detective-leaderboard-" + POOL_ID;
+
+  renderRuleBox();
+  goTo("start");
+  initAccessScreen();
+}
+
+function renderRuleBox() {
+  const box = $("rule-box-list");
+  if (!RULES.length) {
+    box.innerHTML = '<div class="rule-box"><div class="rule-label">This week\'s words</div><div class="rule-text">No rule notes recorded for this week — words only.</div></div>';
+    return;
+  }
+  box.innerHTML = RULES.map(r => `<div class="rule-box">
+    <div class="rule-label">This week's spelling rule</div>
+    <div class="rule-title">${escapeHtml(r.focus || "Spelling pattern")}</div>
+    <div class="rule-text">${escapeHtml(r.explanation)}</div>
+  </div>`).join("");
+}
+
+$("change-week-link").addEventListener("click", () => {
+  $("pin-gate").style.display = "none";
+  $("guest-gate").style.display = "block";
+  goTo("setup");
+});
+
+/* ── Leaderboard (localStorage stand-in for a real backend) ── */
+function loadLeaderboard() {
+  try { return JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || "[]"); }
+  catch (e) { return []; }
+}
+function saveScore(entry) {
+  const board = loadLeaderboard();
+  board.push(entry);
+  board.sort((a, b) => b.score - a.score);
+  const top = board.slice(0, 10);
+  localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(top));
+  return top;
+}
+async function renderLeaderboard(targetId, highlightId) {
+  const remote = await fetchRemoteLeaderboard();
+  const board = remote || loadLeaderboard();
+  const el = $(targetId);
+  if (!board.length) {
+    el.innerHTML = '<div class="board-empty">No scores yet — be the first to play!</div>';
+    return;
+  }
+  const firstYouIdx = highlightId ? board.findIndex(r => r.id === highlightId) : -1;
+  el.innerHTML = board.map((row, i) => `
+    <div class="board-row ${i === firstYouIdx ? 'you' : ''}">
+      <div class="rank">${i + 1}</div>
+      <div class="rname">${escapeHtml(row.name)}</div>
+      <div class="rscore">${row.score} pts</div>
+    </div>`).join("");
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ── "Access" — QR code (?u=CODE) + PIN identifies a named pupil;
+   a manually-typed code + PIN is the fallback. ── */
+const urlParams = new URLSearchParams(location.search);
+const qrCode = (urlParams.get("u") || "").trim().toUpperCase();
+let pendingPupil = null;
+
+function findPupil(code) {
+  return (typeof ROSTER !== "undefined" ? ROSTER : []).find(p => p.id.toUpperCase() === code.toUpperCase());
+}
+
+function showPinGate(pupil) {
+  pendingPupil = pupil;
+  $("pin-pupil-name").textContent = pupil.name;
+  $("guest-gate").style.display = "none";
+  $("pin-gate").style.display = "block";
+  pinBuffer = "";
+  renderPinDots();
+}
+
+function beginAsPupil(pupil) {
+  playerName = pupil.name;
+  playerId = pupil.id;
+  localStorage.setItem(LAST_ID_KEY, pupil.id);
+  goTo("game");
+  startRound();
+}
+
+/* PIN keypad */
+let pinBuffer = "";
+function buildPinKeypad() {
+  const layout = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
+  const kp = $("keypad");
+  kp.innerHTML = "";
+  layout.forEach(k => {
+    const btn = document.createElement("button");
+    if (k === "") { btn.style.visibility = "hidden"; btn.disabled = true; }
+    else if (k === "⌫") { btn.textContent = k; btn.className = "wide"; btn.addEventListener("click", pressDelete); }
+    else { btn.textContent = k; btn.addEventListener("click", () => pressDigit(k)); }
+    kp.appendChild(btn);
+  });
+}
+function renderPinDots() {
+  document.querySelectorAll("#pin-dots .dot").forEach((d, i) => d.classList.toggle("filled", i < pinBuffer.length));
+}
+function pressDigit(d) {
+  if (!pendingPupil || pinBuffer.length >= 4) return;
+  pinBuffer += d;
+  renderPinDots();
+  $("pin-error").innerHTML = "&nbsp;";
+  if (pinBuffer.length === 4) checkPin();
+}
+function pressDelete() { pinBuffer = pinBuffer.slice(0, -1); renderPinDots(); }
+function checkPin() {
+  if (pinBuffer === pendingPupil.pin) {
+    spSetVerifiedPupil(pendingPupil.id);
+    beginAsPupil(pendingPupil);
+  } else {
+    $("pin-gate").classList.add("shake");
+    $("pin-error").textContent = "That's not quite right — try again.";
+    setTimeout(() => { pinBuffer = ""; renderPinDots(); $("pin-gate").classList.remove("shake"); }, 420);
+  }
+}
+buildPinKeypad();
+
+$("pin-back").addEventListener("click", () => {
+  $("pin-gate").style.display = "none";
+  $("guest-gate").style.display = "block";
+});
+
+$("manual-submit").addEventListener("click", () => {
+  const code = $("manual-code").value.trim().toUpperCase();
+  const pin = $("manual-pin").value.trim();
+  const pupil = code ? findPupil(code) : null;
+  if (!pupil || pupil.pin !== pin) {
+    $("manual-error").textContent = "That code and PIN don't match — check with your teacher.";
+    return;
+  }
+  spSetVerifiedPupil(pupil.id);
+  beginAsPupil(pupil);
+});
+
+/* Runs once a word list is active and the start (identify-yourself) screen is showing. */
+function initAccessScreen() {
+  $("bad-code-banner").style.display = "none";
+  if (qrCode) {
+    pendingPupil = findPupil(qrCode);
+    if (pendingPupil) {
+      // Already proved this pupil's PIN once in this tab (e.g. via the
+      // "My Spelling Games" hub) — go straight in instead of asking again.
+      if (spGetVerifiedPupilId() === pendingPupil.id.toUpperCase()) {
+        beginAsPupil(pendingPupil);
+        return;
+      }
+      showPinGate(pendingPupil);
+    } else {
+      $("bad-code-banner").style.display = "block";
+    }
+  }
+  renderLeaderboard("leaderboard-list", localStorage.getItem(LAST_ID_KEY));
+}
+
+$("again-btn").addEventListener("click", () => { goTo("game"); startRound(); });
+$("menu-btn").addEventListener("click", () => {
+  // Full sign-out: clears this tab's verified pupil and returns to the
+  // hub's identify screen, so the next child on the same iPad must enter
+  // their own code + PIN rather than picking up mid-session as this pupil.
+  spClearVerifiedPupil();
+  location.href = "../play/index.html";
+});
+
+function goTo(which) {
+  $("screen-loading").classList.toggle("active", false);
+  $("screen-setup").classList.toggle("active", which === "setup");
+  $("screen-start").classList.toggle("active", which === "start");
+  $("screen-end").classList.toggle("active", which === "end");
+  $("game-wrap").classList.toggle("active", which === "game");
+  document.body.classList.toggle("playing", which === "game");
+}
+
+/* ── Game logic — guess the word one letter at a time ── */
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function startRound() {
+  state = { score: 0, solvedCount: 0, idx: 0, order: shuffleArray(WORDS.slice()), ending: false };
+  showWord();
+}
+
+function currentWord() { return state.order[state.idx]; }
+
+function showWord() {
+  state.revealed = new Set();
+  state.livesLeft = MAX_WRONG_GUESSES;
+  $("ld-play-area").style.display = "block";
+  $("ld-feedback").style.display = "none";
+  renderWordDisplay();
+  buildLetterKeyboard();
+  updateHud();
+}
+
+function renderWordDisplay() {
+  const word = currentWord();
+  $("ld-word-display").innerHTML = [...word].map(ch => {
+    const shown = state.revealed.has(ch);
+    return `<div class="ld-letter-box ${shown ? 'revealed' : ''}">${shown ? escapeHtml(ch.toUpperCase()) : ''}</div>`;
+  }).join("");
+}
+
+function buildLetterKeyboard() {
+  const kb = $("ld-keyboard");
+  kb.innerHTML = "";
+  "abcdefghijklmnopqrstuvwxyz".split("").forEach(letter => {
+    const btn = document.createElement("button");
+    btn.className = "ld-key";
+    btn.textContent = letter.toUpperCase();
+    btn.addEventListener("click", () => guessLetter(letter, btn));
+    kb.appendChild(btn);
+  });
+}
+
+function guessLetter(letter, btn) {
+  if (!state || state.ending || btn.disabled) return;
+  const word = currentWord();
+  btn.disabled = true;
+
+  if (word.includes(letter)) {
+    state.revealed.add(letter);
+    btn.classList.add("correct");
+    renderWordDisplay();
+    const uniqueLetters = new Set(word.split(""));
+    const allRevealed = [...uniqueLetters].every(ch => state.revealed.has(ch));
+    if (allRevealed) wordSolved();
+  } else {
+    btn.classList.add("wrong");
+    state.livesLeft--;
+    updateHud();
+    if (state.livesLeft <= 0) wordFailed();
+  }
+}
+
+function wordSolved() {
+  state.score += 10;
+  state.solvedCount++;
+  showFeedback(true, currentWord());
+}
+function wordFailed() {
+  showFeedback(false, currentWord());
+}
+
+function showFeedback(success, word) {
+  $("ld-play-area").style.display = "none";
+  $("ld-feedback").style.display = "block";
+  $("ld-feedback-icon").textContent = success ? "🎉" : "🕵️";
+  $("ld-feedback-text").innerHTML = success
+    ? `<span class="correct-word">${escapeHtml(word)}</span> — cracked it!`
+    : `Out of guesses — it was <span class="correct-word">${escapeHtml(word)}</span>`;
+  updateHud();
+  setTimeout(nextWord, success ? 900 : 1600);
+}
+
+function nextWord() {
+  if (!state || state.ending) return;
+  state.idx++;
+  if (state.idx >= state.order.length) { endRound(); return; }
+  showWord();
+}
+
+function updateHud() {
+  $("hud-score").textContent = state.score;
+  $("hud-progress").textContent = `${Math.min(state.idx + 1, state.order.length)} / ${state.order.length}`;
+  $("hud-lives").textContent = state.livesLeft;
+}
+
+function endRound() {
+  if (!state || state.ending) return;
+  state.ending = true;
+
+  const total = state.order.length;
+  const accuracy = total ? Math.round((state.solvedCount / total) * 100) : 0;
+
+  $("end-score").textContent = state.score;
+  $("end-accuracy").textContent = accuracy + "%";
+  $("end-correct").textContent = `${state.solvedCount} / ${total}`;
+
+  const scoreEntry = {
+    id: playerId, name: playerName, score: state.score, accuracy,
+    bestStreak: 0, date: new Date().toISOString().slice(0, 10)
+  };
+  saveScore(scoreEntry);
+  syncSaveScore(scoreEntry);
+  renderLeaderboard("leaderboard-list-end", playerId);
+
+  goTo("end");
+}
+
+/* ── Optional backend sync — see ../backend/. No-ops until
+   BACKEND_URL is set, so the game works standalone until it's deployed. ── */
+function syncSaveScore(entry) {
+  if (!BACKEND_URL || !entry.id) return;
+  fetch(BACKEND_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      pupilId: entry.id, pupilName: entry.name, game: GAME_ID, ruleId: POOL_ID,
+      score: entry.score, accuracy: entry.accuracy, bestStreak: entry.bestStreak
+    }),
+    headers: { "Content-Type": "text/plain" }
+  }).catch(e => console.warn("Score sync failed, kept locally only:", e));
+}
+
+async function fetchRemoteLeaderboard() {
+  if (!BACKEND_URL) return null;
+  try {
+    const url = `${BACKEND_URL}?action=leaderboard&game=${encodeURIComponent(GAME_ID)}&rule=${encodeURIComponent(POOL_ID)}&top=10`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    return (data.leaderboard || []).map(r => ({ id: r.pupilId, name: r.pupilName, score: r.score }));
+  } catch (e) {
+    console.warn("Remote leaderboard fetch failed, showing local scores:", e);
+    return null;
+  }
+}
+
+/* ── Entry point: a QR card bakes ?y=&t=&w= in, so scanning it skips
+   straight past the setup screen. Opening the page with no params (staff
+   testing, or a guest) shows the year/week picker instead. Pupil setup
+   (ROSTER) and the default week (CURRENT_WEEK) are fetched live from the
+   Sheet first, falling back to roster.js's static copies if that fails. ── */
+(async function boot() {
+  const live = await spFetchLiveRoster(BACKEND_URL);
+  if (live) {
+    if (live.roster && live.roster.length) ROSTER = live.roster;
+    if (live.currentWeek) CURRENT_WEEK = live.currentWeek;
+  }
+
+  const paramYear = urlParams.get("y");
+  const paramTerm = urlParams.get("t");
+  const paramWeek = urlParams.get("w");
+  if (paramYear && paramTerm && paramWeek) {
+    activatePool(paramYear, paramTerm, paramWeek);
+  } else {
+    goTo("setup");
+  }
+})();
+</script>
+</body>
+</html>
