@@ -46,5 +46,9 @@ const GAMES = [
   {
     id: "look-write-check", label: "Look, Cover, Write, Check", icon: "✍️", path: "look-write-check/index.html",
     isAvailable: (year, term, week) => spGetWeekPool(year, term, week).words.length > 0
+  },
+  {
+    id: "spelling-bee", label: "Spelling Bee", icon: "🐝", path: "spelling-bee/index.html",
+    isAvailable: (year, term, week) => spGetWeekPool(year, term, week).words.length > 0
   }
 ];
