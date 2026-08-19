@@ -20,10 +20,15 @@
     color:var(--navy);
     display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
     min-height:100%;
-    overflow:hidden;
+    overflow-x:hidden;
+    overflow-y:auto;
     touch-action:manipulation;
     user-select:none;
   }
+  /* Only lock page scroll during actual gameplay — the setup/start/end
+     screens can be taller than the viewport (long rule lists, word tags,
+     leaderboards) and need to scroll normally. */
+  body.playing{ overflow-y:hidden; }
 
   /* ── Shared screen layout ── */
   .screen{
@@ -656,6 +661,7 @@ function goTo(which) {
   $("screen-start").classList.toggle("active", which === "start");
   $("screen-end").classList.toggle("active", which === "end");
   $("game-wrap").classList.toggle("active", which === "game");
+  document.body.classList.toggle("playing", which === "game");
 }
 
 /* ── Game logic ── */

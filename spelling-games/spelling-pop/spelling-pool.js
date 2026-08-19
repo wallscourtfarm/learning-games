@@ -47,17 +47,20 @@ function spGetWeekPool(year, term, week) {
   const lessons = spGetWeekLessons(year, term, week);
   const words = [...new Set(lessons.flatMap(l => (l.hlWords || []).map(w => w.toLowerCase())))];
 
-  const rules = [];
-  const seen = new Set();
+  // Dedupe by explanation text, not focus+explanation — several lessons in
+  // a week often share identical explanation text but differ in their
+  // (sometimes empty, sometimes truncated) focus label, which otherwise
+  // shows the same rule card twice.
+  const byExplanation = new Map();
   lessons.forEach(l => {
     if (!l.explanation) return;
-    const key = l.focus + "|" + l.explanation;
-    if (seen.has(key)) return;
-    seen.add(key);
-    rules.push({ focus: l.focus, explanation: l.explanation, exampleWords: l.hlWords || [] });
+    const existing = byExplanation.get(l.explanation);
+    if (!existing || (!existing.focus && l.focus)) {
+      byExplanation.set(l.explanation, { focus: l.focus, explanation: l.explanation, exampleWords: l.hlWords || [] });
+    }
   });
 
-  return { year, term, week, lessons, words, rules };
+  return { year, term, week, lessons, words, rules: [...byExplanation.values()] };
 }
 
 /* ── Heuristic "wrong spelling" generator ──
