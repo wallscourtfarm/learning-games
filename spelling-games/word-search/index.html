@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Word Search — Wallscourt Farm Academy</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔍</text></svg>">
+<style>
+  :root{
+    --blue:#1798d3; --blue-dark:#0f6f9e; --navy:#12263a;
+    --green:#2fbf71; --red:#e5484d; --amber:#f5a524;
+    --bg1:#eaf6fd; --bg2:#dcf0fb;
+    --card:#ffffff; --muted:#5b7a8a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;
+    background:linear-gradient(160deg,var(--bg1),var(--bg2));
+    color:var(--navy);
+    display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+    min-height:100%;
+    overflow-x:hidden;
+    overflow-y:auto;
+    touch-action:manipulation;
+    user-select:none;
+  }
+  body.playing{ overflow-y:hidden; }
+
+  @keyframes shakeAnim{ 20%{transform:translateX(-8px) rotate(-4deg);} 50%{transform:translateX(8px) rotate(4deg);} 80%{transform:translateX(-4px);} 100%{transform:translateX(0);} }
+
+  /* ── Shared screen layout ── */
+  .screen{
+    width:100%; max-width:640px; margin:0 auto;
+    padding:20px 20px 32px;
+    display:none;
+  }
+  .screen.active{display:block;}
+
+  .brand{ text-align:center; padding-top:18px; }
+  .brand .kicker{
+    font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+    color:var(--blue-dark); opacity:.75;
+  }
+  .brand h1{ margin:4px 0 2px; font-size:clamp(28px,7vw,40px); font-weight:800; }
+  .brand h1 .pop-emoji{display:inline-block;}
+
+  .panel{
+    background:var(--card); border-radius:18px; padding:22px 22px 26px;
+    box-shadow:0 10px 30px rgba(18,38,58,.10);
+    margin-top:16px;
+  }
+
+  .rule-box{
+    background:#fff7e6; border:1.5px solid #f3d18a; border-radius:14px;
+    padding:14px 16px; margin-bottom:18px;
+  }
+  .rule-box .rule-label{
+    font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1px;
+    color:#a3720b; margin-bottom:4px;
+  }
+  .rule-box .rule-title{ font-size:17px; font-weight:800; margin-bottom:4px; }
+  .rule-box .rule-text{ font-size:13.5px; color:#5b4a1f; line-height:1.45; }
+
+  label.field-label{ display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--muted); }
+  input[type=text]{
+    width:100%; font-size:18px; padding:12px 14px; border-radius:12px;
+    border:2px solid #cfe2ec; outline:none; font-family:inherit;
+  }
+  input[type=text]:focus{ border-color:var(--blue); }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    font-size:17px; font-weight:800; font-family:inherit;
+    padding:14px 22px; border-radius:14px; border:none; cursor:pointer;
+    width:100%; margin-top:16px;
+    background:var(--blue); color:#fff;
+    box-shadow:0 6px 0 var(--blue-dark);
+    transition:transform .05s;
+  }
+  .btn:active{ transform:translateY(4px); box-shadow:0 2px 0 var(--blue-dark); }
+  .btn.secondary{ background:#eef5f9; color:var(--blue-dark); box-shadow:0 6px 0 #c9dde7; }
+  .btn.secondary:active{ box-shadow:0 2px 0 #c9dde7; }
+
+  /* ── Leaderboard ── */
+  .board-title{ font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin:22px 0 8px; }
+  .board-row{
+    display:flex; align-items:center; gap:10px;
+    padding:9px 4px; border-bottom:1px solid #eef3f6; font-size:14.5px;
+  }
+  .board-row .rank{ width:22px; font-weight:800; color:var(--muted); text-align:center; }
+  .board-row .rname{ flex:1; font-weight:700; }
+  .board-row .rscore{ font-weight:800; color:var(--blue-dark); }
+  .board-row.you{ background:#eaf8f0; border-radius:10px; }
+  .board-empty{ font-size:13.5px; color:var(--muted); padding:8px 4px; }
+
+  /* ── HUD ── */
+  .hud{
+    width:100%; max-width:640px; display:flex; align-items:center; gap:10px;
+    padding:10px 14px; z-index:5;
+  }
+  .hud-pill{
+    background:#fff; border-radius:12px; padding:8px 14px;
+    box-shadow:0 3px 10px rgba(18,38,58,.08);
+    font-weight:800; font-size:15px; display:flex; align-items:center; gap:6px;
+  }
+  .hud-pill.grow{ flex:1; justify-content:center; }
+  .hud-pill .lab{ font-size:10px; font-weight:700; text-transform:uppercase; color:var(--muted); letter-spacing:.5px; }
+
+  /* ── Game screen: grid + word list ── */
+  #game-wrap{ display:none; flex-direction:column; align-items:center; width:100%; padding:0 16px 20px; }
+  #game-wrap.active{ display:flex; }
+
+  #ws-grid{
+    display:grid; gap:2px; margin:16px auto 0;
+    width:100%; max-width:440px; aspect-ratio:1/1;
+    touch-action:none; user-select:none;
+  }
+  .ws-cell{
+    display:flex; align-items:center; justify-content:center;
+    background:#fff; border-radius:5px; font-weight:800; color:var(--navy);
+    font-size:clamp(11px,3vw,17px); cursor:pointer;
+  }
+  .ws-cell.selected{ background:var(--amber); color:#fff; }
+  .ws-cell.found{ background:var(--green); color:#fff; }
+  .ws-cell.wrong{ background:var(--red); color:#fff; }
+
+  .ws-word-list{
+    display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; justify-content:center;
+    width:100%; max-width:440px;
+  }
+  .ws-word-chip{
+    font-size:13px; font-weight:700; padding:7px 14px; border-radius:999px;
+    background:#eef5f9; color:var(--navy);
+  }
+  .ws-word-chip.found{ background:var(--green); color:#fff; text-decoration:line-through; opacity:.8; }
+
+  /* ── End screen stats ── */
+  .stat-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:6px; }
+  .stat-box{ background:#f5fafc; border-radius:12px; padding:14px 6px; text-align:center; }
+  .stat-box .num{ font-size:24px; font-weight:900; color:var(--blue-dark); }
+  .stat-box .lab{ font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-top:2px; }
+
+  footer.note{
+    max-width:640px; margin:18px auto 0; padding:0 20px 20px; font-size:11.5px; color:var(--muted); text-align:center; line-height:1.5;
+  }
+
+  /* ── QR / PIN access gate ── */
+  .banner-error{
+    background:#fdeceb; border:1.5px solid #f3b7b3; color:#a3231f;
+    border-radius:12px; padding:12px 14px; font-size:13.5px; font-weight:600;
+    margin-bottom:18px;
+  }
+  .pin-hello{ font-size:16px; font-weight:800; text-align:center; margin-bottom:16px; }
+  .pin-hello span{ color:var(--blue-dark); }
+  .pin-dots{ display:flex; justify-content:center; gap:14px; margin-bottom:10px; }
+  .pin-dots .dot{
+    width:18px; height:18px; border-radius:50%; border:2.5px solid #cfe2ec; background:#fff;
+    transition:background .15s, border-color .15s;
+  }
+  .pin-dots .dot.filled{ background:var(--blue); border-color:var(--blue); }
+  .pin-error{ text-align:center; font-size:13px; font-weight:700; color:var(--red); min-height:18px; margin-top:10px; margin-bottom:8px; }
+  #pin-gate.shake .pin-dots{ animation:shakeAnim .32s ease; }
+  .keypad{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:280px; margin:6px auto 0; }
+  .keypad button{
+    font-size:22px; font-weight:800; font-family:inherit; padding:16px 0; border-radius:14px;
+    border:none; background:#eef5f9; color:var(--navy); cursor:pointer; box-shadow:0 4px 0 #d3e4ec;
+  }
+  .keypad button:active{ transform:translateY(3px); box-shadow:0 1px 0 #d3e4ec; }
+  .keypad button.wide{ font-size:15px; color:var(--muted); }
+  .pin-back{
+    display:block; text-align:center; width:100%; margin-top:16px; font-size:13px; color:var(--muted);
+    background:none; border:none; cursor:pointer; text-decoration:underline; font-family:inherit;
+  }
+
+  /* ── Year / week setup screen ── */
+  select{
+    width:100%; font-size:17px; padding:12px 14px; border-radius:12px;
+    border:2px solid #cfe2ec; outline:none; font-family:inherit; background:#fff; color:var(--navy);
+  }
+  select:focus{ border-color:var(--blue); }
+  .rule-mini{
+    background:#fff7e6; border:1.5px solid #f3d18a; border-radius:12px;
+    padding:12px 14px; margin-bottom:10px; font-size:13.5px; color:#5b4a1f; line-height:1.4;
+  }
+  .rule-mini b{ display:block; font-size:14.5px; color:var(--navy); margin-bottom:3px; font-weight:800; }
+  .word-tags{ display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  .word-tag{
+    font-family:inherit; font-size:14px; font-weight:700; padding:9px 16px; border-radius:999px;
+    border:2px solid #cfe2ec; background:#fff; color:var(--navy);
+  }
+  .setup-link{
+    display:block; text-align:center; width:100%; margin-top:10px; font-size:12.5px; color:var(--muted);
+    background:none; border:none; cursor:pointer; text-decoration:underline; font-family:inherit;
+  }
+</style>
+</head>
+<body>
+
+  <!-- ══════════ LOADING SCREEN — shown while boot() resolves identity/roster,
+       so a QR/link that already carries y/t/w/u never flashes the setup
+       screen underneath it while waiting on the network. ══════════ -->
+  <section id="screen-loading" class="screen active">
+    <div class="brand">
+      <div class="kicker">Wallscourt Farm Academy · Spelling Games (prototype)</div>
+      <h1><span class="pop-emoji">🔍</span> Word Search</h1>
+    </div>
+  </section>
+
+  <!-- ══════════ SETUP SCREEN — pick year group + week ══════════ -->
+  <section id="screen-setup" class="screen">
+    <div class="brand">
+      <div class="kicker">Wallscourt Farm Academy · Spelling Games (prototype)</div>
+      <h1><span class="pop-emoji">🔍</span> Word Search</h1>
+    </div>
+    <div class="panel">
+      <p style="font-size:13.5px; color:var(--muted); margin:0 0 16px;">
+        Find this week's spelling words hidden in a letter grid — drag across letters, forwards, backwards, up, down
+        or diagonally. Up to 10 words per round. Works with any week's word list.
+      </p>
+      <label class="field-label" for="setup-year">Year group</label>
+      <select id="setup-year"><option value="">Choose…</option></select>
+
+      <label class="field-label" for="setup-week" style="margin-top:14px;">Week</label>
+      <select id="setup-week"><option value="">Choose a year group first…</option></select>
+
+      <div id="setup-pool" style="display:none; margin-top:20px;"></div>
+    </div>
+  </section>
+
+  <!-- ══════════ START SCREEN — identify the player ══════════ -->
+  <section id="screen-start" class="screen">
+    <div class="brand">
+      <div class="kicker">Wallscourt Farm Academy · Spelling Games (prototype)</div>
+      <h1><span class="pop-emoji">🔍</span> Word Search</h1>
+    </div>
+
+    <div class="panel">
+      <div id="rule-box-list"></div>
+
+      <div id="bad-code-banner" class="banner-error" style="display:none;">
+        We didn't recognise that spelling code. Ask your teacher for a new card, or use the options below.
+      </div>
+
+      <!-- Shown once a pupil is identified, via QR scan or manual code -->
+      <div id="pin-gate" style="display:none;">
+        <div class="pin-hello">Hi <span id="pin-pupil-name"></span>! Enter your spelling PIN.</div>
+        <div class="pin-dots" id="pin-dots">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        </div>
+        <div class="pin-error" id="pin-error">&nbsp;</div>
+        <div class="keypad" id="keypad"></div>
+        <button class="pin-back" id="pin-back">Not you? Use a different way in</button>
+      </div>
+
+      <!-- Default entry: a personal code + PIN, always required — no
+           typed-name shortcut, since iPads get shared between children. -->
+      <div id="guest-gate">
+        <label class="field-label" for="manual-code">Your code</label>
+        <input type="text" id="manual-code" maxlength="6" placeholder="e.g. AM72" style="text-transform:uppercase;" autocomplete="off">
+        <label class="field-label" for="manual-pin" style="margin-top:10px;">Your PIN</label>
+        <input type="text" id="manual-pin" inputmode="numeric" maxlength="4" placeholder="4 digits" autocomplete="off">
+        <button class="btn" id="manual-submit">▶ Start playing</button>
+        <div class="pin-error" id="manual-error">&nbsp;</div>
+        <button class="setup-link" id="change-week-link">Not the right week? Change year/week</button>
+      </div>
+    </div>
+
+    <div class="board-title">🏆 Leaderboard — best scores on this device</div>
+    <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
+      <div id="leaderboard-list"></div>
+    </div>
+
+    <footer class="note">
+      Proof of concept — each pupil's card (see <code>../cards.html</code>) has a personal QR code and PIN, shared across every spelling game. The grid is generated fresh each round from the week's own word list — a word that won't fit the grid is quietly left out rather than breaking the puzzle. Scores sync to the same backend as Spelling Pop.
+    </footer>
+  </section>
+
+  <!-- ══════════ GAME SCREEN ══════════ -->
+  <div id="game-wrap">
+    <div class="hud">
+      <div class="hud-pill"><span class="lab">Score</span>&nbsp;<span id="hud-score">0</span></div>
+      <div class="hud-pill grow"><span class="lab">Found&nbsp;</span><span id="hud-progress">0 / 0</span></div>
+    </div>
+    <div id="ws-grid"></div>
+    <div class="ws-word-list" id="ws-word-list"></div>
+  </div>
+
+  <!-- ══════════ END SCREEN ══════════ -->
+  <section id="screen-end" class="screen">
+    <div class="brand">
+      <div class="kicker">Round complete</div>
+      <h1>🎉 All found!</h1>
+    </div>
+    <div class="panel">
+      <div class="stat-grid">
+        <div class="stat-box"><div class="num" id="end-score">0</div><div class="lab">Score</div></div>
+        <div class="stat-box"><div class="num" id="end-accuracy">0%</div><div class="lab">Accuracy</div></div>
+        <div class="stat-box"><div class="num" id="end-time">0s</div><div class="lab">Time taken</div></div>
+      </div>
+      <button class="btn" id="again-btn">🔁 Play again</button>
+      <button class="btn secondary" id="menu-btn">🚪 Exit — next player sign in</button>
+    </div>
+    <div class="board-title">🏆 Leaderboard — best scores on this device</div>
+    <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
+      <div id="leaderboard-list-end"></div>
+    </div>
+  </section>
+
+<script src="../lessons-data.js"></script>
+<script src="../spelling-pool.js"></script>
+<script src="../roster.js"></script>
+<script>
+/* ════════════════════════════════════════════════════════════════
+   GAME IDENTITY — used to tag scores; leave as-is per game.
+   ════════════════════════════════════════════════════════════════ */
+const GAME_ID = "word-search";
+const LAST_ID_KEY = "wfa-word-search-last-id";
+const MAX_ROUND_WORDS = 10; // caps grid size/packing difficulty and round length
+/* BACKEND_URL, ROSTER and CURRENT_WEEK come from ../roster.js — the same
+   deployed backend as every other spelling game, since Code.gs keys rows
+   by game+rule. */
+/* ═══════════════════════════════════════════════════════════════ */
+
+const $ = id => document.getElementById(id);
+
+let WORDS = [];           // this week's word list, capped at MAX_ROUND_WORDS
+let RULES = [];
+let LEADERBOARD_KEY = "";
+let POOL_ID = "";
+let currentPool = null;
+
+let playerName = "";
+let playerId = null;
+let state = null;         // { score, foundWords, remaining, wrongAttempts, startTime, ending }
+let GRID = [];             // active letter grid for this round
+let GRID_SIZE = 0;
+let PLACED = [];           // [{ word, cells:[{r,c}] }] — words actually fitted into the grid
+
+/* ── Setup screen: year + week → word list ── */
+function populateYearSelect() {
+  const sel = $("setup-year");
+  sel.innerHTML = '<option value="">Choose…</option>' +
+    spGetYears().map(y => `<option value="${y}">${y.replace("Y", "Year ")}</option>`).join("");
+}
+function onSetupYearChange() {
+  const year = $("setup-year").value;
+  const weekSel = $("setup-week");
+  $("setup-pool").style.display = "none";
+  if (!year) { weekSel.innerHTML = '<option value="">Choose a year group first…</option>'; return; }
+  // Only the current week and earlier — never a week not yet taught.
+  const weeks = spGetAvailableWeeksForYear(year, CURRENT_WEEK);
+  weekSel.innerHTML = '<option value="">Choose…</option>' +
+    weeks.map(w => `<option value="${w.term}|${w.week}">${w.label}</option>`).join("");
+}
+function onSetupWeekChange() {
+  const year = $("setup-year").value;
+  const val = $("setup-week").value;
+  if (!year || !val) { $("setup-pool").style.display = "none"; return; }
+  const [term, week] = val.split("|");
+  loadPoolIntoSetup(year, term, week);
+}
+function loadPoolIntoSetup(year, term, week) {
+  currentPool = spGetWeekPool(year, term, week);
+  const box = $("setup-pool");
+
+  if (!currentPool.words.length) {
+    box.innerHTML = `<div class="banner-error">This week has no words recorded yet — try a different week.</div>`;
+    box.style.display = "block";
+    return;
+  }
+
+  const roundWords = currentPool.words.slice(0, MAX_ROUND_WORDS);
+  const rulesHtml = currentPool.rules.length
+    ? currentPool.rules.map(r => `<div class="rule-mini"><b>${escapeHtml(r.focus || "This week's pattern")}</b>${escapeHtml(r.explanation)}</div>`).join("")
+    : "";
+  box.innerHTML = `
+    ${rulesHtml}
+    <label class="field-label" style="margin-top:14px;">Words this round (${roundWords.length})</label>
+    <div class="word-tags">${roundWords.map(w => `<span class="word-tag">${escapeHtml(w)}</span>`).join("")}</div>
+    <button class="btn" id="setup-continue">Continue ▶</button>`;
+  box.style.display = "block";
+  $("setup-continue").addEventListener("click", () => {
+    activatePool(currentPool.year, currentPool.term, currentPool.week);
+  });
+}
+$("setup-year").addEventListener("change", onSetupYearChange);
+$("setup-week").addEventListener("change", onSetupWeekChange);
+populateYearSelect();
+
+/* ── Turn a chosen year/week into an active round ── */
+function activatePool(year, term, week) {
+  const pool = spGetWeekPool(year, term, week);
+  RULES = pool.rules;
+  WORDS = pool.words.slice(0, MAX_ROUND_WORDS);
+
+  POOL_ID = `${year}-${term}${week}`;
+  LEADERBOARD_KEY = "wfa-word-search-leaderboard-" + POOL_ID;
+
+  renderRuleBox();
+  goTo("start");
+  initAccessScreen();
+}
+
+function renderRuleBox() {
+  const box = $("rule-box-list");
+  if (!RULES.length) {
+    box.innerHTML = '<div class="rule-box"><div class="rule-label">This week\'s words</div><div class="rule-text">No rule notes recorded for this week — words only.</div></div>';
+    return;
+  }
+  box.innerHTML = RULES.map(r => `<div class="rule-box">
+    <div class="rule-label">This week's spelling rule</div>
+    <div class="rule-title">${escapeHtml(r.focus || "Spelling pattern")}</div>
+    <div class="rule-text">${escapeHtml(r.explanation)}</div>
+  </div>`).join("");
+}
+
+$("change-week-link").addEventListener("click", () => {
+  $("pin-gate").style.display = "none";
+  $("guest-gate").style.display = "block";
+  goTo("setup");
+});
+
+/* ── Leaderboard (localStorage stand-in for a real backend) ── */
+function loadLeaderboard() {
+  try { return JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || "[]"); }
+  catch (e) { return []; }
+}
+function saveScore(entry) {
+  const board = loadLeaderboard();
+  board.push(entry);
+  board.sort((a, b) => b.score - a.score);
+  const top = board.slice(0, 10);
+  localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(top));
+  return top;
+}
+async function renderLeaderboard(targetId, highlightId) {
+  const remote = await fetchRemoteLeaderboard();
+  const board = remote || loadLeaderboard();
+  const el = $(targetId);
+  if (!board.length) {
+    el.innerHTML = '<div class="board-empty">No scores yet — be the first to play!</div>';
+    return;
+  }
+  const firstYouIdx = highlightId ? board.findIndex(r => r.id === highlightId) : -1;
+  el.innerHTML = board.map((row, i) => `
+    <div class="board-row ${i === firstYouIdx ? 'you' : ''}">
+      <div class="rank">${i + 1}</div>
+      <div class="rname">${escapeHtml(row.name)}</div>
+      <div class="rscore">${row.score} pts</div>
+    </div>`).join("");
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ── "Access" — QR code (?u=CODE) + PIN identifies a named pupil;
+   a manually-typed code + PIN is the fallback. ── */
+const urlParams = new URLSearchParams(location.search);
+const qrCode = (urlParams.get("u") || "").trim().toUpperCase();
+let pendingPupil = null;
+
+function findPupil(code) {
+  return (typeof ROSTER !== "undefined" ? ROSTER : []).find(p => p.id.toUpperCase() === code.toUpperCase());
+}
+
+function showPinGate(pupil) {
+  pendingPupil = pupil;
+  $("pin-pupil-name").textContent = pupil.name;
+  $("guest-gate").style.display = "none";
+  $("pin-gate").style.display = "block";
+  pinBuffer = "";
+  renderPinDots();
+}
+
+function beginAsPupil(pupil) {
+  playerName = pupil.name;
+  playerId = pupil.id;
+  localStorage.setItem(LAST_ID_KEY, pupil.id);
+  goTo("game");
+  startRound();
+}
+
+/* PIN keypad */
+let pinBuffer = "";
+function buildKeypad() {
+  const layout = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
+  const kp = $("keypad");
+  kp.innerHTML = "";
+  layout.forEach(k => {
+    const btn = document.createElement("button");
+    if (k === "") { btn.style.visibility = "hidden"; btn.disabled = true; }
+    else if (k === "⌫") { btn.textContent = k; btn.className = "wide"; btn.addEventListener("click", pressDelete); }
+    else { btn.textContent = k; btn.addEventListener("click", () => pressDigit(k)); }
+    kp.appendChild(btn);
+  });
+}
+function renderPinDots() {
+  document.querySelectorAll("#pin-dots .dot").forEach((d, i) => d.classList.toggle("filled", i < pinBuffer.length));
+}
+function pressDigit(d) {
+  if (!pendingPupil || pinBuffer.length >= 4) return;
+  pinBuffer += d;
+  renderPinDots();
+  $("pin-error").innerHTML = "&nbsp;";
+  if (pinBuffer.length === 4) checkPin();
+}
+function pressDelete() { pinBuffer = pinBuffer.slice(0, -1); renderPinDots(); }
+function checkPin() {
+  if (pinBuffer === pendingPupil.pin) {
+    spSetVerifiedPupil(pendingPupil.id);
+    beginAsPupil(pendingPupil);
+  } else {
+    $("pin-gate").classList.add("shake");
+    $("pin-error").textContent = "That's not quite right — try again.";
+    setTimeout(() => { pinBuffer = ""; renderPinDots(); $("pin-gate").classList.remove("shake"); }, 420);
+  }
+}
+buildKeypad();
+
+$("pin-back").addEventListener("click", () => {
+  $("pin-gate").style.display = "none";
+  $("guest-gate").style.display = "block";
+});
+
+$("manual-submit").addEventListener("click", () => {
+  const code = $("manual-code").value.trim().toUpperCase();
+  const pin = $("manual-pin").value.trim();
+  const pupil = code ? findPupil(code) : null;
+  if (!pupil || pupil.pin !== pin) {
+    $("manual-error").textContent = "That code and PIN don't match — check with your teacher.";
+    return;
+  }
+  spSetVerifiedPupil(pupil.id);
+  beginAsPupil(pupil);
+});
+
+/* Runs once a word list is active and the start (identify-yourself) screen is showing. */
+function initAccessScreen() {
+  $("bad-code-banner").style.display = "none";
+  if (qrCode) {
+    pendingPupil = findPupil(qrCode);
+    if (pendingPupil) {
+      // Already proved this pupil's PIN once in this tab (e.g. via the
+      // "My Spelling Games" hub) — go straight in instead of asking again.
+      if (spGetVerifiedPupilId() === pendingPupil.id.toUpperCase()) {
+        beginAsPupil(pendingPupil);
+        return;
+      }
+      showPinGate(pendingPupil);
+    } else {
+      $("bad-code-banner").style.display = "block";
+    }
+  }
+  renderLeaderboard("leaderboard-list", localStorage.getItem(LAST_ID_KEY));
+}
+
+$("again-btn").addEventListener("click", () => { goTo("game"); startRound(); });
+$("menu-btn").addEventListener("click", () => {
+  // Full sign-out: clears this tab's verified pupil and returns to the
+  // hub's identify screen, so the next child on the same iPad must enter
+  // their own code + PIN rather than picking up mid-session as this pupil.
+  spClearVerifiedPupil();
+  location.href = "../play/index.html";
+});
+
+function goTo(which) {
+  $("screen-loading").classList.toggle("active", false);
+  $("screen-setup").classList.toggle("active", which === "setup");
+  $("screen-start").classList.toggle("active", which === "start");
+  $("screen-end").classList.toggle("active", which === "end");
+  $("game-wrap").classList.toggle("active", which === "game");
+  document.body.classList.toggle("playing", which === "game");
+}
+
+/* ── Grid generation — places each word in a straight line (right, down, or
+   either diagonal), longest first for tighter packing. A word that can't
+   find a fit after many random attempts is quietly left out of the round
+   rather than breaking the puzzle — rare, and only for very long words on
+   a small grid. ── */
+const WS_DIRS = [[0,1],[1,0],[1,1],[1,-1]];
+const WS_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+function buildGrid(words) {
+  const longest = Math.max(...words.map(w => w.length));
+  const size = Math.max(10, Math.min(14, longest + 2));
+  const grid = Array.from({ length: size }, () => Array(size).fill(null));
+  const placed = [];
+
+  [...words].sort((a, b) => b.length - a.length).forEach(word => {
+    const upper = word.toUpperCase();
+    for (let attempt = 0; attempt < 300; attempt++) {
+      const [dr, dc] = WS_DIRS[Math.floor(Math.random() * WS_DIRS.length)];
+      const r0 = Math.floor(Math.random() * size);
+      const c0 = Math.floor(Math.random() * size);
+      const r1 = r0 + dr * (upper.length - 1);
+      const c1 = c0 + dc * (upper.length - 1);
+      if (r1 < 0 || r1 >= size || c1 < 0 || c1 >= size) continue;
+
+      let fits = true;
+      for (let i = 0; i < upper.length; i++) {
+        const existing = grid[r0 + dr * i][c0 + dc * i];
+        if (existing !== null && existing !== upper[i]) { fits = false; break; }
+      }
+      if (!fits) continue;
+
+      const cells = [];
+      for (let i = 0; i < upper.length; i++) {
+        const r = r0 + dr * i, c = c0 + dc * i;
+        grid[r][c] = upper[i];
+        cells.push({ r, c });
+      }
+      placed.push({ word, cells });
+      return;
+    }
+    // Dropped — couldn't fit after 300 attempts. Rare; the word simply
+    // won't appear in this round rather than corrupting the puzzle.
+  });
+
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      if (grid[r][c] === null) grid[r][c] = WS_LETTERS[Math.floor(Math.random() * WS_LETTERS.length)];
+    }
+  }
+
+  return { size, grid, placed };
+}
+
+function renderGrid() {
+  const el = $("ws-grid");
+  el.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 1fr)`;
+  el.innerHTML = "";
+  for (let r = 0; r < GRID_SIZE; r++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
+      const cell = document.createElement("div");
+      cell.className = "ws-cell";
+      cell.textContent = GRID[r][c];
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+      el.appendChild(cell);
+    }
+  }
+}
+
+function renderWordList() {
+  $("ws-word-list").innerHTML = PLACED.map(p =>
+    `<span class="ws-word-chip ${state.foundWords.includes(p.word) ? 'found' : ''}">${escapeHtml(p.word)}</span>`
+  ).join("");
+}
+
+/* ── Selection — press-and-drag across the grid (mouse or touch, via
+   Pointer Events), snapping to whichever straight 8-direction line the
+   pointer is currently over. ── */
+let selecting = false;
+let selStart = null;
+let selPath = [];
+
+function getCellEl(r, c) { return $("ws-grid").querySelector(`.ws-cell[data-r="${r}"][data-c="${c}"]`); }
+function clearCellClasses(cls) { document.querySelectorAll(`.ws-cell.${cls}`).forEach(el => el.classList.remove(cls)); }
+function highlightPath(path) {
+  clearCellClasses("selected");
+  path.forEach(({ r, c }) => { const el = getCellEl(r, c); if (el) el.classList.add("selected"); });
+}
+function computePath(r0, c0, r1, c1) {
+  const dr = r1 - r0, dc = c1 - c0;
+  if (!(dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc))) return null;
+  const steps = Math.max(Math.abs(dr), Math.abs(dc));
+  const sr = Math.sign(dr), sc = Math.sign(dc);
+  const path = [];
+  for (let i = 0; i <= steps; i++) path.push({ r: r0 + sr * i, c: c0 + sc * i });
+  return path;
+}
+function cellFromPoint(x, y) {
+  const el = document.elementFromPoint(x, y);
+  if (!el || !el.classList.contains("ws-cell")) return null;
+  return { r: parseInt(el.dataset.r, 10), c: parseInt(el.dataset.c, 10) };
+}
+
+$("ws-grid").addEventListener("pointerdown", e => {
+  if (!state || state.ending) return;
+  const target = e.target.closest(".ws-cell");
+  if (!target) return;
+  selecting = true;
+  selStart = { r: parseInt(target.dataset.r, 10), c: parseInt(target.dataset.c, 10) };
+  selPath = [selStart];
+  highlightPath(selPath);
+  e.preventDefault();
+});
+document.addEventListener("pointermove", e => {
+  if (!selecting) return;
+  const cell = cellFromPoint(e.clientX, e.clientY);
+  if (!cell) return;
+  const path = computePath(selStart.r, selStart.c, cell.r, cell.c);
+  if (path) { selPath = path; highlightPath(selPath); }
+});
+document.addEventListener("pointerup", () => {
+  if (!selecting) return;
+  selecting = false;
+  finalizeSelection();
+});
+
+function finalizeSelection() {
+  if (!state || state.ending || selPath.length < 2) {
+    clearCellClasses("selected");
+    selPath = []; selStart = null;
+    return;
+  }
+  const letters = selPath.map(({ r, c }) => GRID[r][c]).join("");
+  const reversed = letters.split("").reverse().join("");
+  const match = state.remaining.find(w => w.toUpperCase() === letters || w.toUpperCase() === reversed);
+
+  if (match) {
+    markFound(match);
+  } else {
+    state.wrongAttempts++;
+    document.querySelectorAll(".ws-cell.selected").forEach(el => { el.classList.remove("selected"); el.classList.add("wrong"); });
+    setTimeout(() => clearCellClasses("wrong"), 300);
+  }
+  selPath = []; selStart = null;
+}
+
+function markFound(word) {
+  const entry = PLACED.find(p => p.word === word);
+  state.foundWords.push(word);
+  state.remaining = state.remaining.filter(w => w !== word);
+  state.score += 10;
+  entry.cells.forEach(({ r, c }) => {
+    const el = getCellEl(r, c);
+    if (el) { el.classList.remove("selected"); el.classList.add("found"); }
+  });
+  renderWordList();
+  updateHud();
+  if (state.remaining.length === 0) endRound();
+}
+
+function updateHud() {
+  $("hud-score").textContent = state.score;
+  $("hud-progress").textContent = `${state.foundWords.length} / ${PLACED.length}`;
+}
+
+/* ── Round lifecycle ── */
+function startRound() {
+  const built = buildGrid(WORDS);
+  GRID_SIZE = built.size;
+  GRID = built.grid;
+  PLACED = built.placed;
+
+  state = { score: 0, foundWords: [], remaining: PLACED.map(p => p.word), wrongAttempts: 0, startTime: performance.now(), ending: false };
+  renderGrid();
+  renderWordList();
+  updateHud();
+}
+
+function endRound() {
+  if (!state || state.ending) return;
+  state.ending = true;
+
+  const elapsedSec = Math.max(1, Math.round((performance.now() - state.startTime) / 1000));
+  const totalAttempts = state.foundWords.length + state.wrongAttempts;
+  const accuracy = totalAttempts ? Math.round((state.foundWords.length / totalAttempts) * 100) : 100;
+
+  $("end-score").textContent = state.score;
+  $("end-accuracy").textContent = accuracy + "%";
+  $("end-time").textContent = elapsedSec + "s";
+
+  const scoreEntry = {
+    id: playerId, name: playerName, score: state.score, accuracy,
+    bestStreak: 0, date: new Date().toISOString().slice(0, 10)
+  };
+  saveScore(scoreEntry);
+  syncSaveScore(scoreEntry);
+  renderLeaderboard("leaderboard-list-end", playerId);
+
+  setTimeout(() => goTo("end"), 400);
+}
+
+/* ── Optional backend sync — see ../backend/. No-ops until
+   BACKEND_URL is set, so the game works standalone until it's deployed. ── */
+function syncSaveScore(entry) {
+  if (!BACKEND_URL || !entry.id) return;
+  fetch(BACKEND_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      pupilId: entry.id, pupilName: entry.name, game: GAME_ID, ruleId: POOL_ID,
+      score: entry.score, accuracy: entry.accuracy, bestStreak: entry.bestStreak
+    }),
+    headers: { "Content-Type": "text/plain" }
+  }).catch(e => console.warn("Score sync failed, kept locally only:", e));
+}
+
+async function fetchRemoteLeaderboard() {
+  if (!BACKEND_URL) return null;
+  try {
+    const url = `${BACKEND_URL}?action=leaderboard&game=${encodeURIComponent(GAME_ID)}&rule=${encodeURIComponent(POOL_ID)}&top=10`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    return (data.leaderboard || []).map(r => ({ id: r.pupilId, name: r.pupilName, score: r.score }));
+  } catch (e) {
+    console.warn("Remote leaderboard fetch failed, showing local scores:", e);
+    return null;
+  }
+}
+
+/* ── Entry point: a QR card bakes ?y=&t=&w= in, so scanning it skips
+   straight past the setup screen. Opening the page with no params (staff
+   testing, or a guest) shows the year/week picker instead. Pupil setup
+   (ROSTER) and the default week (CURRENT_WEEK) are fetched live from the
+   Sheet first, falling back to roster.js's static copies if that fails. ── */
+(async function boot() {
+  const live = await spFetchLiveRoster(BACKEND_URL);
+  if (live) {
+    if (live.roster && live.roster.length) ROSTER = live.roster;
+    if (live.currentWeek) CURRENT_WEEK = live.currentWeek;
+  }
+
+  const paramYear = urlParams.get("y");
+  const paramTerm = urlParams.get("t");
+  const paramWeek = urlParams.get("w");
+  if (paramYear && paramTerm && paramWeek) {
+    activatePool(paramYear, paramTerm, paramWeek);
+  } else {
+    goTo("setup");
+  }
+})();
+</script>
+</body>
+</html>
