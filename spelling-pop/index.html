@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Spelling Pop — Wallscourt Farm Academy</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🫧</text></svg>">
+<style>
+  :root{
+    --blue:#1798d3; --blue-dark:#0f6f9e; --navy:#12263a;
+    --green:#2fbf71; --red:#e5484d; --amber:#f5a524;
+    --bg1:#eaf6fd; --bg2:#dcf0fb;
+    --card:#ffffff; --muted:#5b7a8a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;
+    background:linear-gradient(160deg,var(--bg1),var(--bg2));
+    color:var(--navy);
+    display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+    min-height:100%;
+    overflow:hidden;
+    touch-action:manipulation;
+    user-select:none;
+  }
+
+  /* ── Shared screen layout ── */
+  .screen{
+    width:100%; max-width:640px; margin:0 auto;
+    padding:20px 20px 32px;
+    display:none;
+  }
+  .screen.active{display:block;}
+
+  .brand{
+    text-align:center; padding-top:18px;
+  }
+  .brand .kicker{
+    font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+    color:var(--blue-dark); opacity:.75;
+  }
+  .brand h1{
+    margin:4px 0 2px; font-size:clamp(28px,7vw,40px); font-weight:800;
+  }
+  .brand h1 .pop-emoji{display:inline-block;}
+
+  .panel{
+    background:var(--card); border-radius:18px; padding:22px 22px 26px;
+    box-shadow:0 10px 30px rgba(18,38,58,.10);
+    margin-top:16px;
+  }
+
+  .rule-box{
+    background:#fff7e6; border:1.5px solid #f3d18a; border-radius:14px;
+    padding:14px 16px; margin-bottom:18px;
+  }
+  .rule-box .rule-label{
+    font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1px;
+    color:#a3720b; margin-bottom:4px;
+  }
+  .rule-box .rule-title{ font-size:17px; font-weight:800; margin-bottom:4px; }
+  .rule-box .rule-text{ font-size:13.5px; color:#5b4a1f; line-height:1.45; }
+  .rule-box .rule-examples{ margin-top:8px; font-size:13.5px; }
+  .rule-box .rule-examples b{ color:var(--green); }
+  .rule-box .rule-examples s{ color:var(--red); text-decoration-thickness:2px; margin-left:10px; }
+
+  label.field-label{ display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--muted); }
+  input[type=text]{
+    width:100%; font-size:18px; padding:12px 14px; border-radius:12px;
+    border:2px solid #cfe2ec; outline:none; font-family:inherit;
+  }
+  input[type=text]:focus{ border-color:var(--blue); }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    font-size:17px; font-weight:800; font-family:inherit;
+    padding:14px 22px; border-radius:14px; border:none; cursor:pointer;
+    width:100%; margin-top:16px;
+    background:var(--blue); color:#fff;
+    box-shadow:0 6px 0 var(--blue-dark);
+    transition:transform .05s;
+  }
+  .btn:active{ transform:translateY(4px); box-shadow:0 2px 0 var(--blue-dark); }
+  .btn.secondary{
+    background:#eef5f9; color:var(--blue-dark); box-shadow:0 6px 0 #c9dde7;
+  }
+  .btn.secondary:active{ box-shadow:0 2px 0 #c9dde7; }
+
+  .name-chip{
+    display:inline-flex; align-items:center; gap:6px;
+    background:#eef5f9; border-radius:999px; padding:6px 12px 6px 8px;
+    font-size:13px; font-weight:700; color:var(--blue-dark); margin-top:10px;
+  }
+  .name-chip .avatar{
+    width:22px;height:22px;border-radius:50%;background:var(--blue);
+    color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;
+  }
+
+  /* ── Leaderboard ── */
+  .board-title{ font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin:22px 0 8px; }
+  .board-row{
+    display:flex; align-items:center; gap:10px;
+    padding:9px 4px; border-bottom:1px solid #eef3f6; font-size:14.5px;
+  }
+  .board-row .rank{ width:22px; font-weight:800; color:var(--muted); text-align:center; }
+  .board-row .rname{ flex:1; font-weight:700; }
+  .board-row .rscore{ font-weight:800; color:var(--blue-dark); }
+  .board-row.you{ background:#eaf8f0; border-radius:10px; }
+  .board-empty{ font-size:13.5px; color:var(--muted); padding:8px 4px; }
+
+  /* ── HUD ── */
+  .hud{
+    width:100%; max-width:640px; display:flex; align-items:center; gap:10px;
+    padding:10px 14px; z-index:5;
+  }
+  .hud-pill{
+    background:#fff; border-radius:12px; padding:8px 14px;
+    box-shadow:0 3px 10px rgba(18,38,58,.08);
+    font-weight:800; font-size:15px; display:flex; align-items:center; gap:6px;
+  }
+  .hud-pill.grow{ flex:1; }
+  .hud-pill .lab{ font-size:10px; font-weight:700; text-transform:uppercase; color:var(--muted); letter-spacing:.5px; }
+  #hud-time.warn{ color:var(--red); }
+  .timebar-track{ height:8px; background:#e2eef4; border-radius:6px; overflow:hidden; flex:1; }
+  .timebar-fill{ height:100%; background:var(--blue); border-radius:6px; transition:width .2s linear, background .3s; width:100%; }
+  #streak-pill{ display:none; }
+  #streak-pill.show{ display:flex; }
+
+  /* ── Game area ── */
+  #game-wrap{ display:none; flex-direction:column; align-items:center; width:100%; height:100%; }
+  #game-wrap.active{ display:flex; }
+  #game-area{
+    position:relative; width:100%; max-width:640px; flex:1;
+    background:radial-gradient(circle at 30% 20%, #ffffff 0%, var(--bg1) 45%, var(--bg2) 100%);
+    border-radius:0;
+    overflow:hidden;
+  }
+  .lane-line{ position:absolute; bottom:64px; left:0; right:0; border-top:2px dashed #b9d8e6; opacity:.6; }
+
+  .bubble{
+    position:absolute; top:-70px;
+    padding:12px 20px; border-radius:999px;
+    font-size:clamp(18px,4.6vw,26px); font-weight:800; color:#fff;
+    box-shadow:0 6px 14px rgba(0,0,0,.15), inset 0 -3px 0 rgba(0,0,0,.12);
+    cursor:pointer; white-space:nowrap;
+    will-change:transform,top;
+  }
+  .bubble.pop{ animation:popAnim .28s ease forwards; pointer-events:none; }
+  .bubble.wrongPop{ animation:shakeAnim .32s ease; }
+  @keyframes popAnim{ to{ transform:scale(1.6); opacity:0; } }
+  @keyframes shakeAnim{ 20%{transform:translateX(-8px) rotate(-4deg);} 50%{transform:translateX(8px) rotate(4deg);} 80%{transform:translateX(-4px);} 100%{transform:translateX(0);} }
+
+  .floater{
+    position:absolute; font-weight:900; font-size:20px; pointer-events:none;
+    animation:floatUp .8s ease forwards;
+  }
+  @keyframes floatUp{ from{ opacity:1; transform:translateY(0);} to{ opacity:0; transform:translateY(-46px);} }
+
+  .correction-toast{
+    position:absolute; left:50%; bottom:74px; transform:translateX(-50%) translateY(10px);
+    background:var(--navy); color:#fff; font-weight:700; font-size:14px;
+    padding:9px 16px; border-radius:12px; opacity:0; transition:opacity .2s, transform .2s;
+    pointer-events:none; text-align:center; max-width:88%;
+  }
+  .correction-toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .correction-toast b{ color:#8ee6a8; }
+
+  #ground{
+    height:64px; width:100%; max-width:640px;
+    background:#dff1e4; border-top:2px solid #bfe3c9;
+    display:flex; align-items:center; justify-content:center;
+    font-size:12.5px; color:#3f7a54; font-weight:700; gap:6px;
+  }
+
+  /* ── End screen stats ── */
+  .stat-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:6px; }
+  .stat-box{ background:#f5fafc; border-radius:12px; padding:14px 6px; text-align:center; }
+  .stat-box .num{ font-size:24px; font-weight:900; color:var(--blue-dark); }
+  .stat-box .lab{ font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-top:2px; }
+  .stat-box.new .num{ color:var(--green); }
+
+  footer.note{
+    max-width:640px; margin:18px auto 0; padding:0 20px 20px; font-size:11.5px; color:var(--muted); text-align:center; line-height:1.5;
+  }
+
+  /* ── QR / PIN access gate ── */
+  .banner-error{
+    background:#fdeceb; border:1.5px solid #f3b7b3; color:#a3231f;
+    border-radius:12px; padding:12px 14px; font-size:13.5px; font-weight:600;
+    margin-bottom:18px;
+  }
+  .pin-hello{ font-size:16px; font-weight:800; text-align:center; margin-bottom:16px; }
+  .pin-hello span{ color:var(--blue-dark); }
+  .pin-dots{ display:flex; justify-content:center; gap:14px; margin-bottom:10px; }
+  .pin-dots .dot{
+    width:18px; height:18px; border-radius:50%; border:2.5px solid #cfe2ec; background:#fff;
+    transition:background .15s, border-color .15s;
+  }
+  .pin-dots .dot.filled{ background:var(--blue); border-color:var(--blue); }
+  .pin-error{ text-align:center; font-size:13px; font-weight:700; color:var(--red); min-height:18px; margin-bottom:8px; }
+  #pin-gate.shake .pin-dots{ animation:shakeAnim .32s ease; }
+  .keypad{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:280px; margin:6px auto 0; }
+  .keypad button{
+    font-size:22px; font-weight:800; font-family:inherit; padding:16px 0; border-radius:14px;
+    border:none; background:#eef5f9; color:var(--navy); cursor:pointer; box-shadow:0 4px 0 #d3e4ec;
+  }
+  .keypad button:active{ transform:translateY(3px); box-shadow:0 1px 0 #d3e4ec; }
+  .keypad button.wide{ font-size:15px; color:var(--muted); }
+  .pin-back{
+    display:block; text-align:center; width:100%; margin-top:16px; font-size:13px; color:var(--muted);
+    background:none; border:none; cursor:pointer; text-decoration:underline; font-family:inherit;
+  }
+
+  .link-btn{
+    display:block; text-align:center; width:100%; background:none; border:none; cursor:pointer;
+    color:var(--blue-dark); font-size:13px; font-weight:700; text-decoration:underline;
+    margin-top:14px; font-family:inherit;
+  }
+  .divider-row{ display:flex; align-items:center; gap:10px; margin:20px 0 2px; color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+  .divider-row::before, .divider-row::after{ content:''; flex:1; height:1px; background:#e2eef4; }
+
+  /* ── Year / week setup screen ── */
+  select{
+    width:100%; font-size:17px; padding:12px 14px; border-radius:12px;
+    border:2px solid #cfe2ec; outline:none; font-family:inherit; background:#fff; color:var(--navy);
+  }
+  select:focus{ border-color:var(--blue); }
+  .rule-mini{
+    background:#fff7e6; border:1.5px solid #f3d18a; border-radius:12px;
+    padding:12px 14px; margin-bottom:10px; font-size:13.5px; color:#5b4a1f; line-height:1.4;
+  }
+  .rule-mini b{ display:block; font-size:14.5px; color:var(--navy); margin-bottom:3px; font-weight:800; }
+  .word-tags{ display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  .word-tag{
+    font-family:inherit; font-size:14px; font-weight:700; padding:9px 16px; border-radius:999px;
+    border:2px solid #cfe2ec; background:#fff; color:var(--navy); cursor:pointer;
+  }
+  .word-tag.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
+  .setup-link{
+    display:block; text-align:center; width:100%; margin-top:10px; font-size:12.5px; color:var(--muted);
+    background:none; border:none; cursor:pointer; text-decoration:underline; font-family:inherit;
+  }
+</style>
+</head>
+<body>
+
+  <!-- ══════════ SETUP SCREEN — pick year group + week ══════════ -->
+  <section id="screen-setup" class="screen active">
+    <div class="brand">
+      <div class="kicker">Wallscourt Farm Academy · Spelling Games (prototype)</div>
+      <h1><span class="pop-emoji">🫧</span> Spelling Pop</h1>
+    </div>
+    <div class="panel">
+      <p style="font-size:13.5px; color:var(--muted); margin:0 0 16px;">
+        Words and rules come straight from the Spelling Assessment tool's lesson data — pick a year group and week to build this round's word pool.
+      </p>
+      <label class="field-label" for="setup-year">Year group</label>
+      <select id="setup-year"><option value="">Choose…</option></select>
+
+      <label class="field-label" for="setup-week" style="margin-top:14px;">Week</label>
+      <select id="setup-week"><option value="">Choose a year group first…</option></select>
+
+      <div id="setup-pool" style="display:none; margin-top:20px;">
+        <div id="setup-rules"></div>
+        <label class="field-label" style="margin-top:14px;">Words for this round <span id="setup-count" style="font-weight:400;"></span></label>
+        <div class="word-tags" id="setup-word-tags"></div>
+        <button class="btn" id="setup-continue">Continue ▶</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ START SCREEN — identify the player ══════════ -->
+  <section id="screen-start" class="screen">
+    <div class="brand">
+      <div class="kicker">Wallscourt Farm Academy · Spelling Games (prototype)</div>
+      <h1><span class="pop-emoji">🫧</span> Spelling Pop</h1>
+    </div>
+
+    <div class="panel">
+      <div id="rule-box-list"></div>
+
+      <div id="bad-code-banner" class="banner-error" style="display:none;">
+        We didn't recognise that spelling code. Ask your teacher for a new card, or use the options below.
+      </div>
+
+      <!-- Shown once a pupil is identified, via QR scan or manual code -->
+      <div id="pin-gate" style="display:none;">
+        <div class="pin-hello">Hi <span id="pin-pupil-name"></span>! Enter your spelling PIN.</div>
+        <div class="pin-dots" id="pin-dots">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        </div>
+        <div class="pin-error" id="pin-error">&nbsp;</div>
+        <div class="keypad" id="keypad"></div>
+        <button class="pin-back" id="pin-back">Not you? Use a different way in</button>
+      </div>
+
+      <!-- Default entry: type a name, or switch to a personal code + PIN -->
+      <div id="guest-gate">
+        <label class="field-label" for="name-input">What's your name?</label>
+        <input type="text" id="name-input" maxlength="20" placeholder="e.g. Amelia" autocomplete="off">
+
+        <button class="btn" id="start-btn">▶ Start playing</button>
+
+        <div id="prev-player-row" style="display:none; text-align:center;">
+          <span class="name-chip"><span class="avatar" id="prev-avatar">?</span><span id="prev-name-text"></span></span>
+        </div>
+
+        <div class="divider-row">or</div>
+        <button class="link-btn" id="manual-toggle">I have a spelling code</button>
+        <div id="manual-form" style="display:none;">
+          <label class="field-label" for="manual-code">Your code</label>
+          <input type="text" id="manual-code" maxlength="6" placeholder="e.g. AM72" style="text-transform:uppercase;" autocomplete="off">
+          <label class="field-label" for="manual-pin" style="margin-top:10px;">Your PIN</label>
+          <input type="text" id="manual-pin" inputmode="numeric" maxlength="4" placeholder="4 digits" autocomplete="off">
+          <button class="btn secondary" id="manual-submit">Continue</button>
+          <div class="pin-error" id="manual-error">&nbsp;</div>
+        </div>
+        <button class="setup-link" id="change-week-link">Not the right week? Change year/week</button>
+      </div>
+    </div>
+
+    <div class="board-title">🏆 Leaderboard — best scores on this device</div>
+    <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
+      <div id="leaderboard-list"></div>
+    </div>
+
+    <footer class="note">
+      Proof of concept — each pupil's card (see <code>cards.html</code>) has a personal QR code and PIN, but scores are currently saved only in this browser (localStorage). A real deployment would swap this for the same lightweight sync backend already used by the SLT Schedule and Lunch Cover tools, keyed per pupil ID, so scores follow a child across devices. The PIN is a light identity check for a classroom setting, not real security — it's visible to anyone reading this page's code.
+    </footer>
+  </section>
+
+  <!-- ══════════ GAME SCREEN ══════════ -->
+  <div id="game-wrap">
+    <div class="hud">
+      <div class="hud-pill"><span class="lab">Score</span>&nbsp;<span id="hud-score">0</span></div>
+      <div class="hud-pill grow"><span class="lab" id="hud-time">60s</span><div class="timebar-track"><div class="timebar-fill" id="timebar"></div></div></div>
+      <div class="hud-pill" id="streak-pill">🔥 <span id="hud-streak">0</span></div>
+    </div>
+    <div id="game-area">
+      <div class="lane-line"></div>
+      <div class="correction-toast" id="correction-toast"></div>
+    </div>
+    <div id="ground">👇 Tap the words spelled <strong>correctly</strong> — let the wrong ones fall past</div>
+  </div>
+
+  <!-- ══════════ END SCREEN ══════════ -->
+  <section id="screen-end" class="screen">
+    <div class="brand">
+      <div class="kicker">Round complete</div>
+      <h1>🎉 Nice popping!</h1>
+    </div>
+    <div class="panel">
+      <div class="stat-grid">
+        <div class="stat-box"><div class="num" id="end-score">0</div><div class="lab">Score</div></div>
+        <div class="stat-box"><div class="num" id="end-accuracy">0%</div><div class="lab">Accuracy</div></div>
+        <div class="stat-box" id="end-streak-box"><div class="num" id="end-streak">0</div><div class="lab">Best streak</div></div>
+      </div>
+      <button class="btn" id="again-btn">🔁 Play again</button>
+      <button class="btn secondary" id="menu-btn">Change player / back to menu</button>
+    </div>
+    <div class="board-title">🏆 Leaderboard — best scores on this device</div>
+    <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
+      <div id="leaderboard-list-end"></div>
+    </div>
+  </section>
+
+<script src="lessons-data.js"></script>
+<script src="spelling-pool.js"></script>
+<script src="roster.js"></script>
+<script>
+/* ════════════════════════════════════════════════════════════════
+   GAME IDENTITY — used to tag scores; leave as-is per game.
+   ════════════════════════════════════════════════════════════════ */
+const GAME_ID = "spelling-pop";
+const ROUND_SECONDS = 60;
+const LAST_NAME_KEY = "wfa-spelling-pop-last-name";
+const LAST_ID_KEY = "wfa-spelling-pop-last-id";
+const BUBBLE_COLORS = ["#1798d3","#2fbf71","#f5a524","#c65bd6","#ff7a6b","#2ba9a1"];
+/* Real deployment backend URL — see backend/. Empty = local only. */
+const BACKEND_URL = "";
+/* ═══════════════════════════════════════════════════════════════ */
+
+const $ = id => document.getElementById(id);
+
+let WORDS = [];          // active { correct, wrong } pairs for this round
+let RULES = [];          // active { focus, explanation, exampleWords }[] for the chosen week
+let LEADERBOARD_KEY = ""; // set once a year/week pool is chosen
+let POOL_ID = "";         // "Y5-T1W1" — identifies this week's pool for scoring
+let currentPool = null;   // result of spGetWeekPool() for the setup screen in progress
+let selectedWords = new Set();
+
+let playerName = "";
+let playerId = null;
+let state = null;
+let rafId = null;
+let spawnTimer = null;
+let tickTimer = null;
+let lastFrame = 0;
+
+/* ── Setup screen: year + week → word pool ── */
+function populateYearSelect() {
+  const sel = $("setup-year");
+  sel.innerHTML = '<option value="">Choose…</option>' +
+    spGetYears().map(y => `<option value="${y}">${y.replace("Y", "Year ")}</option>`).join("");
+}
+function onSetupYearChange() {
+  const year = $("setup-year").value;
+  const weekSel = $("setup-week");
+  $("setup-pool").style.display = "none";
+  if (!year) { weekSel.innerHTML = '<option value="">Choose a year group first…</option>'; return; }
+  const weeks = spGetWeeksForYear(year);
+  weekSel.innerHTML = '<option value="">Choose…</option>' +
+    weeks.map(w => `<option value="${w.term}|${w.week}">${w.label}</option>`).join("");
+}
+function onSetupWeekChange() {
+  const year = $("setup-year").value;
+  const val = $("setup-week").value;
+  if (!year || !val) { $("setup-pool").style.display = "none"; return; }
+  const [term, week] = val.split("|");
+  loadPoolIntoSetup(year, term, week);
+}
+function loadPoolIntoSetup(year, term, week) {
+  currentPool = spGetWeekPool(year, term, week);
+  $("setup-rules").innerHTML = currentPool.rules.length
+    ? currentPool.rules.map(r => `<div class="rule-mini"><b>${escapeHtml(r.focus || "This week's pattern")}</b>${escapeHtml(r.explanation)}</div>`).join("")
+    : '<div class="rule-mini"><b>No rule notes recorded</b>This week has words but no saved explanation — the game will still work.</div>';
+
+  selectedWords = new Set(defaultWordSelection(currentPool.words));
+  renderWordTags();
+  $("setup-pool").style.display = "block";
+}
+function defaultWordSelection(words) {
+  return words.slice(0, Math.min(14, words.length));
+}
+function renderWordTags() {
+  $("setup-word-tags").innerHTML = currentPool.words.map(w =>
+    `<button type="button" class="word-tag ${selectedWords.has(w) ? "on" : ""}" data-word="${escapeHtml(w)}">${escapeHtml(w)}</button>`
+  ).join("");
+  $("setup-count").textContent = `(${selectedWords.size} selected)`;
+  $("setup-word-tags").querySelectorAll(".word-tag").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const w = btn.dataset.word;
+      if (selectedWords.has(w)) selectedWords.delete(w); else selectedWords.add(w);
+      renderWordTags();
+    });
+  });
+}
+$("setup-year").addEventListener("change", onSetupYearChange);
+$("setup-week").addEventListener("change", onSetupWeekChange);
+$("setup-continue").addEventListener("click", () => {
+  if (selectedWords.size < 3) { alert("Pick at least 3 words to play with."); return; }
+  activatePool(currentPool.year, currentPool.term, currentPool.week, [...selectedWords]);
+});
+populateYearSelect();
+
+/* ── Turn a chosen year/week (+ optional word subset) into an active round ── */
+function activatePool(year, term, week, words) {
+  const pool = spGetWeekPool(year, term, week);
+  RULES = pool.rules;
+  const chosenWords = words && words.length ? words : defaultWordSelection(pool.words);
+  WORDS = spBuildWordPairs(chosenWords);
+
+  POOL_ID = `${year}-${term}${week}`;
+  LEADERBOARD_KEY = "wfa-spelling-pop-leaderboard-" + POOL_ID;
+
+  renderRuleBox();
+  goTo("start");
+  initAccessScreen();
+}
+
+function renderRuleBox() {
+  const box = $("rule-box-list");
+  if (!RULES.length) {
+    box.innerHTML = '<div class="rule-box"><div class="rule-label">This week\'s words</div><div class="rule-text">No rule notes recorded for this week — words only.</div></div>';
+    return;
+  }
+  box.innerHTML = RULES.map(r => {
+    const exampleLower = (r.exampleWords || []).map(w => w.toLowerCase());
+    const pair = WORDS.find(p => exampleLower.includes(p.correct));
+    return `<div class="rule-box">
+      <div class="rule-label">This week's spelling rule</div>
+      <div class="rule-title">${escapeHtml(r.focus || "Spelling pattern")}</div>
+      <div class="rule-text">${escapeHtml(r.explanation)}</div>
+      ${pair ? `<div class="rule-examples"><b>✓ ${escapeHtml(pair.correct)}</b><s>✗ ${escapeHtml(pair.wrong)}</s></div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+$("change-week-link").addEventListener("click", () => {
+  $("pin-gate").style.display = "none";
+  $("guest-gate").style.display = "block";
+  goTo("setup");
+});
+
+/* ── Leaderboard (localStorage stand-in for a real backend) ── */
+function loadLeaderboard() {
+  try { return JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || "[]"); }
+  catch (e) { return []; }
+}
+function saveScore(entry) {
+  const board = loadLeaderboard();
+  board.push(entry);
+  board.sort((a, b) => b.score - a.score);
+  const top = board.slice(0, 10);
+  localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(top));
+  return top;
+}
+async function renderLeaderboard(targetId, highlightId) {
+  const remote = await fetchRemoteLeaderboard();
+  const board = remote || loadLeaderboard();
+  const el = $(targetId);
+  if (!board.length) {
+    el.innerHTML = '<div class="board-empty">No scores yet — be the first to play!</div>';
+    return;
+  }
+  const firstYouIdx = highlightId ? board.findIndex(r => r.id === highlightId) : -1;
+  el.innerHTML = board.map((row, i) => `
+    <div class="board-row ${i === firstYouIdx ? 'you' : ''}">
+      <div class="rank">${i + 1}</div>
+      <div class="rname">${escapeHtml(row.name)}</div>
+      <div class="rscore">${row.score} pts</div>
+    </div>`).join("");
+}
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ── "Access" — QR code (?u=CODE) + PIN identifies a named pupil;
+   free-text name or manually-typed code are the fallbacks. ── */
+const urlParams = new URLSearchParams(location.search);
+const qrCode = (urlParams.get("u") || "").trim().toUpperCase();
+let pendingPupil = null;
+
+function findPupil(code) {
+  return (typeof ROSTER !== "undefined" ? ROSTER : []).find(p => p.id.toUpperCase() === code.toUpperCase());
+}
+
+function showPinGate(pupil) {
+  pendingPupil = pupil;
+  $("pin-pupil-name").textContent = pupil.name;
+  $("guest-gate").style.display = "none";
+  $("pin-gate").style.display = "block";
+  pinBuffer = "";
+  renderPinDots();
+}
+
+function beginAsPupil(pupil) {
+  playerName = pupil.name;
+  playerId = pupil.id;
+  localStorage.setItem(LAST_ID_KEY, pupil.id);
+  goTo("game");
+  startRound();
+}
+
+/* PIN keypad */
+let pinBuffer = "";
+function buildKeypad() {
+  const layout = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
+  const kp = $("keypad");
+  kp.innerHTML = "";
+  layout.forEach(k => {
+    const btn = document.createElement("button");
+    if (k === "") { btn.style.visibility = "hidden"; btn.disabled = true; }
+    else if (k === "⌫") { btn.textContent = k; btn.className = "wide"; btn.addEventListener("click", pressDelete); }
+    else { btn.textContent = k; btn.addEventListener("click", () => pressDigit(k)); }
+    kp.appendChild(btn);
+  });
+}
+function renderPinDots() {
+  document.querySelectorAll("#pin-dots .dot").forEach((d, i) => d.classList.toggle("filled", i < pinBuffer.length));
+}
+function pressDigit(d) {
+  if (!pendingPupil || pinBuffer.length >= 4) return;
+  pinBuffer += d;
+  renderPinDots();
+  $("pin-error").innerHTML = "&nbsp;";
+  if (pinBuffer.length === 4) checkPin();
+}
+function pressDelete() { pinBuffer = pinBuffer.slice(0, -1); renderPinDots(); }
+function checkPin() {
+  if (pinBuffer === pendingPupil.pin) {
+    beginAsPupil(pendingPupil);
+  } else {
+    $("pin-gate").classList.add("shake");
+    $("pin-error").textContent = "That's not quite right — try again.";
+    setTimeout(() => { pinBuffer = ""; renderPinDots(); $("pin-gate").classList.remove("shake"); }, 420);
+  }
+}
+buildKeypad();
+
+$("pin-back").addEventListener("click", () => {
+  $("pin-gate").style.display = "none";
+  $("guest-gate").style.display = "block";
+});
+
+$("manual-toggle").addEventListener("click", () => {
+  const f = $("manual-form");
+  f.style.display = f.style.display === "block" ? "none" : "block";
+});
+$("manual-submit").addEventListener("click", () => {
+  const code = $("manual-code").value.trim().toUpperCase();
+  const pin = $("manual-pin").value.trim();
+  const pupil = code ? findPupil(code) : null;
+  if (!pupil || pupil.pin !== pin) {
+    $("manual-error").textContent = "That code and PIN don't match — check with your teacher.";
+    return;
+  }
+  beginAsPupil(pupil);
+});
+
+/* Runs once a word pool is active and the start (identify-yourself) screen is showing. */
+function initAccessScreen() {
+  $("bad-code-banner").style.display = "none";
+  if (qrCode) {
+    pendingPupil = findPupil(qrCode);
+    if (pendingPupil) {
+      showPinGate(pendingPupil);
+    } else {
+      $("bad-code-banner").style.display = "block";
+    }
+  }
+
+  const savedName = localStorage.getItem(LAST_NAME_KEY);
+  if (savedName) {
+    $("name-input").value = savedName;
+    $("prev-player-row").style.display = "block";
+    $("prev-avatar").textContent = savedName.trim()[0]?.toUpperCase() || "?";
+    $("prev-name-text").textContent = `Last time: ${savedName}`;
+  }
+  renderLeaderboard("leaderboard-list", localStorage.getItem(LAST_ID_KEY));
+}
+
+$("start-btn").addEventListener("click", () => {
+  const name = $("name-input").value.trim();
+  if (!name) { $("name-input").focus(); $("name-input").style.borderColor = "var(--red)"; return; }
+  playerName = name;
+  playerId = "guest:" + name.toLowerCase();
+  localStorage.setItem(LAST_NAME_KEY, name);
+  localStorage.setItem(LAST_ID_KEY, playerId);
+  goTo("game");
+  startRound();
+});
+
+$("again-btn").addEventListener("click", () => { goTo("game"); startRound(); });
+$("menu-btn").addEventListener("click", () => {
+  renderLeaderboard("leaderboard-list", playerId);
+  $("pin-gate").style.display = "none";
+  $("guest-gate").style.display = "block";
+  if (pendingPupil) { $("manual-form").style.display = "block"; }
+  goTo("start");
+});
+
+function goTo(which) {
+  $("screen-setup").classList.toggle("active", which === "setup");
+  $("screen-start").classList.toggle("active", which === "start");
+  $("screen-end").classList.toggle("active", which === "end");
+  $("game-wrap").classList.toggle("active", which === "game");
+}
+
+/* ── Game logic ── */
+function startRound() {
+  clearInterval(spawnTimer);
+  clearInterval(tickTimer);
+  cancelAnimationFrame(rafId);
+  $("game-area").querySelectorAll(".bubble,.floater").forEach(n => n.remove());
+
+  state = {
+    score: 0, streak: 0, bestStreak: 0,
+    correctTaps: 0, wrongTaps: 0,
+    timeLeft: ROUND_SECONDS,
+    bubbles: [],
+    ending: false
+  };
+  updateHud();
+  $("timebar").style.background = "var(--blue)";
+  $("hud-time").classList.remove("warn");
+
+  tickTimer = setInterval(() => {
+    state.timeLeft--;
+    updateHud();
+    if (state.timeLeft <= 10) $("hud-time").classList.add("warn");
+    if (state.timeLeft <= 0) endRound();
+  }, 1000);
+
+  const spawnLoop = () => {
+    if (!state || state.ending) return;
+    spawnBubble();
+    const elapsed = ROUND_SECONDS - state.timeLeft;
+    const interval = Math.max(520, 1100 - elapsed * 8);
+    spawnTimer = setTimeout(spawnLoop, interval);
+  };
+  spawnLoop();
+
+  lastFrame = performance.now();
+  rafId = requestAnimationFrame(tickFrame);
+}
+
+function updateHud() {
+  $("hud-score").textContent = state.score;
+  $("hud-time").textContent = `${state.timeLeft}s`;
+  $("timebar").style.width = `${(state.timeLeft / ROUND_SECONDS) * 100}%`;
+  if (state.streak >= 2) {
+    $("streak-pill").classList.add("show");
+    $("hud-streak").textContent = state.streak;
+  } else {
+    $("streak-pill").classList.remove("show");
+  }
+}
+
+function spawnBubble() {
+  const area = $("game-area");
+  const pair = WORDS[Math.floor(Math.random() * WORDS.length)];
+  const isCorrect = Math.random() < 0.55;
+  const word = isCorrect ? pair.correct : pair.wrong;
+
+  const el = document.createElement("div");
+  el.className = "bubble";
+  el.textContent = word;
+  el.style.background = BUBBLE_COLORS[Math.floor(Math.random() * BUBBLE_COLORS.length)];
+  area.appendChild(el);
+
+  const areaW = area.clientWidth;
+  const bw = el.offsetWidth;
+  const x = Math.max(8, Math.min(areaW - bw - 8, Math.random() * (areaW - bw)));
+  el.style.left = x + "px";
+
+  const speed = 34 + Math.random() * 18 + (ROUND_SECONDS - state.timeLeft) * 0.35;
+  const bubble = { el, y: -70, x, speed, isCorrect, word, correctSpelling: pair.correct, popped: false };
+  state.bubbles.push(bubble);
+
+  el.addEventListener("pointerdown", () => popBubble(bubble), { passive: true });
+}
+
+function tickFrame(now) {
+  if (!state) return;
+  const dt = Math.min(0.05, (now - lastFrame) / 1000);
+  lastFrame = now;
+  const area = $("game-area");
+  const floorY = area.clientHeight;
+
+  for (let i = state.bubbles.length - 1; i >= 0; i--) {
+    const b = state.bubbles[i];
+    if (b.popped) continue;
+    b.y += b.speed * dt;
+    b.el.style.top = b.y + "px";
+    if (b.y > floorY) {
+      if (b.isCorrect) { state.streak = 0; }
+      b.el.remove();
+      state.bubbles.splice(i, 1);
+    }
+  }
+  updateHud();
+  if (state && !state.ending) rafId = requestAnimationFrame(tickFrame);
+}
+
+function popBubble(b) {
+  if (b.popped || !state) return;
+  b.popped = true;
+  const area = $("game-area");
+  const rect = b.el.getBoundingClientRect();
+  const areaRect = area.getBoundingClientRect();
+  const localX = rect.left - areaRect.left + rect.width / 2;
+  const localY = rect.top - areaRect.top;
+
+  if (b.isCorrect) {
+    state.streak++;
+    state.bestStreak = Math.max(state.bestStreak, state.streak);
+    const mult = state.streak >= 6 ? 3 : state.streak >= 3 ? 2 : 1;
+    const pts = 10 * mult;
+    state.score += pts;
+    state.correctTaps++;
+    b.el.classList.add("pop");
+    spawnFloater(`+${pts}`, "var(--green)", localX, localY);
+  } else {
+    state.streak = 0;
+    state.score = Math.max(0, state.score - 5);
+    state.wrongTaps++;
+    b.el.classList.add("wrongPop");
+    spawnFloater("−5", "var(--red)", localX, localY);
+    showCorrection(b.correctSpelling);
+    setTimeout(() => { b.el.remove(); state.bubbles = state.bubbles.filter(x => x !== b); }, 320);
+    updateHud();
+    return;
+  }
+
+  updateHud();
+  setTimeout(() => {
+    b.el.remove();
+    state.bubbles = state.bubbles.filter(x => x !== b);
+  }, 280);
+}
+
+function spawnFloater(text, color, x, y) {
+  const f = document.createElement("div");
+  f.className = "floater";
+  f.textContent = text;
+  f.style.color = color;
+  f.style.left = x + "px";
+  f.style.top = y + "px";
+  $("game-area").appendChild(f);
+  setTimeout(() => f.remove(), 820);
+}
+
+let toastTimer = null;
+function showCorrection(word) {
+  const t = $("correction-toast");
+  t.innerHTML = `It's spelled <b>${word}</b>`;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 1100);
+}
+
+function endRound() {
+  if (!state || state.ending) return;
+  state.ending = true;
+  clearInterval(tickTimer);
+  clearTimeout(spawnTimer);
+  cancelAnimationFrame(rafId);
+
+  const totalTaps = state.correctTaps + state.wrongTaps;
+  const accuracy = totalTaps ? Math.round((state.correctTaps / totalTaps) * 100) : 0;
+
+  $("end-score").textContent = state.score;
+  $("end-accuracy").textContent = accuracy + "%";
+  $("end-streak").textContent = state.bestStreak;
+
+  const scoreEntry = {
+    id: playerId, name: playerName, score: state.score, accuracy,
+    bestStreak: state.bestStreak, date: new Date().toISOString().slice(0, 10)
+  };
+  saveScore(scoreEntry);
+  syncSaveScore(scoreEntry);
+  renderLeaderboard("leaderboard-list-end", playerId);
+
+  setTimeout(() => {
+    $("game-area").querySelectorAll(".bubble,.floater").forEach(n => n.remove());
+    goTo("end");
+  }, 260);
+}
+
+/* ── Optional backend sync — see backend/. No-ops until
+   BACKEND_URL is set, so the game works standalone until it's deployed. ── */
+function syncSaveScore(entry) {
+  if (!BACKEND_URL || !entry.id) return;
+  fetch(BACKEND_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      pupilId: entry.id, pupilName: entry.name, game: GAME_ID, ruleId: POOL_ID,
+      score: entry.score, accuracy: entry.accuracy, bestStreak: entry.bestStreak
+    }),
+    headers: { "Content-Type": "text/plain" }
+  }).catch(e => console.warn("Score sync failed, kept locally only:", e));
+}
+
+async function fetchRemoteLeaderboard() {
+  if (!BACKEND_URL) return null;
+  try {
+    const url = `${BACKEND_URL}?action=leaderboard&game=${encodeURIComponent(GAME_ID)}&rule=${encodeURIComponent(POOL_ID)}&top=10`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    return (data.leaderboard || []).map(r => ({ id: r.pupilId, name: r.pupilName, score: r.score }));
+  } catch (e) {
+    console.warn("Remote leaderboard fetch failed, showing local scores:", e);
+    return null;
+  }
+}
+
+/* ── Entry point: a QR card bakes ?y=&t=&w= in, so scanning it skips
+   straight past the setup screen. Opening the page with no params (staff
+   testing, or a guest) shows the year/week picker instead. ── */
+const paramYear = urlParams.get("y");
+const paramTerm = urlParams.get("t");
+const paramWeek = urlParams.get("w");
+if (paramYear && paramTerm && paramWeek) {
+  activatePool(paramYear, paramTerm, paramWeek);
+} else {
+  goTo("setup");
+}
+</script>
+</body>
+</html>
