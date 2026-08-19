@@ -290,7 +290,7 @@
     </div>
 
     <footer class="note">
-      Proof of concept — each pupil's card (see <code>../cards.html</code>) has a personal QR code and PIN, shared across every spelling game. Buckets use the curriculum's own example words for each spelling pattern (topped up with matching words from this week's list), not a guess. Scores sync to the same backend as Spelling Pop.
+      Proof of concept — each pupil's card (see <code>../cards.html</code>) has a personal QR code and PIN, shared across every spelling game. Buckets use the curriculum's own example words for each spelling pattern (topped up with matching words from this week's list), not a guess. On prefix weeks the word's prefix is stripped off, so it's a genuine recall task rather than sorting words that already show the answer. Scores sync to the same backend as Spelling Pop.
     </footer>
   </section>
 
@@ -342,6 +342,8 @@ const LAST_ID_KEY = "wfa-grapheme-sort-last-id";
 const $ = id => document.getElementById(id);
 
 let BUCKETS = [];          // active [{ grapheme, words }] for this round
+let BUCKET_KIND = "grapheme"; // "grapheme" | "prefix" | "suffix" — from spGetGraphemeBuckets
+let ROUND_BUCKET_TOTALS = {}; // grapheme -> playable word count this round (see startRound)
 let RULE_FOCUS = "";
 let RULE_EXPLANATION = "";
 let LEADERBOARD_KEY = "";  // set once a year/week pool is chosen
@@ -391,10 +393,15 @@ function loadPoolIntoSetup(year, term, week) {
     return;
   }
 
+  const groupsLabel = buckets.kind === "prefix" ? "Prefixes to choose from" : "Groups to sort";
+  const modeNote = buckets.kind === "prefix"
+    ? `<p style="font-size:12.5px; color:var(--muted); margin:8px 0 0;">You'll see each word with its prefix removed and have to pick the right one.</p>`
+    : "";
   box.innerHTML = `
     <div class="rule-mini"><b>${escapeHtml(buckets.focus || "Spelling pattern")}</b>${escapeHtml(buckets.explanation)}</div>
-    <label class="field-label" style="margin-top:14px;">Groups to sort</label>
+    <label class="field-label" style="margin-top:14px;">${groupsLabel}</label>
     <div class="word-tags">${buckets.buckets.map(b => `<span class="word-tag on">${escapeHtml(b.grapheme)} · ${b.words.length} words</span>`).join("")}</div>
+    ${modeNote}
     <button class="btn" id="setup-continue">Continue ▶</button>`;
   box.style.display = "block";
   $("setup-continue").addEventListener("click", () => {
@@ -422,6 +429,7 @@ function activatePool(year, term, week) {
   }
 
   BUCKETS = b.buckets;
+  BUCKET_KIND = b.kind || "grapheme";
   RULE_FOCUS = b.focus;
   RULE_EXPLANATION = b.explanation;
   POOL_ID = `${year}-${term}${week}`;
@@ -613,9 +621,38 @@ function startRound() {
   state = { score: 0, correct: 0, wrong: 0, startTime: performance.now(), ending: false };
   selectedChip = null;
 
+  // Prefix weeks show the bare root ("perfect") instead of the answer
+  // ("imperfect") — safe only because every prefix in SP_PREFIXES glues
+  // straight onto the root with no spelling change, unlike suffixes.
+  // But a root can genuinely take more than one prefix in real English
+  // (mismatch / rematch, misplace / replace) — if two words in this
+  // round's pool share a root, showing both as identical "match" chips
+  // would be unfair, not just hard, since there'd be no way to tell them
+  // apart on screen. Drop any word whose root collides this round.
+  const rootCounts = {};
+  if (BUCKET_KIND === "prefix") {
+    BUCKETS.forEach(b => b.words.forEach(w => {
+      const root = w.slice(b.grapheme.length);
+      rootCounts[root] = (rootCounts[root] || 0) + 1;
+    }));
+  }
+
   chips = [];
-  BUCKETS.forEach(b => b.words.forEach(w => chips.push({ word: w, grapheme: b.grapheme, placed: false })));
+  ROUND_BUCKET_TOTALS = {};
+  BUCKETS.forEach(b => {
+    ROUND_BUCKET_TOTALS[b.grapheme] = 0;
+    b.words.forEach(w => {
+      const label = BUCKET_KIND === "prefix" ? w.slice(b.grapheme.length) : w;
+      if (BUCKET_KIND === "prefix" && rootCounts[label] > 1) return;
+      chips.push({ word: w, label, grapheme: b.grapheme, placed: false });
+      ROUND_BUCKET_TOTALS[b.grapheme]++;
+    });
+  });
   shuffleArray(chips);
+
+  $("ground").textContent = BUCKET_KIND === "prefix"
+    ? "👆 Tap a root word, then tap the prefix that completes it"
+    : "👆 Tap a word, then tap the pattern it belongs to";
 
   buildBuckets();
   renderBank();
@@ -626,11 +663,12 @@ function buildBuckets() {
   const wrap = $("gs-buckets");
   wrap.innerHTML = "";
   BUCKETS.forEach(b => {
+    const total = ROUND_BUCKET_TOTALS[b.grapheme] ?? b.words.length;
     const el = document.createElement("div");
     el.className = "gs-bucket";
     el.innerHTML = `
       <div class="glabel">${escapeHtml(b.grapheme)}</div>
-      <div class="gcount">0 / ${b.words.length}</div>
+      <div class="gcount">0 / ${total}</div>
       <div class="gwords"></div>`;
     el.addEventListener("click", () => onBucketTap(b.grapheme, el));
     wrap.appendChild(el);
@@ -643,7 +681,7 @@ function renderBank() {
   chips.filter(c => !c.placed).forEach(chip => {
     const btn = document.createElement("button");
     btn.className = "gs-chip" + (selectedChip === chip ? " selected" : "");
-    btn.textContent = chip.word;
+    btn.textContent = chip.label;
     btn.addEventListener("click", () => onChipTap(chip));
     bank.appendChild(btn);
   });
@@ -668,7 +706,7 @@ function onBucketTap(grapheme, bucketEl) {
     tag.textContent = selectedChip.word;
     wordsEl.appendChild(tag);
 
-    const total = BUCKETS.find(b => b.grapheme === grapheme).words.length;
+    const total = ROUND_BUCKET_TOTALS[grapheme] ?? BUCKETS.find(b => b.grapheme === grapheme).words.length;
     const placed = chips.filter(c => c.placed && c.grapheme === grapheme).length;
     bucketEl.querySelector(".gcount").textContent = `${placed} / ${total}`;
 

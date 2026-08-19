@@ -165,18 +165,19 @@ function spGetGraphemeBuckets(pool) {
         if (!bucket.words.includes(word)) bucket.words.push(word);
       }
     });
+    grapheme.kind = "grapheme";
     return grapheme;
   }
 
   const prefix = spFindBestBuckets(pool.rules, r =>
     spMentionsAffix(r, "prefix") ? spAffixBuckets(pool.words, SP_PREFIXES, true) : []
   );
-  if (prefix) return prefix;
+  if (prefix) { prefix.kind = "prefix"; return prefix; }
 
   const suffix = spFindBestBuckets(pool.rules, r =>
     spMentionsAffix(r, "suffix") ? spAffixBuckets(pool.words, SP_SUFFIXES, false) : []
   );
-  if (suffix) return suffix;
+  if (suffix) { suffix.kind = "suffix"; return suffix; }
 
   return null;
 }
