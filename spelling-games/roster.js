@@ -27,7 +27,7 @@ let CURRENT_WEEK = { term: "T1", week: "W1" };
 /* Same deployed Apps Script backend for every spelling game — scores,
    leaderboards and the pupil roster all live behind this one URL.
    Empty = local-only (localStorage scores, the static ROSTER above). */
-const BACKEND_URL = "https://script.google.com/macros/s/AKfycbz7wYDaxA-8HNhkBL1nIyV7hXA5wUa3WJq4vU3ieasUk4zufeQoxZOO8WN8NzjudxNM/exec";
+const BACKEND_URL = "https://script.google.com/macros/s/AKfycbwP3s1LdhCV3FZCYwY8QPtGZ2xeJgY8ZlEzRY44Igw2Bvr_nGUJtx7uB7JOEIXwXsPb/exec";
 
 /* Every game cards.html should generate a QR code for, one row per
    pupil. Add a new entry here when a new game is built — nothing else
