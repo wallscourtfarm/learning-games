@@ -103,3 +103,61 @@ function spBuildWordPairs(words) {
     .map(w => ({ correct: w, wrong: spGuessWrongSpelling(w) }))
     .filter(p => p.wrong && p.wrong !== p.correct);
 }
+
+/* ── Grapheme buckets, for sorting-style games ──
+   Only weeks whose rule text is the "alternative graphemes" family have
+   a natural "sort by spelling pattern" structure — and helpfully, that
+   family is written as 'ai' (rain, pain), 'ay' (day, stay), ... with
+   curriculum-authored example words right there in the parentheses.
+   Those are used as-is (accurate, not guessed) rather than trying to
+   classify the week's own hlWords, which mix in words from unrelated
+   rules taught the same week and are too noisy to sort reliably. Each
+   bucket is then topped up with any of the week's own words that
+   independently match the same pattern, for a bit more variety.
+
+   Only around 1 in 12 weeks has a rule written this way — most rules
+   (prefixes, suffixes, doubling, etc.) don't have a "which spelling"
+   structure at all, so there's nothing to sort. Returns null rather
+   than forcing a thin or unreliable set of buckets.
+*/
+function spGetGraphemeBuckets(pool) {
+  let best = null;
+  pool.rules.forEach(r => {
+    const buckets = spExtractCuratedBuckets(r.explanation);
+    if (buckets.length >= 2 && (!best || buckets.length > best.buckets.length)) {
+      best = { rule: r, buckets };
+    }
+  });
+  if (!best) return null;
+
+  const graphemes = best.buckets.map(b => b.grapheme);
+  pool.words.forEach(word => {
+    const matches = graphemes.filter(g => spGraphemeMatches(word, g));
+    if (matches.length === 1) {
+      const bucket = best.buckets.find(b => b.grapheme === matches[0]);
+      if (!bucket.words.includes(word)) bucket.words.push(word);
+    }
+  });
+
+  return { focus: best.rule.focus, explanation: best.rule.explanation, buckets: best.buckets };
+}
+
+function spExtractCuratedBuckets(explanation) {
+  const buckets = [];
+  const re = /'([a-z-]+)'\s*\(([^)]+)\)/g;
+  let m;
+  while ((m = re.exec(explanation))) {
+    const words = [...new Set(m[2].split(",").map(w => w.trim().toLowerCase()).filter(Boolean))];
+    if (words.length >= 2) buckets.push({ grapheme: m[1], words });
+  }
+  return buckets;
+}
+
+function spGraphemeMatches(word, grapheme) {
+  if (grapheme.startsWith("-")) return word.endsWith(grapheme.slice(1));
+  if (grapheme.includes("-")) {
+    const [a, b] = grapheme.split("-");
+    return new RegExp(a + "[^aeiou]+" + b + "$").test(word);
+  }
+  return word.includes(grapheme);
+}

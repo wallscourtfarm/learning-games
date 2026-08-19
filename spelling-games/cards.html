@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Spelling Pop — Pupil Cards</title>
+<title>Spelling Games — Pupil Cards</title>
 <style>
   :root{
     --blue:#1798d3; --blue-dark:#0f6f9e; --navy:#12263a; --muted:#5b7a8a;
@@ -25,20 +25,29 @@
   .toolbar button:active{ transform:translateY(3px); box-shadow:0 2px 0 var(--blue-dark); }
 
   .card-grid{
-    max-width:900px; margin:0 auto; display:grid; grid-template-columns:repeat(2,1fr); gap:18px;
+    max-width:900px; margin:0 auto; display:grid; grid-template-columns:1fr; gap:14px;
   }
   .card{
-    background:#fff; border-radius:16px; padding:20px; display:flex; align-items:center; gap:16px;
+    background:#fff; border-radius:16px; padding:18px 20px; display:flex; align-items:center; gap:18px; flex-wrap:wrap;
     box-shadow:0 8px 20px rgba(18,38,58,.08); border:1.5px dashed #cfe2ec;
   }
-  .card .qr{ flex-shrink:0; width:104px; height:104px; }
-  .card .qr svg{ width:100%; height:100%; display:block; }
-  .card .info{ flex:1; min-width:0; }
+  .card .info{ flex:0 0 auto; min-width:150px; }
   .card .kicker{ font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.8px; color:var(--blue-dark); opacity:.8; }
   .card .pname{ font-size:22px; font-weight:800; margin:2px 0 8px; }
   .card .row{ display:flex; align-items:baseline; gap:8px; font-size:13px; color:var(--muted); margin-bottom:2px; }
   .card .row b{ font-family:'Courier New',monospace; font-size:16px; letter-spacing:1.5px; color:var(--navy); font-weight:800; }
   .card .pin-val{ font-size:20px; }
+
+  .card .games{ display:flex; gap:14px; flex-wrap:wrap; flex:1; }
+  .card .game-qr{ text-align:center; flex:0 0 auto; }
+  .card .game-qr .qr{ width:82px; height:82px; margin:0 auto; }
+  .card .game-qr .qr svg{ width:100%; height:100%; display:block; }
+  .card .game-qr .glabel{ font-size:10.5px; font-weight:700; color:var(--muted); margin-top:4px; max-width:82px; }
+  .card .game-qr.off .qr{
+    display:flex; align-items:center; justify-content:center; border:2px dashed #d8e3ea; border-radius:10px;
+    color:#c3d2db; font-size:28px;
+  }
+  .card .game-qr.off .glabel{ color:#c3d2db; }
 
   footer.note{
     max-width:900px; margin:24px auto 0; font-size:12px; color:var(--muted); line-height:1.6;
@@ -57,8 +66,8 @@
 
   <div class="toolbar">
     <div>
-      <h1>🫧 Spelling Pop — Pupil Cards</h1>
-      <p id="week-label">Print, cut out and hand one card to each child. They scan the QR code (or open Spelling Pop and type their code) then enter their PIN.</p>
+      <h1>🎲 Spelling Games — Pupil Cards</h1>
+      <p id="week-label">Print, cut out and hand one card to each child. They scan a game's QR code (or open that game and type their code) then enter their PIN.</p>
     </div>
     <button onclick="window.print()">🖨️ Print cards</button>
   </div>
@@ -66,7 +75,7 @@
   <div class="card-grid" id="card-grid"></div>
 
   <footer class="note">
-    Proof of concept — QR codes are generated in your browser using the <a href="https://github.com/kazuhikoarase/qrcode-generator" target="_blank" rel="noopener">qrcode-generator</a> library (MIT licence, vendored locally in <code>vendor/qrcode.js</code>, no external service or network call). PINs live in <code>roster.js</code> alongside this page — treat that file the way you'd treat a class list, not a secrets store. Each pupil's <code>year</code> and the shared <code>CURRENT_WEEK</code> (both in <code>roster.js</code>) are baked into their QR code, so scanning it opens Spelling Pop already loaded with the right week's words — no picker needed.
+    Proof of concept — QR codes are generated in your browser using the <a href="https://github.com/kazuhikoarase/qrcode-generator" target="_blank" rel="noopener">qrcode-generator</a> library (MIT licence, vendored locally in <code>vendor/qrcode.js</code>, no external service or network call). PINs live in <code>roster.js</code> alongside this page, shared by every game — treat that file the way you'd treat a class list, not a secrets store. Each pupil's <code>year</code> and the shared <code>CURRENT_WEEK</code> (both in <code>roster.js</code>) are baked into every QR code, so scanning one opens that game already loaded with the right week's words — no picker needed. Add a new game to every pupil's card by adding one entry to the <code>GAMES</code> list in <code>roster.js</code> — nothing else on this page needs to change.
   </footer>
 
 <script src="lessons-data.js"></script>
@@ -75,34 +84,50 @@
 <script src="roster.js"></script>
 <script>
   const grid = document.getElementById("card-grid");
-  const gameUrl = new URL(GAME_URL, location.href);
   const weeks = spGetWeeksForYear(ROSTER[0]?.year || "Y5");
   const weekInfo = weeks.find(w => w.term === CURRENT_WEEK.term && w.week === CURRENT_WEEK.week);
   document.getElementById("week-label").textContent =
     `Cards for ${weekInfo ? weekInfo.label : `${CURRENT_WEEK.term} ${CURRENT_WEEK.week}`} — change CURRENT_WEEK in roster.js and reprint for a new week.`;
 
-  ROSTER.forEach(pupil => {
-    const target = new URL(gameUrl);
-    target.searchParams.set("u", pupil.id);
-    target.searchParams.set("y", pupil.year);
-    target.searchParams.set("t", CURRENT_WEEK.term);
-    target.searchParams.set("w", CURRENT_WEEK.week);
-
+  function qrSvgFor(url) {
     const qr = qrcode(0, "M");
-    qr.addData(target.href);
+    qr.addData(url);
     qr.make();
-    const svg = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+    return qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  }
+
+  ROSTER.forEach(pupil => {
+    const gamesHtml = GAMES.map(game => {
+      const available = !game.isAvailable || game.isAvailable(pupil.year, CURRENT_WEEK.term, CURRENT_WEEK.week);
+      if (!available) {
+        return `
+          <div class="game-qr off">
+            <div class="qr">—</div>
+            <div class="glabel">${game.icon} ${game.label}<br>not this week</div>
+          </div>`;
+      }
+      const target = new URL(game.path, location.href);
+      target.searchParams.set("u", pupil.id);
+      target.searchParams.set("y", pupil.year);
+      target.searchParams.set("t", CURRENT_WEEK.term);
+      target.searchParams.set("w", CURRENT_WEEK.week);
+      return `
+        <div class="game-qr">
+          <div class="qr">${qrSvgFor(target.href)}</div>
+          <div class="glabel">${game.icon} ${game.label}</div>
+        </div>`;
+    }).join("");
 
     const card = document.createElement("div");
     card.className = "card";
     card.innerHTML = `
-      <div class="qr">${svg}</div>
       <div class="info">
-        <div class="kicker">Spelling Pop · WFA · ${pupil.year}</div>
+        <div class="kicker">Spelling Games · WFA · ${pupil.year}</div>
         <div class="pname">${pupil.name}</div>
         <div class="row">Code&nbsp;<b>${pupil.id}</b></div>
         <div class="row">PIN&nbsp;<b class="pin-val">${pupil.pin}</b></div>
-      </div>`;
+      </div>
+      <div class="games">${gamesHtml}</div>`;
     grid.appendChild(card);
   });
 </script>
