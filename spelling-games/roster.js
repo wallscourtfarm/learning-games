@@ -1,21 +1,17 @@
 /* ════════════════════════════════════════════════════════════════
-   Wallscourt Farm Academy — Spelling Games shared roster (PROOF OF CONCEPT)
-   Five made-up pupils standing in for a real class list.
+   Wallscourt Farm Academy — Spelling Games shared roster
 
-   Shared by every game under spelling-games/ — one file to edit, not
-   one per game. Each pupil gets:
-     id   — short code used both as a QR code's "?u=" value and as
-             something they can type by hand if a device has no camera
-     name — shown on screen once they're identified
-     pin  — 4-digit PIN, printed on their card, given out by the teacher
-     year — Y2–Y6, picks which year group's word lists they see
+   The real source of pupil setup is the Google Sheet behind BACKEND_URL
+   below — see "Set up Roster tab" in that Sheet's menu. Every game and
+   cards.html fetch the live roster + current week from there first
+   (spFetchLiveRoster in spelling-pool.js) and only fall back to the
+   five made-up pupils below if BACKEND_URL is empty or unreachable —
+   so this file still works standalone for local testing or a demo.
 
-   In a real deployment this file would be generated from the class
-   list already held in the Spelling Assessment tool, with PINs
-   randomly generated once per pupil and never shown again outside
-   their printed card.
+   ROSTER / CURRENT_WEEK are declared with `let`, not `const`, because
+   a successful live fetch replaces them in place.
    ════════════════════════════════════════════════════════════════ */
-const ROSTER = [
+let ROSTER = [
   { id: "AM72", name: "Amelia", pin: "4821", year: "Y5" },
   { id: "NH19", name: "Noah",   pin: "1937", year: "Y5" },
   { id: "FR66", name: "Freya",  pin: "6650", year: "Y5" },
@@ -23,10 +19,15 @@ const ROSTER = [
   { id: "IS91", name: "Isla",   pin: "9142", year: "Y5" }
 ];
 
-/* The week currently being taught — the one thing to change here each
-   week when printing new cards. Every pupil's card uses this same
-   term/week, each within their own year group above. */
-const CURRENT_WEEK = { term: "T1", week: "W1" };
+/* Fallback week when there's no live Settings tab to read — every pupil's
+   card/session uses this same term/week, each within their own year
+   group above. */
+let CURRENT_WEEK = { term: "T1", week: "W1" };
+
+/* Same deployed Apps Script backend for every spelling game — scores,
+   leaderboards and the pupil roster all live behind this one URL.
+   Empty = local-only (localStorage scores, the static ROSTER above). */
+const BACKEND_URL = "https://script.google.com/macros/s/AKfycbz7wYDaxA-8HNhkBL1nIyV7hXA5wUa3WJq4vU3ieasUk4zufeQoxZOO8WN8NzjudxNM/exec";
 
 /* Every game cards.html should generate a QR code for, one row per
    pupil. Add a new entry here when a new game is built — nothing else

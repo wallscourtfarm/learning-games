@@ -161,3 +161,23 @@ function spGraphemeMatches(word, grapheme) {
   }
   return word.includes(grapheme);
 }
+
+/* ── Live roster/settings fetch ──
+   Pupil setup lives in the backend's Google Sheet (see setupRosterSheet()
+   in Code.gs), not in a hand-edited JS file. Every game and cards.html
+   call this once at load, before falling back to the static ROSTER /
+   CURRENT_WEEK in roster.js if the backend isn't set or the fetch fails —
+   so everything still works offline or before the Sheet is set up. */
+async function spFetchLiveRoster(backendUrl) {
+  if (!backendUrl) return null;
+  try {
+    const res = await fetch(`${backendUrl}?action=roster`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    if (!data.roster || !data.roster.length) return null;
+    return data;
+  } catch (e) {
+    console.warn("Live roster fetch failed, using the roster.js fallback:", e);
+    return null;
+  }
+}
