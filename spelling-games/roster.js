@@ -1,9 +1,10 @@
 /* ════════════════════════════════════════════════════════════════
-   Wallscourt Farm Academy — Spelling Pop demo roster (PROOF OF CONCEPT)
+   Wallscourt Farm Academy — Spelling Games shared roster (PROOF OF CONCEPT)
    Five made-up pupils standing in for a real class list.
 
-   Each pupil gets:
-     id   — short code used both as the QR code's "?u=" value and as
+   Shared by every game under spelling-games/ — one file to edit, not
+   one per game. Each pupil gets:
+     id   — short code used both as a QR code's "?u=" value and as
              something they can type by hand if a device has no camera
      name — shown on screen once they're identified
      pin  — 4-digit PIN, printed on their card, given out by the teacher
@@ -27,5 +28,18 @@ const ROSTER = [
    term/week, each within their own year group above. */
 const CURRENT_WEEK = { term: "T1", week: "W1" };
 
-/* Where the game itself lives, relative to this file's folder. */
-const GAME_URL = "index.html";
+/* Every game cards.html should generate a QR code for, one row per
+   pupil. Add a new entry here when a new game is built — nothing else
+   about the card-printing page needs to change.
+
+   isAvailable(year, term, week) is optional — only needed for a game
+   that doesn't work on every week (Grapheme Sort needs a "which
+   spelling?" rule, most weeks aren't that). When it returns false,
+   cards.html greys out that game's QR instead of printing a dead end. */
+const GAMES = [
+  { id: "spelling-pop",  label: "Spelling Pop",  icon: "🫧", path: "spelling-pop/index.html" },
+  {
+    id: "grapheme-sort", label: "Grapheme Sort", icon: "🗂️", path: "grapheme-sort/index.html",
+    isAvailable: (year, term, week) => !!spGetGraphemeBuckets(spGetWeekPool(year, term, week))
+  }
+];

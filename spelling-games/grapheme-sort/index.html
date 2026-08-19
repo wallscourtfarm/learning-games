@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Spelling Pop — Wallscourt Farm Academy</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🫧</text></svg>">
+<title>Grapheme Sort — Wallscourt Farm Academy</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗂️</text></svg>">
 <style>
   :root{
     --blue:#1798d3; --blue-dark:#0f6f9e; --navy:#12263a;
@@ -25,10 +25,9 @@
     touch-action:manipulation;
     user-select:none;
   }
-  /* Only lock page scroll during actual gameplay — the setup/start/end
-     screens can be taller than the viewport (long rule lists, word tags,
-     leaderboards) and need to scroll normally. */
   body.playing{ overflow-y:hidden; }
+
+  @keyframes shakeAnim{ 20%{transform:translateX(-8px) rotate(-4deg);} 50%{transform:translateX(8px) rotate(4deg);} 80%{transform:translateX(-4px);} 100%{transform:translateX(0);} }
 
   /* ── Shared screen layout ── */
   .screen{
@@ -38,16 +37,12 @@
   }
   .screen.active{display:block;}
 
-  .brand{
-    text-align:center; padding-top:18px;
-  }
+  .brand{ text-align:center; padding-top:18px; }
   .brand .kicker{
     font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
     color:var(--blue-dark); opacity:.75;
   }
-  .brand h1{
-    margin:4px 0 2px; font-size:clamp(28px,7vw,40px); font-weight:800;
-  }
+  .brand h1{ margin:4px 0 2px; font-size:clamp(28px,7vw,40px); font-weight:800; }
   .brand h1 .pop-emoji{display:inline-block;}
 
   .panel{
@@ -66,9 +61,11 @@
   }
   .rule-box .rule-title{ font-size:17px; font-weight:800; margin-bottom:4px; }
   .rule-box .rule-text{ font-size:13.5px; color:#5b4a1f; line-height:1.45; }
-  .rule-box .rule-examples{ margin-top:8px; font-size:13.5px; }
-  .rule-box .rule-examples b{ color:var(--green); }
-  .rule-box .rule-examples s{ color:var(--red); text-decoration-thickness:2px; margin-left:10px; }
+  .rule-box .rule-examples{ margin-top:10px; font-size:15px; }
+  .rule-box .rule-examples b{
+    display:inline-block; background:#fff; border:1.5px solid #f3d18a; border-radius:8px;
+    padding:3px 9px; margin:0 6px 6px 0; font-weight:800; color:var(--navy);
+  }
 
   label.field-label{ display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--muted); }
   input[type=text]{
@@ -87,9 +84,7 @@
     transition:transform .05s;
   }
   .btn:active{ transform:translateY(4px); box-shadow:0 2px 0 var(--blue-dark); }
-  .btn.secondary{
-    background:#eef5f9; color:var(--blue-dark); box-shadow:0 6px 0 #c9dde7;
-  }
+  .btn.secondary{ background:#eef5f9; color:var(--blue-dark); box-shadow:0 6px 0 #c9dde7; }
   .btn.secondary:active{ box-shadow:0 2px 0 #c9dde7; }
 
   .name-chip{
@@ -124,57 +119,45 @@
     box-shadow:0 3px 10px rgba(18,38,58,.08);
     font-weight:800; font-size:15px; display:flex; align-items:center; gap:6px;
   }
-  .hud-pill.grow{ flex:1; }
+  .hud-pill.grow{ flex:1; justify-content:center; }
   .hud-pill .lab{ font-size:10px; font-weight:700; text-transform:uppercase; color:var(--muted); letter-spacing:.5px; }
-  #hud-time.warn{ color:var(--red); }
-  .timebar-track{ height:8px; background:#e2eef4; border-radius:6px; overflow:hidden; flex:1; }
-  .timebar-fill{ height:100%; background:var(--blue); border-radius:6px; transition:width .2s linear, background .3s; width:100%; }
-  #streak-pill{ display:none; }
-  #streak-pill.show{ display:flex; }
 
-  /* ── Game area ── */
+  /* ── Game screen: buckets + word bank ── */
   #game-wrap{ display:none; flex-direction:column; align-items:center; width:100%; height:100%; }
   #game-wrap.active{ display:flex; }
-  #game-area{
-    position:relative; width:100%; max-width:640px; flex:1;
+
+  #gs-buckets{
+    width:100%; max-width:640px; display:flex; gap:8px; padding:10px 12px; flex-wrap:wrap; justify-content:center;
+  }
+  .gs-bucket{
+    flex:1 1 110px; min-width:100px; background:#fff; border:2.5px dashed #cfe2ec; border-radius:14px;
+    padding:10px 8px 12px; text-align:center; cursor:pointer; transition:border-color .15s, background .15s;
+  }
+  .gs-bucket.armed{ border-color:var(--blue); background:#eaf6fd; }
+  .gs-bucket.wrong{ animation:shakeAnim .32s ease; border-color:var(--red); }
+  .gs-bucket .glabel{ font-size:19px; font-weight:900; color:var(--navy); }
+  .gs-bucket .gcount{ font-size:11px; font-weight:700; color:var(--muted); margin-top:2px; }
+  .gs-bucket .gwords{ display:flex; flex-wrap:wrap; gap:4px; justify-content:center; margin-top:8px; min-height:4px; }
+  .gs-bucket .gword-placed{
+    background:var(--green); color:#fff; font-size:11.5px; font-weight:700; padding:4px 8px; border-radius:999px;
+  }
+
+  #gs-bank{
+    flex:1; width:100%; overflow-y:auto; padding:18px 16px; display:flex; flex-wrap:wrap;
+    align-content:flex-start; gap:10px; justify-content:center;
     background:radial-gradient(circle at 30% 20%, #ffffff 0%, var(--bg1) 45%, var(--bg2) 100%);
-    border-radius:0;
-    overflow:hidden;
   }
-  .lane-line{ position:absolute; bottom:64px; left:0; right:0; border-top:2px dashed #b9d8e6; opacity:.6; }
-
-  .bubble{
-    position:absolute; top:-70px;
-    padding:12px 20px; border-radius:999px;
-    font-size:clamp(18px,4.6vw,26px); font-weight:800; color:#fff;
-    box-shadow:0 6px 14px rgba(0,0,0,.15), inset 0 -3px 0 rgba(0,0,0,.12);
-    cursor:pointer; white-space:nowrap;
-    will-change:transform,top;
+  .gs-chip{
+    font-family:inherit; font-size:17px; font-weight:800; padding:11px 18px; border-radius:999px;
+    border:none; background:var(--blue); color:#fff; cursor:pointer; box-shadow:0 4px 0 var(--blue-dark);
   }
-  .bubble.pop{ animation:popAnim .28s ease forwards; pointer-events:none; }
-  .bubble.wrongPop{ animation:shakeAnim .32s ease; }
-  @keyframes popAnim{ to{ transform:scale(1.6); opacity:0; } }
-  @keyframes shakeAnim{ 20%{transform:translateX(-8px) rotate(-4deg);} 50%{transform:translateX(8px) rotate(4deg);} 80%{transform:translateX(-4px);} 100%{transform:translateX(0);} }
-
-  .floater{
-    position:absolute; font-weight:900; font-size:20px; pointer-events:none;
-    animation:floatUp .8s ease forwards;
-  }
-  @keyframes floatUp{ from{ opacity:1; transform:translateY(0);} to{ opacity:0; transform:translateY(-46px);} }
-
-  .correction-toast{
-    position:absolute; left:50%; bottom:74px; transform:translateX(-50%) translateY(10px);
-    background:var(--navy); color:#fff; font-weight:700; font-size:14px;
-    padding:9px 16px; border-radius:12px; opacity:0; transition:opacity .2s, transform .2s;
-    pointer-events:none; text-align:center; max-width:88%;
-  }
-  .correction-toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
-  .correction-toast b{ color:#8ee6a8; }
+  .gs-chip.selected{ background:var(--amber); box-shadow:0 4px 0 #b9790e; transform:translateY(-2px); }
 
   #ground{
-    height:64px; width:100%; max-width:640px;
+    height:auto; width:100%; max-width:640px;
     background:#dff1e4; border-top:2px solid #bfe3c9;
-    display:flex; align-items:center; justify-content:center;
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    padding:10px 16px;
     font-size:12.5px; color:#3f7a54; font-weight:700; gap:6px;
   }
 
@@ -183,7 +166,6 @@
   .stat-box{ background:#f5fafc; border-radius:12px; padding:14px 6px; text-align:center; }
   .stat-box .num{ font-size:24px; font-weight:900; color:var(--blue-dark); }
   .stat-box .lab{ font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-top:2px; }
-  .stat-box.new .num{ color:var(--green); }
 
   footer.note{
     max-width:640px; margin:18px auto 0; padding:0 20px 20px; font-size:11.5px; color:var(--muted); text-align:center; line-height:1.5;
@@ -195,6 +177,7 @@
     border-radius:12px; padding:12px 14px; font-size:13.5px; font-weight:600;
     margin-bottom:18px;
   }
+  .banner-error a{ color:#a3231f; font-weight:800; }
   .pin-hello{ font-size:16px; font-weight:800; text-align:center; margin-bottom:16px; }
   .pin-hello span{ color:var(--blue-dark); }
   .pin-dots{ display:flex; justify-content:center; gap:14px; margin-bottom:10px; }
@@ -239,7 +222,7 @@
   .word-tags{ display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
   .word-tag{
     font-family:inherit; font-size:14px; font-weight:700; padding:9px 16px; border-radius:999px;
-    border:2px solid #cfe2ec; background:#fff; color:var(--navy); cursor:pointer;
+    border:2px solid #cfe2ec; background:#fff; color:var(--navy);
   }
   .word-tag.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
   .setup-link{
@@ -254,11 +237,12 @@
   <section id="screen-setup" class="screen active">
     <div class="brand">
       <div class="kicker">Wallscourt Farm Academy · Spelling Games (prototype)</div>
-      <h1><span class="pop-emoji">🫧</span> Spelling Pop</h1>
+      <h1><span class="pop-emoji">🗂️</span> Grapheme Sort</h1>
     </div>
     <div class="panel">
       <p style="font-size:13.5px; color:var(--muted); margin:0 0 16px;">
-        Words and rules come straight from the Spelling Assessment tool's lesson data — pick a year group and week to build this round's word pool.
+        Sort words into the right spelling pattern for this week's sound. Only works on weeks whose rule is
+        "which spelling?" — pick a year group and week to see if this week qualifies.
       </p>
       <label class="field-label" for="setup-year">Year group</label>
       <select id="setup-year"><option value="">Choose…</option></select>
@@ -266,12 +250,7 @@
       <label class="field-label" for="setup-week" style="margin-top:14px;">Week</label>
       <select id="setup-week"><option value="">Choose a year group first…</option></select>
 
-      <div id="setup-pool" style="display:none; margin-top:20px;">
-        <div id="setup-rules"></div>
-        <label class="field-label" style="margin-top:14px;">Words for this round <span id="setup-count" style="font-weight:400;"></span></label>
-        <div class="word-tags" id="setup-word-tags"></div>
-        <button class="btn" id="setup-continue">Continue ▶</button>
-      </div>
+      <div id="setup-pool" style="display:none; margin-top:20px;"></div>
     </div>
   </section>
 
@@ -279,7 +258,7 @@
   <section id="screen-start" class="screen">
     <div class="brand">
       <div class="kicker">Wallscourt Farm Academy · Spelling Games (prototype)</div>
-      <h1><span class="pop-emoji">🫧</span> Spelling Pop</h1>
+      <h1><span class="pop-emoji">🗂️</span> Grapheme Sort</h1>
     </div>
 
     <div class="panel">
@@ -331,35 +310,32 @@
     </div>
 
     <footer class="note">
-      Proof of concept — each pupil's card (see <code>cards.html</code>) has a personal QR code and PIN, but scores are currently saved only in this browser (localStorage). A real deployment would swap this for the same lightweight sync backend already used by the SLT Schedule and Lunch Cover tools, keyed per pupil ID, so scores follow a child across devices. The PIN is a light identity check for a classroom setting, not real security — it's visible to anyone reading this page's code.
+      Proof of concept — each pupil's card (see <code>../cards.html</code>) has a personal QR code and PIN, shared across every spelling game. Buckets use the curriculum's own example words for each spelling pattern (topped up with matching words from this week's list), not a guess. Scores sync to the same backend as Spelling Pop.
     </footer>
   </section>
 
   <!-- ══════════ GAME SCREEN ══════════ -->
   <div id="game-wrap">
     <div class="hud">
-      <div class="hud-pill"><span class="lab">Score</span>&nbsp;<span id="hud-score">0</span></div>
-      <div class="hud-pill grow"><span class="lab" id="hud-time">60s</span><div class="timebar-track"><div class="timebar-fill" id="timebar"></div></div></div>
-      <div class="hud-pill" id="streak-pill">🔥 <span id="hud-streak">0</span></div>
+      <div class="hud-pill"><span class="lab">Score</span>&nbsp;<span id="gs-score">0</span></div>
+      <div class="hud-pill grow"><span class="lab">Left to sort&nbsp;</span><span id="gs-remaining">0</span></div>
     </div>
-    <div id="game-area">
-      <div class="lane-line"></div>
-      <div class="correction-toast" id="correction-toast"></div>
-    </div>
-    <div id="ground">👇 Tap the words spelled <strong>correctly</strong> — let the wrong ones fall past</div>
+    <div id="gs-buckets"></div>
+    <div id="gs-bank"></div>
+    <div id="ground">👆 Tap a word, then tap the pattern it belongs to</div>
   </div>
 
   <!-- ══════════ END SCREEN ══════════ -->
   <section id="screen-end" class="screen">
     <div class="brand">
       <div class="kicker">Round complete</div>
-      <h1>🎉 Nice popping!</h1>
+      <h1>🎉 All sorted!</h1>
     </div>
     <div class="panel">
       <div class="stat-grid">
         <div class="stat-box"><div class="num" id="end-score">0</div><div class="lab">Score</div></div>
         <div class="stat-box"><div class="num" id="end-accuracy">0%</div><div class="lab">Accuracy</div></div>
-        <div class="stat-box" id="end-streak-box"><div class="num" id="end-streak">0</div><div class="lab">Best streak</div></div>
+        <div class="stat-box"><div class="num" id="end-time">0s</div><div class="lab">Time taken</div></div>
       </div>
       <button class="btn" id="again-btn">🔁 Play again</button>
       <button class="btn secondary" id="menu-btn">Change player / back to menu</button>
@@ -377,33 +353,30 @@
 /* ════════════════════════════════════════════════════════════════
    GAME IDENTITY — used to tag scores; leave as-is per game.
    ════════════════════════════════════════════════════════════════ */
-const GAME_ID = "spelling-pop";
-const ROUND_SECONDS = 60;
-const LAST_NAME_KEY = "wfa-spelling-pop-last-name";
-const LAST_ID_KEY = "wfa-spelling-pop-last-id";
-const BUBBLE_COLORS = ["#1798d3","#2fbf71","#f5a524","#c65bd6","#ff7a6b","#2ba9a1"];
-/* Real deployment backend URL — see ../backend/. Empty = local only. */
+const GAME_ID = "grapheme-sort";
+const LAST_NAME_KEY = "wfa-grapheme-sort-last-name";
+const LAST_ID_KEY = "wfa-grapheme-sort-last-id";
+/* Same deployed backend as Spelling Pop — Code.gs already keys rows by
+   game + rule, so every spelling game can share one Sheet. */
 const BACKEND_URL = "https://script.google.com/macros/s/AKfycbz7wYDaxA-8HNhkBL1nIyV7hXA5wUa3WJq4vU3ieasUk4zufeQoxZOO8WN8NzjudxNM/exec";
 /* ═══════════════════════════════════════════════════════════════ */
 
 const $ = id => document.getElementById(id);
 
-let WORDS = [];          // active { correct, wrong } pairs for this round
-let RULES = [];          // active { focus, explanation, exampleWords }[] for the chosen week
-let LEADERBOARD_KEY = ""; // set once a year/week pool is chosen
-let POOL_ID = "";         // "Y5-T1W1" — identifies this week's pool for scoring
-let currentPool = null;   // result of spGetWeekPool() for the setup screen in progress
-let selectedWords = new Set();
+let BUCKETS = [];          // active [{ grapheme, words }] for this round
+let RULE_FOCUS = "";
+let RULE_EXPLANATION = "";
+let LEADERBOARD_KEY = "";  // set once a year/week pool is chosen
+let POOL_ID = "";          // "Y5-T1W1" — identifies this week's pool for scoring
+let currentPool = null;    // spGetWeekPool() result for the setup screen in progress
 
 let playerName = "";
 let playerId = null;
 let state = null;
-let rafId = null;
-let spawnTimer = null;
-let tickTimer = null;
-let lastFrame = 0;
+let chips = [];
+let selectedChip = null;
 
-/* ── Setup screen: year + week → word pool ── */
+/* ── Setup screen: year + week → grapheme buckets (or "not available") ── */
 function populateYearSelect() {
   const sel = $("setup-year");
   sel.innerHTML = '<option value="">Choose…</option>' +
@@ -427,47 +400,53 @@ function onSetupWeekChange() {
 }
 function loadPoolIntoSetup(year, term, week) {
   currentPool = spGetWeekPool(year, term, week);
-  $("setup-rules").innerHTML = currentPool.rules.length
-    ? currentPool.rules.map(r => `<div class="rule-mini"><b>${escapeHtml(r.focus || "This week's pattern")}</b>${escapeHtml(r.explanation)}</div>`).join("")
-    : '<div class="rule-mini"><b>No rule notes recorded</b>This week has words but no saved explanation — the game will still work.</div>';
+  const buckets = spGetGraphemeBuckets(currentPool);
+  const box = $("setup-pool");
 
-  selectedWords = new Set(defaultWordSelection(currentPool.words));
-  renderWordTags();
-  $("setup-pool").style.display = "block";
-}
-function defaultWordSelection(words) {
-  return words.slice(0, Math.min(14, words.length));
-}
-function renderWordTags() {
-  $("setup-word-tags").innerHTML = currentPool.words.map(w =>
-    `<button type="button" class="word-tag ${selectedWords.has(w) ? "on" : ""}" data-word="${escapeHtml(w)}">${escapeHtml(w)}</button>`
-  ).join("");
-  $("setup-count").textContent = `(${selectedWords.size} selected)`;
-  $("setup-word-tags").querySelectorAll(".word-tag").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const w = btn.dataset.word;
-      if (selectedWords.has(w)) selectedWords.delete(w); else selectedWords.add(w);
-      renderWordTags();
-    });
+  if (!buckets) {
+    box.innerHTML = `<div class="banner-error">
+      This week's rule isn't a "choose your spelling" pattern, so there's nothing to sort here.
+      Try a different week, or play <a href="../spelling-pop/index.html">Spelling Pop</a> instead — it works with any week.
+    </div>`;
+    box.style.display = "block";
+    return;
+  }
+
+  box.innerHTML = `
+    <div class="rule-mini"><b>${escapeHtml(buckets.focus || "Spelling pattern")}</b>${escapeHtml(buckets.explanation)}</div>
+    <label class="field-label" style="margin-top:14px;">Groups to sort</label>
+    <div class="word-tags">${buckets.buckets.map(b => `<span class="word-tag on">${escapeHtml(b.grapheme)} · ${b.words.length} words</span>`).join("")}</div>
+    <button class="btn" id="setup-continue">Continue ▶</button>`;
+  box.style.display = "block";
+  $("setup-continue").addEventListener("click", () => {
+    activatePool(currentPool.year, currentPool.term, currentPool.week);
   });
 }
 $("setup-year").addEventListener("change", onSetupYearChange);
 $("setup-week").addEventListener("change", onSetupWeekChange);
-$("setup-continue").addEventListener("click", () => {
-  if (selectedWords.size < 3) { alert("Pick at least 3 words to play with."); return; }
-  activatePool(currentPool.year, currentPool.term, currentPool.week, [...selectedWords]);
-});
 populateYearSelect();
 
-/* ── Turn a chosen year/week (+ optional word subset) into an active round ── */
-function activatePool(year, term, week, words) {
+/* ── Turn a chosen year/week into an active round ── */
+function activatePool(year, term, week) {
   const pool = spGetWeekPool(year, term, week);
-  RULES = pool.rules;
-  const chosenWords = words && words.length ? words : defaultWordSelection(pool.words);
-  WORDS = spBuildWordPairs(chosenWords);
+  const b = spGetGraphemeBuckets(pool);
+  if (!b) {
+    // Defensive: only reachable if a QR/link points at a week that doesn't
+    // qualify. Fall back to the setup screen with the same explanation
+    // shown to someone picking manually, instead of a blank/broken game.
+    $("setup-year").value = year;
+    onSetupYearChange();
+    $("setup-week").value = `${term}|${week}`;
+    loadPoolIntoSetup(year, term, week);
+    goTo("setup");
+    return;
+  }
 
+  BUCKETS = b.buckets;
+  RULE_FOCUS = b.focus;
+  RULE_EXPLANATION = b.explanation;
   POOL_ID = `${year}-${term}${week}`;
-  LEADERBOARD_KEY = "wfa-spelling-pop-leaderboard-" + POOL_ID;
+  LEADERBOARD_KEY = "wfa-grapheme-sort-leaderboard-" + POOL_ID;
 
   renderRuleBox();
   goTo("start");
@@ -475,21 +454,12 @@ function activatePool(year, term, week, words) {
 }
 
 function renderRuleBox() {
-  const box = $("rule-box-list");
-  if (!RULES.length) {
-    box.innerHTML = '<div class="rule-box"><div class="rule-label">This week\'s words</div><div class="rule-text">No rule notes recorded for this week — words only.</div></div>';
-    return;
-  }
-  box.innerHTML = RULES.map(r => {
-    const exampleLower = (r.exampleWords || []).map(w => w.toLowerCase());
-    const pair = WORDS.find(p => exampleLower.includes(p.correct));
-    return `<div class="rule-box">
-      <div class="rule-label">This week's spelling rule</div>
-      <div class="rule-title">${escapeHtml(r.focus || "Spelling pattern")}</div>
-      <div class="rule-text">${escapeHtml(r.explanation)}</div>
-      ${pair ? `<div class="rule-examples"><b>✓ ${escapeHtml(pair.correct)}</b><s>✗ ${escapeHtml(pair.wrong)}</s></div>` : ""}
-    </div>`;
-  }).join("");
+  $("rule-box-list").innerHTML = `<div class="rule-box">
+    <div class="rule-label">This week's spelling rule</div>
+    <div class="rule-title">${escapeHtml(RULE_FOCUS || "Spelling pattern")}</div>
+    <div class="rule-text">${escapeHtml(RULE_EXPLANATION)}</div>
+    <div class="rule-examples">${BUCKETS.map(b => `<b>${escapeHtml(b.grapheme)}</b>`).join("")}</div>
+  </div>`;
 }
 
 $("change-week-link").addEventListener("click", () => {
@@ -528,7 +498,7 @@ async function renderLeaderboard(targetId, highlightId) {
     </div>`).join("");
 }
 function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 /* ── "Access" — QR code (?u=CODE) + PIN identifies a named pupil;
@@ -614,7 +584,7 @@ $("manual-submit").addEventListener("click", () => {
   beginAsPupil(pupil);
 });
 
-/* Runs once a word pool is active and the start (identify-yourself) screen is showing. */
+/* Runs once a pool is active and the start (identify-yourself) screen is showing. */
 function initAccessScreen() {
   $("bad-code-banner").style.display = "none";
   if (qrCode) {
@@ -664,185 +634,116 @@ function goTo(which) {
   document.body.classList.toggle("playing", which === "game");
 }
 
-/* ── Game logic ── */
+/* ── Game logic — tap a word, then tap the bucket it belongs to ── */
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 function startRound() {
-  clearInterval(spawnTimer);
-  clearInterval(tickTimer);
-  cancelAnimationFrame(rafId);
-  $("game-area").querySelectorAll(".bubble,.floater").forEach(n => n.remove());
+  state = { score: 0, correct: 0, wrong: 0, startTime: performance.now(), ending: false };
+  selectedChip = null;
 
-  state = {
-    score: 0, streak: 0, bestStreak: 0,
-    correctTaps: 0, wrongTaps: 0,
-    timeLeft: ROUND_SECONDS,
-    bubbles: [],
-    ending: false
-  };
+  chips = [];
+  BUCKETS.forEach(b => b.words.forEach(w => chips.push({ word: w, grapheme: b.grapheme, placed: false })));
+  shuffleArray(chips);
+
+  buildBuckets();
+  renderBank();
   updateHud();
-  $("timebar").style.background = "var(--blue)";
-  $("hud-time").classList.remove("warn");
+}
 
-  tickTimer = setInterval(() => {
-    state.timeLeft--;
+function buildBuckets() {
+  const wrap = $("gs-buckets");
+  wrap.innerHTML = "";
+  BUCKETS.forEach(b => {
+    const el = document.createElement("div");
+    el.className = "gs-bucket";
+    el.innerHTML = `
+      <div class="glabel">${escapeHtml(b.grapheme)}</div>
+      <div class="gcount">0 / ${b.words.length}</div>
+      <div class="gwords"></div>`;
+    el.addEventListener("click", () => onBucketTap(b.grapheme, el));
+    wrap.appendChild(el);
+  });
+}
+
+function renderBank() {
+  const bank = $("gs-bank");
+  bank.innerHTML = "";
+  chips.filter(c => !c.placed).forEach(chip => {
+    const btn = document.createElement("button");
+    btn.className = "gs-chip" + (selectedChip === chip ? " selected" : "");
+    btn.textContent = chip.word;
+    btn.addEventListener("click", () => onChipTap(chip));
+    bank.appendChild(btn);
+  });
+  document.querySelectorAll(".gs-bucket").forEach(b => b.classList.toggle("armed", !!selectedChip));
+}
+
+function onChipTap(chip) {
+  selectedChip = selectedChip === chip ? null : chip;
+  renderBank();
+}
+
+function onBucketTap(grapheme, bucketEl) {
+  if (!selectedChip || state.ending) return;
+  if (selectedChip.grapheme === grapheme) {
+    selectedChip.placed = true;
+    state.correct++;
+    state.score += 10;
+
+    const wordsEl = bucketEl.querySelector(".gwords");
+    const tag = document.createElement("span");
+    tag.className = "gword-placed";
+    tag.textContent = selectedChip.word;
+    wordsEl.appendChild(tag);
+
+    const total = BUCKETS.find(b => b.grapheme === grapheme).words.length;
+    const placed = chips.filter(c => c.placed && c.grapheme === grapheme).length;
+    bucketEl.querySelector(".gcount").textContent = `${placed} / ${total}`;
+
+    selectedChip = null;
+    renderBank();
     updateHud();
-    if (state.timeLeft <= 10) $("hud-time").classList.add("warn");
-    if (state.timeLeft <= 0) endRound();
-  }, 1000);
-
-  const spawnLoop = () => {
-    if (!state || state.ending) return;
-    spawnBubble();
-    const elapsed = ROUND_SECONDS - state.timeLeft;
-    const interval = Math.max(520, 1100 - elapsed * 8);
-    spawnTimer = setTimeout(spawnLoop, interval);
-  };
-  spawnLoop();
-
-  lastFrame = performance.now();
-  rafId = requestAnimationFrame(tickFrame);
+    if (chips.every(c => c.placed)) endRound();
+  } else {
+    state.wrong++;
+    bucketEl.classList.add("wrong");
+    setTimeout(() => bucketEl.classList.remove("wrong"), 320);
+    updateHud();
+  }
 }
 
 function updateHud() {
-  $("hud-score").textContent = state.score;
-  $("hud-time").textContent = `${state.timeLeft}s`;
-  $("timebar").style.width = `${(state.timeLeft / ROUND_SECONDS) * 100}%`;
-  if (state.streak >= 2) {
-    $("streak-pill").classList.add("show");
-    $("hud-streak").textContent = state.streak;
-  } else {
-    $("streak-pill").classList.remove("show");
-  }
-}
-
-function spawnBubble() {
-  const area = $("game-area");
-  const pair = WORDS[Math.floor(Math.random() * WORDS.length)];
-  const isCorrect = Math.random() < 0.55;
-  const word = isCorrect ? pair.correct : pair.wrong;
-
-  const el = document.createElement("div");
-  el.className = "bubble";
-  el.textContent = word;
-  el.style.background = BUBBLE_COLORS[Math.floor(Math.random() * BUBBLE_COLORS.length)];
-  area.appendChild(el);
-
-  const areaW = area.clientWidth;
-  const bw = el.offsetWidth;
-  const x = Math.max(8, Math.min(areaW - bw - 8, Math.random() * (areaW - bw)));
-  el.style.left = x + "px";
-
-  const speed = 34 + Math.random() * 18 + (ROUND_SECONDS - state.timeLeft) * 0.35;
-  const bubble = { el, y: -70, x, speed, isCorrect, word, correctSpelling: pair.correct, popped: false };
-  state.bubbles.push(bubble);
-
-  el.addEventListener("pointerdown", () => popBubble(bubble), { passive: true });
-}
-
-function tickFrame(now) {
-  if (!state) return;
-  const dt = Math.min(0.05, (now - lastFrame) / 1000);
-  lastFrame = now;
-  const area = $("game-area");
-  const floorY = area.clientHeight;
-
-  for (let i = state.bubbles.length - 1; i >= 0; i--) {
-    const b = state.bubbles[i];
-    if (b.popped) continue;
-    b.y += b.speed * dt;
-    b.el.style.top = b.y + "px";
-    if (b.y > floorY) {
-      if (b.isCorrect) { state.streak = 0; }
-      b.el.remove();
-      state.bubbles.splice(i, 1);
-    }
-  }
-  updateHud();
-  if (state && !state.ending) rafId = requestAnimationFrame(tickFrame);
-}
-
-function popBubble(b) {
-  if (b.popped || !state) return;
-  b.popped = true;
-  const area = $("game-area");
-  const rect = b.el.getBoundingClientRect();
-  const areaRect = area.getBoundingClientRect();
-  const localX = rect.left - areaRect.left + rect.width / 2;
-  const localY = rect.top - areaRect.top;
-
-  if (b.isCorrect) {
-    state.streak++;
-    state.bestStreak = Math.max(state.bestStreak, state.streak);
-    const mult = state.streak >= 6 ? 3 : state.streak >= 3 ? 2 : 1;
-    const pts = 10 * mult;
-    state.score += pts;
-    state.correctTaps++;
-    b.el.classList.add("pop");
-    spawnFloater(`+${pts}`, "var(--green)", localX, localY);
-  } else {
-    state.streak = 0;
-    state.score = Math.max(0, state.score - 5);
-    state.wrongTaps++;
-    b.el.classList.add("wrongPop");
-    spawnFloater("−5", "var(--red)", localX, localY);
-    showCorrection(b.correctSpelling);
-    setTimeout(() => { b.el.remove(); state.bubbles = state.bubbles.filter(x => x !== b); }, 320);
-    updateHud();
-    return;
-  }
-
-  updateHud();
-  setTimeout(() => {
-    b.el.remove();
-    state.bubbles = state.bubbles.filter(x => x !== b);
-  }, 280);
-}
-
-function spawnFloater(text, color, x, y) {
-  const f = document.createElement("div");
-  f.className = "floater";
-  f.textContent = text;
-  f.style.color = color;
-  f.style.left = x + "px";
-  f.style.top = y + "px";
-  $("game-area").appendChild(f);
-  setTimeout(() => f.remove(), 820);
-}
-
-let toastTimer = null;
-function showCorrection(word) {
-  const t = $("correction-toast");
-  t.innerHTML = `It's spelled <b>${word}</b>`;
-  t.classList.add("show");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("show"), 1100);
+  $("gs-score").textContent = state.score;
+  $("gs-remaining").textContent = chips.filter(c => !c.placed).length;
 }
 
 function endRound() {
   if (!state || state.ending) return;
   state.ending = true;
-  clearInterval(tickTimer);
-  clearTimeout(spawnTimer);
-  cancelAnimationFrame(rafId);
 
-  const totalTaps = state.correctTaps + state.wrongTaps;
-  const accuracy = totalTaps ? Math.round((state.correctTaps / totalTaps) * 100) : 0;
+  const elapsedSec = Math.max(1, Math.round((performance.now() - state.startTime) / 1000));
+  const totalAttempts = state.correct + state.wrong;
+  const accuracy = totalAttempts ? Math.round((state.correct / totalAttempts) * 100) : 100;
 
   $("end-score").textContent = state.score;
   $("end-accuracy").textContent = accuracy + "%";
-  $("end-streak").textContent = state.bestStreak;
+  $("end-time").textContent = elapsedSec + "s";
 
   const scoreEntry = {
     id: playerId, name: playerName, score: state.score, accuracy,
-    bestStreak: state.bestStreak, date: new Date().toISOString().slice(0, 10)
+    bestStreak: 0, date: new Date().toISOString().slice(0, 10)
   };
   saveScore(scoreEntry);
   syncSaveScore(scoreEntry);
   renderLeaderboard("leaderboard-list-end", playerId);
 
-  setTimeout(() => {
-    $("game-area").querySelectorAll(".bubble,.floater").forEach(n => n.remove());
-    goTo("end");
-  }, 260);
+  setTimeout(() => goTo("end"), 400);
 }
 
 /* ── Optional backend sync — see ../backend/. No-ops until
