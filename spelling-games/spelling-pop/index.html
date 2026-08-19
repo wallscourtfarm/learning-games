@@ -342,7 +342,7 @@
         <div class="stat-box" id="end-streak-box"><div class="num" id="end-streak">0</div><div class="lab">Best streak</div></div>
       </div>
       <button class="btn" id="again-btn">🔁 Play again</button>
-      <button class="btn secondary" id="menu-btn">Change player / back to menu</button>
+      <button class="btn secondary" id="menu-btn">🚪 Exit — next player sign in</button>
     </div>
     <div class="board-title">🏆 Leaderboard — best scores on this device</div>
     <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
@@ -392,7 +392,8 @@ function onSetupYearChange() {
   const weekSel = $("setup-week");
   $("setup-pool").style.display = "none";
   if (!year) { weekSel.innerHTML = '<option value="">Choose a year group first…</option>'; return; }
-  const weeks = spGetWeeksForYear(year);
+  // Only the current week and earlier — never a week not yet taught.
+  const weeks = spGetAvailableWeeksForYear(year, CURRENT_WEEK);
   weekSel.innerHTML = '<option value="">Choose…</option>' +
     weeks.map(w => `<option value="${w.term}|${w.week}">${w.label}</option>`).join("");
 }
@@ -612,11 +613,11 @@ function initAccessScreen() {
 
 $("again-btn").addEventListener("click", () => { goTo("game"); startRound(); });
 $("menu-btn").addEventListener("click", () => {
+  // Full sign-out: clears this tab's verified pupil and returns to the
+  // hub's identify screen, so the next child on the same iPad must enter
+  // their own code + PIN rather than picking up mid-session as this pupil.
   spClearVerifiedPupil();
-  renderLeaderboard("leaderboard-list", playerId);
-  $("pin-gate").style.display = "none";
-  $("guest-gate").style.display = "block";
-  goTo("start");
+  location.href = "../play/index.html";
 });
 
 function goTo(which) {
