@@ -33,6 +33,25 @@ function spGetWeeksForYear(year) {
   return out;
 }
 
+function spWeekOrdinal(term, week) {
+  const t = parseInt(String(term).replace(/\D/g, ""), 10) || 0;
+  const w = parseInt(String(week).replace(/\D/g, ""), 10) || 0;
+  return t * 100 + w;
+}
+
+/**
+ * Weeks a pupil is allowed to pick — the current week (from the Settings
+ * tab) and everything before it, never a week whose lessons haven't
+ * happened yet. Moving CURRENT_WEEK forward (e.g. every Monday) is what
+ * unlocks the next week for pupils — there's no separate toggle for it.
+ */
+function spGetAvailableWeeksForYear(year, currentWeek) {
+  const all = spGetWeeksForYear(year);
+  if (!currentWeek || !currentWeek.term || !currentWeek.week) return all;
+  const cutoff = spWeekOrdinal(currentWeek.term, currentWeek.week);
+  return all.filter(w => spWeekOrdinal(w.term, w.week) <= cutoff);
+}
+
 function spGetWeekLessons(year, term, week) {
   return LESSONS.filter(l => l.year === year && l.term === term && l.week === week)
     .sort((a, b) => a.weekLesson - b.weekLesson);

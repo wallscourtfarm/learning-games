@@ -138,7 +138,7 @@
         </div>
       </div>
       <div class="week-note" id="week-note"></div>
-      <button class="setup-link" id="change-player-link">Not you? Sign in as someone else</button>
+      <button class="setup-link" id="change-player-link">🚪 Exit — next player sign in</button>
     </div>
 
     <div class="games-heading">Games for this week</div>
@@ -231,9 +231,11 @@ $("change-player-link").addEventListener("click", () => {
   $("guest-gate").style.display = "block";
 });
 
-/* ── Once identified: term/week (defaulting to the current week) + games ── */
+/* ── Once identified: term/week (defaulting to the current week) + games —
+   only the current week and earlier ever appear, so a pupil can't jump
+   ahead to a week they haven't had the lesson for yet. ── */
 function populateTermWeek(year, selectedTerm, selectedWeek) {
-  const weeks = spGetWeeksForYear(year);
+  const weeks = spGetAvailableWeeksForYear(year, CURRENT_WEEK);
   const terms = [...new Set(weeks.map(w => w.term))];
   const termSel = $("pick-term");
   termSel.innerHTML = '<option value="">Choose…</option>' +
@@ -243,7 +245,7 @@ function populateTermWeek(year, selectedTerm, selectedWeek) {
 function populateWeekSelect(year, term, selectedWeek) {
   const weekSel = $("pick-week");
   if (!term) { weekSel.innerHTML = '<option value="">Choose a term first…</option>'; return; }
-  const weeksInTerm = spGetWeeksForYear(year).filter(w => w.term === term);
+  const weeksInTerm = spGetAvailableWeeksForYear(year, CURRENT_WEEK).filter(w => w.term === term);
   weekSel.innerHTML = '<option value="">Choose…</option>' +
     weeksInTerm.map(w => `<option value="${w.week}" ${w.week === selectedWeek ? "selected" : ""}>${w.label.split(" — ")[1]}</option>`).join("");
 }
@@ -285,14 +287,19 @@ function enterMain() {
   $("identity-sub").textContent = `Year ${identifiedPupil.year.replace("Y", "")} — here's what's ready for you to play.`;
 
   // A printed card's QR can bake in the week it was printed for; otherwise
-  // default to the live current week so pupils don't have to know it.
-  const term = params.get("t") || CURRENT_WEEK.term;
-  const week = params.get("w") || CURRENT_WEEK.week;
+  // default to the live current week so pupils don't have to know it. A
+  // card printed for a week that's since become "future" (the current
+  // week moved back, or the card is old) falls back to the current week
+  // rather than honouring it.
+  const availableWeeks = spGetAvailableWeeksForYear(identifiedPupil.year, CURRENT_WEEK);
+  const paramTerm = params.get("t"), paramWeek = params.get("w");
+  const paramIsAvailable = paramTerm && paramWeek && availableWeeks.some(w => w.term === paramTerm && w.week === paramWeek);
+  const term = paramIsAvailable ? paramTerm : CURRENT_WEEK.term;
+  const week = paramIsAvailable ? paramWeek : CURRENT_WEEK.week;
   populateTermWeek(identifiedPupil.year, term, week);
   renderGames();
 
-  const weeks = spGetWeeksForYear(identifiedPupil.year);
-  const known = weeks.find(w => w.term === term && w.week === week);
+  const known = availableWeeks.find(w => w.term === term && w.week === week);
   $("week-note").textContent = known ? "" : "That week wasn't recognised — pick one from the list.";
 }
 
