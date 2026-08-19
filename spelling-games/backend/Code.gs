@@ -32,7 +32,9 @@
 const SHEET_NAME = 'Scores';
 const HEADERS = ['Timestamp', 'PupilId', 'PupilName', 'Game', 'RuleId', 'Score', 'Accuracy', 'BestStreak'];
 const ROSTER_SHEET_NAME = 'Roster';
-const ROSTER_HEADERS = ['Name', 'Code', 'PIN', 'Year'];
+// First Name / Last Name / Year lead, so a teacher can paste a class list's
+// name + year columns straight in. Code / PIN trail and fill themselves in.
+const ROSTER_HEADERS = ['First Name', 'Last Name', 'Year', 'Code', 'PIN'];
 const SETTINGS_SHEET_NAME = 'Settings';
 
 function doGet(e) {
@@ -147,12 +149,12 @@ function getRosterAndSettings() {
     if (lastRow >= 2) {
       const values = rosterSheet.getRange(2, 1, lastRow - 1, ROSTER_HEADERS.length).getValues();
       roster = values
-        .filter(r => r[0] && r[1] && r[2] && r[3]) // Name, Code, PIN, Year all present
+        .filter(r => r[0] && r[2] && r[3] && r[4]) // First Name, Year, Code, PIN — Last Name optional
         .map(r => ({
-          name: String(r[0]).trim(),
-          id: String(r[1]).trim().toUpperCase(),
-          pin: String(r[2]).trim(),
-          year: String(r[3]).trim()
+          name: [String(r[0]).trim(), String(r[1]).trim()].filter(Boolean).join(' '),
+          year: String(r[2]).trim(),
+          id: String(r[3]).trim().toUpperCase(),
+          pin: String(r[4]).trim()
         }));
     }
   }
@@ -172,17 +174,19 @@ function getRosterAndSettings() {
    reload the Sheet and use the new "Spelling Games" menu it adds
    instead. It builds the Roster and Settings tabs with headers, a Year
    dropdown, and formulas that auto-fill a Code and PIN as soon as a
-   Name is typed — a teacher never has to invent either. Safe to run
-   again later: it only fills in what's missing, never touches existing
-   pupil rows or overwrites the current term/week. */
+   First Name is typed — a teacher never has to invent either. First
+   Name / Last Name / Year lead (columns A-C) so a class list's name +
+   year columns can be pasted straight in. Safe to run again later: it
+   only fills in what's missing, never touches existing pupil rows or
+   overwrites the current term/week. */
 function setupRosterSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
   let roster = ss.getSheetByName(ROSTER_SHEET_NAME);
   if (!roster) roster = ss.insertSheet(ROSTER_SHEET_NAME);
-  if (roster.getRange('A1').getValue() !== 'Name') {
-    roster.getRange('A1:D1').setValues([ROSTER_HEADERS]);
-    roster.getRange('A1:D1').setFontWeight('bold');
+  if (roster.getRange('A1').getValue() !== 'First Name') {
+    roster.getRange('A1:E1').setValues([ROSTER_HEADERS]);
+    roster.getRange('A1:E1').setFontWeight('bold');
     roster.setFrozenRows(1);
   }
 
@@ -192,8 +196,8 @@ function setupRosterSheet() {
   const startRow = 2, numRows = 60;
   for (let i = 0; i < numRows; i++) {
     const row = startRow + i;
-    const codeCell = roster.getRange(row, 2);
-    const pinCell = roster.getRange(row, 3);
+    const codeCell = roster.getRange(row, 4);
+    const pinCell = roster.getRange(row, 5);
     if (!codeCell.getFormula() && !codeCell.getValue()) {
       codeCell.setFormula('=IF(A' + row + '="","",UPPER(LEFT(A' + row + '&"XX",2))&TEXT(MOD(ROW()*37,90)+10,"00"))');
     }
@@ -201,13 +205,13 @@ function setupRosterSheet() {
       pinCell.setFormula('=IF(A' + row + '="","",TEXT(1000+MOD(ROW()*8191,9000),"0000"))');
     }
   }
-  const yearRange = roster.getRange(startRow, 4, numRows, 1);
+  const yearRange = roster.getRange(startRow, 3, numRows, 1);
   const yearRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(['Y2', 'Y3', 'Y4', 'Y5', 'Y6'], true)
     .setAllowInvalid(false)
     .build();
   yearRange.setDataValidation(yearRule);
-  roster.autoResizeColumns(1, 4);
+  roster.autoResizeColumns(1, 5);
 
   let settings = ss.getSheetByName(SETTINGS_SHEET_NAME);
   if (!settings) settings = ss.insertSheet(SETTINGS_SHEET_NAME);
@@ -225,7 +229,7 @@ function setupRosterSheet() {
   settings.autoResizeColumns(1, 2);
 
   try {
-    SpreadsheetApp.getUi().alert('Roster and Settings tabs are ready. Type pupil names into the Roster tab — their code and PIN fill in automatically.');
+    SpreadsheetApp.getUi().alert('Roster and Settings tabs are ready. Paste or type First Name / Last Name / Year into the Roster tab — Code and PIN fill in automatically.');
   } catch (e) {
     // getUi() only works when this Sheet is open in a browser tab, not when
     // run straight from the Apps Script editor with no Sheet open — that's
