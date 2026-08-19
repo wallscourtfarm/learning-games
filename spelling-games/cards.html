@@ -75,7 +75,7 @@
   <div class="card-grid" id="card-grid"></div>
 
   <footer class="note">
-    Proof of concept — QR codes are generated in your browser using the <a href="https://github.com/kazuhikoarase/qrcode-generator" target="_blank" rel="noopener">qrcode-generator</a> library (MIT licence, vendored locally in <code>vendor/qrcode.js</code>, no external service or network call). PINs live in <code>roster.js</code> alongside this page, shared by every game — treat that file the way you'd treat a class list, not a secrets store. Each pupil's <code>year</code> and the shared <code>CURRENT_WEEK</code> (both in <code>roster.js</code>) are baked into every QR code, so scanning one opens that game already loaded with the right week's words — no picker needed. Add a new game to every pupil's card by adding one entry to the <code>GAMES</code> list in <code>roster.js</code> — nothing else on this page needs to change.
+    Proof of concept — QR codes are generated in your browser using the <a href="https://github.com/kazuhikoarase/qrcode-generator" target="_blank" rel="noopener">qrcode-generator</a> library (MIT licence, vendored locally in <code>vendor/qrcode.js</code>, no external service or network call). Pupils and the current week come live from the "Roster" and "Settings" tabs in the backend Google Sheet — type a name in the Sheet and a code + PIN fill themselves in, no code or GitHub needed. <code>roster.js</code> is only the offline fallback used if that Sheet is unreachable. Each pupil's <code>year</code> and the current term/week are baked into every QR code, so scanning one opens that game already loaded with the right week's words — no picker needed. Add a new game to every pupil's card by adding one entry to the <code>GAMES</code> list in <code>roster.js</code> — nothing else on this page needs to change.
   </footer>
 
 <script src="lessons-data.js"></script>
@@ -83,12 +83,6 @@
 <script src="vendor/qrcode.js"></script>
 <script src="roster.js"></script>
 <script>
-  const grid = document.getElementById("card-grid");
-  const weeks = spGetWeeksForYear(ROSTER[0]?.year || "Y5");
-  const weekInfo = weeks.find(w => w.term === CURRENT_WEEK.term && w.week === CURRENT_WEEK.week);
-  document.getElementById("week-label").textContent =
-    `Cards for ${weekInfo ? weekInfo.label : `${CURRENT_WEEK.term} ${CURRENT_WEEK.week}`} — change CURRENT_WEEK in roster.js and reprint for a new week.`;
-
   function qrSvgFor(url) {
     const qr = qrcode(0, "M");
     qr.addData(url);
@@ -96,7 +90,21 @@
     return qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
   }
 
-  ROSTER.forEach(pupil => {
+  async function renderCards() {
+    const live = await spFetchLiveRoster(BACKEND_URL);
+    if (live) {
+      if (live.roster && live.roster.length) ROSTER = live.roster;
+      if (live.currentWeek) CURRENT_WEEK = live.currentWeek;
+    }
+
+    const grid = document.getElementById("card-grid");
+    const weeks = spGetWeeksForYear(ROSTER[0]?.year || "Y5");
+    const weekInfo = weeks.find(w => w.term === CURRENT_WEEK.term && w.week === CURRENT_WEEK.week);
+    document.getElementById("week-label").textContent =
+      `Cards for ${weekInfo ? weekInfo.label : `${CURRENT_WEEK.term} ${CURRENT_WEEK.week}`}` +
+      (live ? " — from the Roster/Settings tabs. Reprint after editing them." : " — from roster.js (Sheet unreachable). Change CURRENT_WEEK there and reprint.");
+
+    ROSTER.forEach(pupil => {
     const gamesHtml = GAMES.map(game => {
       const available = !game.isAvailable || game.isAvailable(pupil.year, CURRENT_WEEK.term, CURRENT_WEEK.week);
       if (!available) {
@@ -128,8 +136,11 @@
         <div class="row">PIN&nbsp;<b class="pin-val">${pupil.pin}</b></div>
       </div>
       <div class="games">${gamesHtml}</div>`;
-    grid.appendChild(card);
-  });
+      grid.appendChild(card);
+    });
+  }
+
+  renderCards();
 </script>
 </body>
 </html>

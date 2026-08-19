@@ -356,9 +356,8 @@
 const GAME_ID = "grapheme-sort";
 const LAST_NAME_KEY = "wfa-grapheme-sort-last-name";
 const LAST_ID_KEY = "wfa-grapheme-sort-last-id";
-/* Same deployed backend as Spelling Pop — Code.gs already keys rows by
-   game + rule, so every spelling game can share one Sheet. */
-const BACKEND_URL = "https://script.google.com/macros/s/AKfycbz7wYDaxA-8HNhkBL1nIyV7hXA5wUa3WJq4vU3ieasUk4zufeQoxZOO8WN8NzjudxNM/exec";
+/* BACKEND_URL, ROSTER and CURRENT_WEEK come from ../roster.js — the same
+   deployed backend as Spelling Pop, since Code.gs keys rows by game+rule. */
 /* ═══════════════════════════════════════════════════════════════ */
 
 const $ = id => document.getElementById(id);
@@ -776,15 +775,25 @@ async function fetchRemoteLeaderboard() {
 
 /* ── Entry point: a QR card bakes ?y=&t=&w= in, so scanning it skips
    straight past the setup screen. Opening the page with no params (staff
-   testing, or a guest) shows the year/week picker instead. ── */
-const paramYear = urlParams.get("y");
-const paramTerm = urlParams.get("t");
-const paramWeek = urlParams.get("w");
-if (paramYear && paramTerm && paramWeek) {
-  activatePool(paramYear, paramTerm, paramWeek);
-} else {
-  goTo("setup");
-}
+   testing, or a guest) shows the year/week picker instead. Pupil setup
+   (ROSTER) and the default week (CURRENT_WEEK) are fetched live from the
+   Sheet first, falling back to roster.js's static copies if that fails. ── */
+(async function boot() {
+  const live = await spFetchLiveRoster(BACKEND_URL);
+  if (live) {
+    if (live.roster && live.roster.length) ROSTER = live.roster;
+    if (live.currentWeek) CURRENT_WEEK = live.currentWeek;
+  }
+
+  const paramYear = urlParams.get("y");
+  const paramTerm = urlParams.get("t");
+  const paramWeek = urlParams.get("w");
+  if (paramYear && paramTerm && paramWeek) {
+    activatePool(paramYear, paramTerm, paramWeek);
+  } else {
+    goTo("setup");
+  }
+})();
 </script>
 </body>
 </html>
