@@ -237,3 +237,20 @@ async function spFetchLiveRoster(backendUrl) {
     return null;
   }
 }
+
+/* ── "Verified this tab" — once a pupil's code + PIN is checked anywhere
+   in Spelling Games (the hub page or a game reached directly via QR),
+   every other game/page in the same browser tab can trust that without
+   asking again. sessionStorage clears when the tab closes, so handing an
+   iPad to a different child (a fresh tab, or reopening the browser) still
+   requires the PIN — this only removes repeat prompts within one sitting. */
+const SP_VERIFIED_KEY = "wfa-spelling-verified-id";
+function spSetVerifiedPupil(id) {
+  try { sessionStorage.setItem(SP_VERIFIED_KEY, String(id).toUpperCase()); } catch (e) {}
+}
+function spGetVerifiedPupilId() {
+  try { return sessionStorage.getItem(SP_VERIFIED_KEY) || ""; } catch (e) { return ""; }
+}
+function spClearVerifiedPupil() {
+  try { sessionStorage.removeItem(SP_VERIFIED_KEY); } catch (e) {}
+}
