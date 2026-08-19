@@ -92,16 +92,6 @@
   }
   .btn.secondary:active{ box-shadow:0 2px 0 #c9dde7; }
 
-  .name-chip{
-    display:inline-flex; align-items:center; gap:6px;
-    background:#eef5f9; border-radius:999px; padding:6px 12px 6px 8px;
-    font-size:13px; font-weight:700; color:var(--blue-dark); margin-top:10px;
-  }
-  .name-chip .avatar{
-    width:22px;height:22px;border-radius:50%;background:var(--blue);
-    color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;
-  }
-
   /* ── Leaderboard ── */
   .board-title{ font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin:22px 0 8px; }
   .board-row{
@@ -217,14 +207,6 @@
     background:none; border:none; cursor:pointer; text-decoration:underline; font-family:inherit;
   }
 
-  .link-btn{
-    display:block; text-align:center; width:100%; background:none; border:none; cursor:pointer;
-    color:var(--blue-dark); font-size:13px; font-weight:700; text-decoration:underline;
-    margin-top:14px; font-family:inherit;
-  }
-  .divider-row{ display:flex; align-items:center; gap:10px; margin:20px 0 2px; color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
-  .divider-row::before, .divider-row::after{ content:''; flex:1; height:1px; background:#e2eef4; }
-
   /* ── Year / week setup screen ── */
   select{
     width:100%; font-size:17px; padding:12px 14px; border-radius:12px;
@@ -300,27 +282,15 @@
         <button class="pin-back" id="pin-back">Not you? Use a different way in</button>
       </div>
 
-      <!-- Default entry: type a name, or switch to a personal code + PIN -->
+      <!-- Default entry: a personal code + PIN, always required — no
+           typed-name shortcut, since iPads get shared between children. -->
       <div id="guest-gate">
-        <label class="field-label" for="name-input">What's your name?</label>
-        <input type="text" id="name-input" maxlength="20" placeholder="e.g. Amelia" autocomplete="off">
-
-        <button class="btn" id="start-btn">▶ Start playing</button>
-
-        <div id="prev-player-row" style="display:none; text-align:center;">
-          <span class="name-chip"><span class="avatar" id="prev-avatar">?</span><span id="prev-name-text"></span></span>
-        </div>
-
-        <div class="divider-row">or</div>
-        <button class="link-btn" id="manual-toggle">I have a spelling code</button>
-        <div id="manual-form" style="display:none;">
-          <label class="field-label" for="manual-code">Your code</label>
-          <input type="text" id="manual-code" maxlength="6" placeholder="e.g. AM72" style="text-transform:uppercase;" autocomplete="off">
-          <label class="field-label" for="manual-pin" style="margin-top:10px;">Your PIN</label>
-          <input type="text" id="manual-pin" inputmode="numeric" maxlength="4" placeholder="4 digits" autocomplete="off">
-          <button class="btn secondary" id="manual-submit">Continue</button>
-          <div class="pin-error" id="manual-error">&nbsp;</div>
-        </div>
+        <label class="field-label" for="manual-code">Your code</label>
+        <input type="text" id="manual-code" maxlength="6" placeholder="e.g. AM72" style="text-transform:uppercase;" autocomplete="off">
+        <label class="field-label" for="manual-pin" style="margin-top:10px;">Your PIN</label>
+        <input type="text" id="manual-pin" inputmode="numeric" maxlength="4" placeholder="4 digits" autocomplete="off">
+        <button class="btn" id="manual-submit">▶ Start playing</button>
+        <div class="pin-error" id="manual-error">&nbsp;</div>
         <button class="setup-link" id="change-week-link">Not the right week? Change year/week</button>
       </div>
     </div>
@@ -379,7 +349,6 @@
    ════════════════════════════════════════════════════════════════ */
 const GAME_ID = "spelling-pop";
 const ROUND_SECONDS = 60;
-const LAST_NAME_KEY = "wfa-spelling-pop-last-name";
 const LAST_ID_KEY = "wfa-spelling-pop-last-id";
 const BUBBLE_COLORS = ["#1798d3","#2fbf71","#f5a524","#c65bd6","#ff7a6b","#2ba9a1"];
 /* BACKEND_URL, ROSTER and CURRENT_WEEK come from ../roster.js. */
@@ -598,10 +567,6 @@ $("pin-back").addEventListener("click", () => {
   $("guest-gate").style.display = "block";
 });
 
-$("manual-toggle").addEventListener("click", () => {
-  const f = $("manual-form");
-  f.style.display = f.style.display === "block" ? "none" : "block";
-});
 $("manual-submit").addEventListener("click", () => {
   const code = $("manual-code").value.trim().toUpperCase();
   const pin = $("manual-pin").value.trim();
@@ -624,34 +589,14 @@ function initAccessScreen() {
       $("bad-code-banner").style.display = "block";
     }
   }
-
-  const savedName = localStorage.getItem(LAST_NAME_KEY);
-  if (savedName) {
-    $("name-input").value = savedName;
-    $("prev-player-row").style.display = "block";
-    $("prev-avatar").textContent = savedName.trim()[0]?.toUpperCase() || "?";
-    $("prev-name-text").textContent = `Last time: ${savedName}`;
-  }
   renderLeaderboard("leaderboard-list", localStorage.getItem(LAST_ID_KEY));
 }
-
-$("start-btn").addEventListener("click", () => {
-  const name = $("name-input").value.trim();
-  if (!name) { $("name-input").focus(); $("name-input").style.borderColor = "var(--red)"; return; }
-  playerName = name;
-  playerId = "guest:" + name.toLowerCase();
-  localStorage.setItem(LAST_NAME_KEY, name);
-  localStorage.setItem(LAST_ID_KEY, playerId);
-  goTo("game");
-  startRound();
-});
 
 $("again-btn").addEventListener("click", () => { goTo("game"); startRound(); });
 $("menu-btn").addEventListener("click", () => {
   renderLeaderboard("leaderboard-list", playerId);
   $("pin-gate").style.display = "none";
   $("guest-gate").style.display = "block";
-  if (pendingPupil) { $("manual-form").style.display = "block"; }
   goTo("start");
 });
 
