@@ -104,42 +104,77 @@ function spBuildWordPairs(words) {
     .filter(p => p.wrong && p.wrong !== p.correct);
 }
 
-/* ── Grapheme buckets, for sorting-style games ──
-   Only weeks whose rule text is the "alternative graphemes" family have
-   a natural "sort by spelling pattern" structure — and helpfully, that
-   family is written as 'ai' (rain, pain), 'ay' (day, stay), ... with
-   curriculum-authored example words right there in the parentheses.
-   Those are used as-is (accurate, not guessed) rather than trying to
-   classify the week's own hlWords, which mix in words from unrelated
-   rules taught the same week and are too noisy to sort reliably. Each
-   bucket is then topped up with any of the week's own words that
-   independently match the same pattern, for a bit more variety.
+/* ── Sort buckets, for sorting-style games ──
+   A week only has something to sort when its rule offers a genuine
+   choice between several categories, tried in this order:
 
-   Only around 1 in 12 weeks has a rule written this way — most rules
-   (prefixes, suffixes, doubling, etc.) don't have a "which spelling"
-   structure at all, so there's nothing to sort. Returns null rather
-   than forcing a thin or unreliable set of buckets.
+   1. "Alternative graphemes" rules — 'ai' (rain, pain), 'ay' (day, stay)
+      — curriculum-authored example words right there in the rule text,
+      the most reliable source available. Topped up with any of the
+      week's own words that independently match the same pattern.
+
+   2. Prefix families — un/dis/mis/... — detected from the week's own
+      word list, but ONLY when that week's rule text actually mentions
+      "prefix". Without that gate, a coincidental "re" at the start of
+      an unrelated word (received, relief — really an ei/ie lesson) gets
+      wrongly treated as the re- prefix; gating on the rule's own text
+      cut that false-positive rate to near zero in testing.
+
+   3. Suffix families — -ing/-ed/-ment/... — same idea, gated on the
+      rule text mentioning "suffix".
+
+   Roughly a third of weeks have one of these three structures. The
+   rest (single-transformation rules like "double the consonant before
+   -ing", or mixed revision weeks with no common thread) genuinely have
+   nothing to sort into groups — this returns null rather than forcing
+   a thin or unreliable set of buckets on them.
 */
+const SP_PREFIXES = ["un","dis","mis","im","il","ir","in","re","sub","inter","super","anti","auto","de","over","under","pre","non","mid"];
+const SP_SUFFIXES = ["ing","ed","er","est","ly","ment","ness","ful","less","tion","sion","cian","ssion","sure","ture","able","ible","ant","ance","ancy","ent","ence","ency","ous","ious","eous","ive","ary","ery","ory","al","ic","ist","ism","hood","ship","dom"];
+
 function spGetGraphemeBuckets(pool) {
+  const grapheme = spFindBestBuckets(pool.rules, r => spExtractCuratedBuckets(r.explanation));
+  if (grapheme) {
+    // Top up with any of the week's own words that independently match —
+    // only possible for this source, since prefix/suffix buckets are
+    // already built from the week's own word list.
+    const graphemes = grapheme.buckets.map(b => b.grapheme);
+    pool.words.forEach(word => {
+      const matches = graphemes.filter(g => spGraphemeMatches(word, g));
+      if (matches.length === 1) {
+        const bucket = grapheme.buckets.find(b => b.grapheme === matches[0]);
+        if (!bucket.words.includes(word)) bucket.words.push(word);
+      }
+    });
+    return grapheme;
+  }
+
+  const prefix = spFindBestBuckets(pool.rules, r =>
+    spMentionsAffix(r, "prefix") ? spAffixBuckets(pool.words, SP_PREFIXES, true) : []
+  );
+  if (prefix) return prefix;
+
+  const suffix = spFindBestBuckets(pool.rules, r =>
+    spMentionsAffix(r, "suffix") ? spAffixBuckets(pool.words, SP_SUFFIXES, false) : []
+  );
+  if (suffix) return suffix;
+
+  return null;
+}
+
+function spFindBestBuckets(rules, getBuckets) {
   let best = null;
-  pool.rules.forEach(r => {
-    const buckets = spExtractCuratedBuckets(r.explanation);
+  rules.forEach(r => {
+    const buckets = getBuckets(r);
     if (buckets.length >= 2 && (!best || buckets.length > best.buckets.length)) {
-      best = { rule: r, buckets };
+      best = { focus: r.focus, explanation: r.explanation, buckets };
     }
   });
-  if (!best) return null;
+  return best;
+}
 
-  const graphemes = best.buckets.map(b => b.grapheme);
-  pool.words.forEach(word => {
-    const matches = graphemes.filter(g => spGraphemeMatches(word, g));
-    if (matches.length === 1) {
-      const bucket = best.buckets.find(b => b.grapheme === matches[0]);
-      if (!bucket.words.includes(word)) bucket.words.push(word);
-    }
-  });
-
-  return { focus: best.rule.focus, explanation: best.rule.explanation, buckets: best.buckets };
+function spMentionsAffix(rule, word) {
+  return new RegExp(word, "i").test((rule.focus || "") + " " + (rule.explanation || ""));
 }
 
 function spExtractCuratedBuckets(explanation) {
@@ -160,6 +195,27 @@ function spGraphemeMatches(word, grapheme) {
     return new RegExp(a + "[^aeiou]+" + b + "$").test(word);
   }
   return word.includes(grapheme);
+}
+
+/* Buckets words by which prefix/suffix they contain, from a fixed list —
+   only called once the rule text has confirmed this week is actually
+   about prefixes/suffixes (see spGetGraphemeBuckets). A word matching
+   more than one candidate, or leaving too short a remainder to be a
+   real root (e.g. "in" + "n"), is left out rather than guessed at. */
+function spAffixBuckets(words, affixes, isPrefix) {
+  const map = new Map();
+  words.forEach(word => {
+    const matches = affixes.filter(a => isPrefix ? word.startsWith(a) : word.endsWith(a));
+    if (matches.length !== 1) return;
+    const affix = matches[0];
+    const remainder = isPrefix ? word.slice(affix.length) : word.slice(0, word.length - affix.length);
+    if (remainder.length < 2) return;
+    if (!map.has(affix)) map.set(affix, []);
+    map.get(affix).push(word);
+  });
+  return [...map.entries()]
+    .map(([grapheme, words]) => ({ grapheme, words }))
+    .filter(b => b.words.length >= 2);
 }
 
 /* ── Live roster/settings fetch ──

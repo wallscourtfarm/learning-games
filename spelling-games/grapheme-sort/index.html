@@ -241,8 +241,8 @@
     </div>
     <div class="panel">
       <p style="font-size:13.5px; color:var(--muted); margin:0 0 16px;">
-        Sort words into the right spelling pattern for this week's sound. Only works on weeks whose rule is
-        "which spelling?" — pick a year group and week to see if this week qualifies.
+        Sort words into groups — different spellings of a sound, or a set of prefixes/suffixes. Only works on
+        weeks whose rule actually offers a choice like that — pick a year group and week to see if this week qualifies.
       </p>
       <label class="field-label" for="setup-year">Year group</label>
       <select id="setup-year"><option value="">Choose…</option></select>
@@ -404,7 +404,7 @@ function loadPoolIntoSetup(year, term, week) {
 
   if (!buckets) {
     box.innerHTML = `<div class="banner-error">
-      This week's rule isn't a "choose your spelling" pattern, so there's nothing to sort here.
+      This week's rule doesn't offer a choice between groups (different spellings, prefixes or suffixes), so there's nothing to sort here.
       Try a different week, or play <a href="../spelling-pop/index.html">Spelling Pop</a> instead — it works with any week.
     </div>`;
     box.style.display = "block";
