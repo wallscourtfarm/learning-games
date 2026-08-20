@@ -64,6 +64,7 @@ const GAMES = [
     isAvailable: (year, term, week) => spGetWeekPool(year, term, week).words.length > 0
   },
   // No isAvailable — homophone pairs are a fixed key-stage list, not tied
-  // to the week's hlWords, so this game is always ready to play.
-  { id: "fill-the-gap", label: "Fill the Gap", icon: "📝", path: "fill-the-gap/index.html" }
+  // to the week's hlWords, so these games are always ready to play.
+  { id: "fill-the-gap", label: "Fill the Gap", icon: "📝", path: "fill-the-gap/index.html" },
+  { id: "spot-the-mistake", label: "Spot the Mistake", icon: "🧐", path: "spot-the-mistake/index.html" }
 ];
