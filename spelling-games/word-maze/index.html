@@ -114,49 +114,57 @@
   .hud-pill.grow{ flex:1; justify-content:center; min-width:120px; }
   .hud-pill .lab{ font-size:10px; font-weight:700; text-transform:uppercase; color:var(--muted); letter-spacing:.5px; }
 
-  /* ── Game screen: corridor of doors + anagram stage ── */
+  /* ── Game screen: fog-of-war maze + on-screen D-pad ── */
   #game-wrap{ display:none; flex-direction:column; align-items:center; width:100%; padding:0 20px; }
   #game-wrap.active{ display:flex; }
 
-  #wm-corridor{
-    display:flex; align-items:center; gap:6px; width:100%; max-width:480px;
-    overflow-x:auto; padding:14px 6px; margin-top:10px;
+  #wm-quest-title{ font-size:14px; font-weight:800; color:var(--navy); margin-top:12px; text-align:center; }
+  #wm-clue-banner{
+    display:none; background:#fff7e6; border:1.5px solid #f3d18a; border-radius:12px;
+    padding:10px 14px; margin-top:8px; font-size:13px; color:#5b4a1f; line-height:1.4;
+    max-width:480px; width:100%; text-align:center;
   }
-  .wm-door{
-    flex:0 0 auto; width:38px; height:38px; border-radius:10px;
-    display:flex; align-items:center; justify-content:center; font-size:19px;
-    background:#e4d3b0; box-shadow:0 3px 0 #c7ab77; transition:transform .2s;
-  }
-  .wm-door.opened{ background:var(--green); box-shadow:0 3px 0 #1f9c58; }
-  .wm-door.current{ background:var(--amber); box-shadow:0 3px 0 #c17f0e; animation:doorOpen .5s ease; }
-  .wm-door-link{ flex:0 0 auto; width:14px; height:3px; background:#c7ab77; border-radius:2px; }
-  .wm-door-link.opened{ background:var(--green); }
+  #wm-clue-banner.shown{ display:block; }
 
-  #wm-stage{
-    width:100%; max-width:480px; margin-top:10px; background:var(--card); border-radius:20px;
-    padding:30px 24px; text-align:center; box-shadow:0 10px 30px rgba(18,38,58,.10);
+  .wm-progress-row{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px; margin:12px 0; }
+  .wm-progress-box{
+    width:30px; height:38px; display:flex; align-items:center; justify-content:center;
+    font-size:18px; font-weight:900; color:var(--navy); border-bottom:4px solid #cfe2ec; border-radius:4px;
   }
-  .wm-stage-label{ font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin-bottom:6px; }
-  .wm-attempts-note{ font-size:12.5px; color:var(--muted); margin-bottom:18px; min-height:16px; }
+  .wm-progress-box.filled{ border-bottom-color:var(--green); }
+  .wm-progress-box.next{ border-bottom-color:var(--amber); }
 
-  .wm-answer-row{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-bottom:22px; }
-  .wm-slot{
-    width:38px; height:48px; border-radius:8px; border:2.5px solid #cfe2ec; background:#f5fafc;
+  #wm-maze{
+    display:grid; gap:2px; width:100%; max-width:420px; aspect-ratio: var(--wm-cols) / var(--wm-rows);
+    margin:0 auto; border-radius:14px; overflow:hidden; box-shadow:0 10px 30px rgba(18,38,58,.15);
+    background:#1a2230;
+  }
+  .wm-cell{
     display:flex; align-items:center; justify-content:center;
-    font-size:22px; font-weight:900; color:var(--navy); cursor:pointer;
+    font-size:clamp(12px,3.4vw,18px); font-weight:900; color:#5b4a1f;
+    background:#e4d3b0;
   }
-  .wm-slot.filled{ border-color:var(--blue); background:#fff; }
-  #wm-answer-row.wrong .wm-slot{ border-color:var(--red); background:#fdeceb; }
-  #wm-answer-row.wrong{ animation:shakeAnim .32s ease; }
+  .wm-cell.fog{ background:#1a2230; }
+  .wm-cell.player{ background:#f0dfb8; font-size:clamp(14px,4vw,20px); }
+  .wm-cell.letter{ background:#f7ecd2; color:var(--blue-dark); border:2px solid #cfe2ec; }
+  .wm-cell.chest{ background:#f0dfb8; font-size:clamp(14px,4vw,20px); }
+  .wm-cell.chest.opened{ background:#e4d3b0; opacity:.7; }
 
-  .wm-tile-row{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
-  .wm-tile{
-    width:38px; height:48px; border-radius:8px; border:none; background:#eef5f9; color:var(--navy);
-    font-weight:900; font-size:20px; cursor:pointer; box-shadow:0 3px 0 #c9dde7; font-family:inherit;
+  .wm-dpad{
+    display:grid; grid-template-columns:repeat(3,52px); grid-template-rows:repeat(3,52px);
+    gap:6px; margin:18px auto 4px; justify-content:center;
   }
-  .wm-tile:active{ transform:translateY(2px); box-shadow:0 1px 0 #c9dde7; }
-  .wm-tile.used{ visibility:hidden; }
+  .wm-dpad button{
+    border:none; border-radius:12px; background:#eef5f9; color:var(--blue-dark);
+    font-size:20px; font-weight:800; cursor:pointer; box-shadow:0 4px 0 #c9dde7; font-family:inherit;
+  }
+  .wm-dpad button:active{ transform:translateY(3px); box-shadow:0 1px 0 #c9dde7; }
+  .wm-dpad .wm-up{ grid-column:2; grid-row:1; }
+  .wm-dpad .wm-left{ grid-column:1; grid-row:2; }
+  .wm-dpad .wm-right{ grid-column:3; grid-row:2; }
+  .wm-dpad .wm-down{ grid-column:2; grid-row:3; }
 
+  #wm-feedback{ text-align:center; margin-top:10px; }
   .wm-feedback-icon{ font-size:52px; margin-bottom:10px; }
   .wm-feedback-text{ font-size:18px; font-weight:700; color:var(--navy); line-height:1.5; }
   .wm-feedback-text .correct-word{ color:var(--green); font-weight:900; }
@@ -241,8 +249,8 @@
     </div>
     <div class="panel">
       <p style="font-size:13.5px; color:var(--muted); margin:0 0 16px;">
-        Explore the ruins one door at a time — unscramble each word to open the next gate along the corridor.
-        Up to 8 doors per round. Works with any week's word list.
+        Explore the ruins to find each artefact — open the clue chest, then walk over the letters in the right
+        order to spell the word. Up to 8 artefacts per round. Works with any week's word list.
       </p>
       <label class="field-label" for="setup-year">Year group</label>
       <select id="setup-year"><option value="">Choose…</option></select>
@@ -298,7 +306,7 @@
     </div>
 
     <footer class="note">
-      Proof of concept — each pupil's card (see <code>../cards.html</code>) has a personal QR code and PIN, shared across every spelling game. Getting an unscramble wrong just shuffles it for another go — after four tries the door opens anyway and you move on, no score for that one. Scores sync to the same backend as Spelling Pop.
+      Proof of concept — each pupil's card (see <code>../cards.html</code>) has a personal QR code and PIN, shared across every spelling game. Walk onto the chest for a clue, then step onto each letter of the word in order — walking over the wrong tile just does nothing, so there's no penalty for exploring. Scores sync to the same backend as Spelling Pop.
     </footer>
   </section>
 
@@ -307,23 +315,26 @@
     <div class="hud">
       <button class="hud-home-btn" id="hud-home-btn" aria-label="Back to games menu" title="Back to games menu">🏠</button>
       <div class="hud-pill"><span class="lab">Score</span>&nbsp;<span id="hud-score">0</span></div>
-      <div class="hud-pill grow"><span class="lab">Door&nbsp;</span><span id="hud-progress">1 / 1</span></div>
+      <div class="hud-pill grow"><span class="lab">Artefact&nbsp;</span><span id="hud-progress">1 / 1</span></div>
     </div>
 
-    <div id="wm-corridor"></div>
+    <div id="wm-quest-title"></div>
+    <div id="wm-clue-banner"></div>
 
-    <div id="wm-stage">
-      <div id="wm-play-area">
-        <div class="wm-stage-label">🗝️ Unscramble to open the door</div>
-        <div class="wm-attempts-note" id="wm-attempts-note">&nbsp;</div>
-        <div class="wm-answer-row" id="wm-answer-row"></div>
-        <div class="wm-tile-row" id="wm-tile-row"></div>
+    <div id="wm-play-area">
+      <div class="wm-progress-row" id="wm-progress-row"></div>
+      <div id="wm-maze"></div>
+      <div class="wm-dpad">
+        <button class="wm-up" id="wm-up" aria-label="Move up">▲</button>
+        <button class="wm-left" id="wm-left" aria-label="Move left">◀</button>
+        <button class="wm-right" id="wm-right" aria-label="Move right">▶</button>
+        <button class="wm-down" id="wm-down" aria-label="Move down">▼</button>
       </div>
+    </div>
 
-      <div id="wm-feedback" style="display:none;">
-        <div class="wm-feedback-icon" id="wm-feedback-icon"></div>
-        <div class="wm-feedback-text" id="wm-feedback-text"></div>
-      </div>
+    <div id="wm-feedback" style="display:none;">
+      <div class="wm-feedback-icon" id="wm-feedback-icon"></div>
+      <div class="wm-feedback-text" id="wm-feedback-text"></div>
     </div>
   </div>
 
@@ -336,8 +347,8 @@
     <div class="panel">
       <div class="stat-grid">
         <div class="stat-box"><div class="num" id="end-score">0</div><div class="lab">Score</div></div>
-        <div class="stat-box"><div class="num" id="end-firsttry">0%</div><div class="lab">First-try</div></div>
-        <div class="stat-box"><div class="num" id="end-correct">0</div><div class="lab">Doors opened</div></div>
+        <div class="stat-box"><div class="num" id="end-tiles">0</div><div class="lab">Tiles explored</div></div>
+        <div class="stat-box"><div class="num" id="end-correct">0</div><div class="lab">Artefacts found</div></div>
       </div>
       <button class="btn" id="again-btn">🔁 Play again</button>
       <button class="btn secondary" id="menu-btn">🚪 Exit — next player sign in</button>
@@ -358,7 +369,6 @@
 const GAME_ID = "word-maze";
 const LAST_ID_KEY = "wfa-word-maze-last-id";
 const MAX_ROUND_WORDS = 8;
-const MAX_ATTEMPTS = 4;
 /* BACKEND_URL, ROSTER and CURRENT_WEEK come from ../roster.js — the same
    deployed backend as every other spelling game, since Code.gs keys rows
    by game+rule. */
@@ -374,7 +384,7 @@ let currentPool = null;
 
 let playerName = "";
 let playerId = null;
-let state = null;         // { score, firstTryCount, doorsOpened, idx, order, ending, tiles, slots, attempts }
+let state = null;         // { score, tilesExplored, wordsFound, idx, order, ending, player, chest, letters, nextIdx, revealed }
 
 /* ── Setup screen: year + week → word list ── */
 function populateYearSelect() {
@@ -617,10 +627,17 @@ function goTo(which) {
   document.body.classList.toggle("playing", which === "game");
 }
 
-/* ── Game logic — walk a corridor of doors, unscrambling each word to
-   open the next one. Getting it wrong just re-shuffles the tiles for
-   another go; after MAX_ATTEMPTS the door opens anyway (no score for
-   that one) so nobody gets stuck in the ruins forever. ── */
+/* ── Game logic — explore a fog-of-war maze on foot. Every artefact's
+   chamber is a fresh MAZE_COLS×MAZE_ROWS grid: an open floor (no walls, so
+   it's always solvable), a clue chest, and one letter tile per character of
+   the target word (duplicate letters get their own separate tile, so
+   "letter" scatters six tiles, not four). Fog reveals a 3×3 patch around
+   every cell the player has stood on, accumulating as they explore. Walking
+   onto the *next* needed letter (by position, not just by matching letter —
+   that's what makes duplicate letters unambiguous) collects it; walking
+   onto any other tile does nothing, so there's no penalty for wandering. ── */
+const MAZE_COLS = 8, MAZE_ROWS = 6;
+
 function shuffleArray(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -629,148 +646,172 @@ function shuffleArray(arr) {
   return arr;
 }
 
-/* A shuffle that's guaranteed not to reproduce the original letter order
-   (trivial for length <=1, and for longer words retries until it differs —
-   an anagram puzzle that starts pre-solved isn't much of a puzzle). */
-function scrambleWord(word) {
-  const letters = word.split("");
-  if (letters.length <= 1) return letters;
-  let shuffled = shuffleArray(letters.slice());
-  let tries = 0;
-  while (shuffled.join("") === word && tries < 20) {
-    shuffled = shuffleArray(letters.slice());
-    tries++;
+function ordinal(n) {
+  const suffixes = ["th", "st", "nd", "rd"], v = n % 100;
+  return n + (suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0]);
+}
+
+/* A short, honest hint built from what we actually know about the word —
+   its length, first letter, and this week's spelling rule — rather than a
+   guessed dictionary definition that risks being wrong. */
+function buildClue(word) {
+  const rule = RULES[0];
+  let clue = `${word.length} letters, starting with "${word[0].toUpperCase()}"`;
+  if (rule) {
+    const pattern = rule.focus || (rule.explanation || "").split(".")[0];
+    if (pattern) clue += ` — this week's pattern: ${pattern}`;
   }
-  return shuffled;
+  return clue;
 }
 
 function startRound() {
   state = {
-    score: 0, firstTryCount: 0, doorsOpened: 0, idx: 0,
+    score: 0, tilesExplored: 0, wordsFound: 0, idx: 0,
     order: shuffleArray(WORDS.slice()), ending: false
   };
-  renderCorridor();
-  showDoor();
+  showChamber();
 }
 
 function currentWord() { return state.order[state.idx]; }
 
-function renderCorridor() {
-  const el = $("wm-corridor");
-  el.innerHTML = state.order.map((_, i) => {
-    const cls = i < state.idx ? "opened" : (i === state.idx ? "current" : "");
-    const icon = i < state.idx ? "🟩" : (i === state.idx ? "🚪" : "🔒");
-    const link = i > 0 ? `<div class="wm-door-link ${i - 1 < state.idx ? "opened" : ""}"></div>` : "";
-    return `${link}<div class="wm-door ${cls}">${icon}</div>`;
-  }).join("");
-  el.scrollLeft = el.scrollWidth;
+/* Picks `count` distinct cells at random, excluding any already spoken for. */
+function pickFreeCells(count, taken) {
+  const all = [];
+  for (let r = 0; r < MAZE_ROWS; r++) for (let c = 0; c < MAZE_COLS; c++) all.push({ r, c });
+  const free = all.filter(cell => !taken.some(t => t.r === cell.r && t.c === cell.c));
+  return shuffleArray(free).slice(0, count);
 }
 
-function showDoor() {
+function showChamber() {
   const word = currentWord();
-  state.tiles = scrambleWord(word).map((letter, i) => ({ id: i, letter, used: false }));
-  state.slots = new Array(word.length).fill(null); // each: tile id, or null
-  state.attempts = 0;
+  const start = { r: Math.floor(MAZE_ROWS / 2), c: 0 };
+  const [chestCell, ...letterCells] = pickFreeCells(word.length + 1, [start]);
+
+  state.player = { r: start.r, c: start.c };
+  state.chest = { r: chestCell.r, c: chestCell.c, opened: false, clue: buildClue(word) };
+  state.letters = [...word].map((letter, i) => ({ r: letterCells[i].r, c: letterCells[i].c, letter, collected: false }));
+  state.nextIdx = 0;
+  state.revealed = new Set();
+
   $("wm-play-area").style.display = "block";
   $("wm-feedback").style.display = "none";
-  $("wm-attempts-note").innerHTML = "&nbsp;";
-  renderAnswerRow();
-  renderTileRow();
+  $("wm-clue-banner").classList.remove("shown");
+  $("wm-quest-title").textContent = `🗺️ Find the ${ordinal(state.idx + 1)} artefact`;
+  $("wm-maze").style.setProperty("--wm-cols", MAZE_COLS);
+  $("wm-maze").style.setProperty("--wm-rows", MAZE_ROWS);
+  $("wm-maze").style.gridTemplateColumns = `repeat(${MAZE_COLS}, 1fr)`;
+  $("wm-maze").style.gridTemplateRows = `repeat(${MAZE_ROWS}, 1fr)`;
+
+  revealAround(state.player);
+  renderProgressRow();
+  renderMaze();
   updateHud();
 }
 
-function renderAnswerRow() {
-  const row = $("wm-answer-row");
-  row.classList.remove("wrong");
-  row.innerHTML = state.slots.map((tileId, i) => {
-    const tile = tileId === null ? null : state.tiles.find(t => t.id === tileId);
-    return `<div class="wm-slot ${tile ? "filled" : ""}" data-slot="${i}">${tile ? escapeHtml(tile.letter.toUpperCase()) : ""}</div>`;
-  }).join("");
-  row.querySelectorAll(".wm-slot").forEach(el => {
-    el.addEventListener("click", () => clearSlot(Number(el.dataset.slot)));
-  });
-}
-
-function renderTileRow() {
-  const row = $("wm-tile-row");
-  row.innerHTML = state.tiles.map(t => `
-    <button class="wm-tile ${t.used ? "used" : ""}" data-tile="${t.id}">${escapeHtml(t.letter.toUpperCase())}</button>
-  `).join("");
-  row.querySelectorAll(".wm-tile").forEach(el => {
-    el.addEventListener("click", () => placeTile(Number(el.dataset.tile)));
-  });
-}
-
-function placeTile(tileId) {
-  if (!state || state.ending) return;
-  const tile = state.tiles.find(t => t.id === tileId);
-  if (!tile || tile.used) return;
-  const emptySlot = state.slots.findIndex(s => s === null);
-  if (emptySlot === -1) return;
-  state.slots[emptySlot] = tileId;
-  tile.used = true;
-  renderAnswerRow();
-  renderTileRow();
-  if (state.slots.every(s => s !== null)) checkAnswer();
-}
-
-function clearSlot(slotIdx) {
-  if (!state || state.ending) return;
-  const tileId = state.slots[slotIdx];
-  if (tileId === null) return;
-  state.tiles.find(t => t.id === tileId).used = false;
-  state.slots[slotIdx] = null;
-  renderAnswerRow();
-  renderTileRow();
-}
-
-function checkAnswer() {
-  const word = currentWord();
-  const guess = state.slots.map(tileId => state.tiles.find(t => t.id === tileId).letter).join("");
-  state.attempts++;
-  if (guess === word) {
-    doorOpened(state.attempts === 1);
-  } else if (state.attempts >= MAX_ATTEMPTS) {
-    doorFailed();
-  } else {
-    $("wm-answer-row").classList.add("wrong");
-    $("wm-attempts-note").textContent = `Not quite — try again (${MAX_ATTEMPTS - state.attempts} ${MAX_ATTEMPTS - state.attempts === 1 ? "go" : "goes"} left)`;
-    setTimeout(() => {
-      state.slots = new Array(word.length).fill(null);
-      state.tiles.forEach(t => t.used = false);
-      renderAnswerRow();
-      renderTileRow();
-    }, 500);
+function revealAround(pos) {
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      const r = pos.r + dr, c = pos.c + dc;
+      if (r < 0 || r >= MAZE_ROWS || c < 0 || c >= MAZE_COLS) continue;
+      const key = r + "," + c;
+      if (!state.revealed.has(key)) { state.revealed.add(key); state.tilesExplored++; }
+    }
   }
 }
 
-function doorOpened(firstTry) {
-  state.score += firstTry ? 10 : 5;
-  state.doorsOpened++;
-  if (firstTry) state.firstTryCount++;
-  showFeedback(true, currentWord(), firstTry);
-}
-function doorFailed() {
-  showFeedback(false, currentWord(), false);
+function renderProgressRow() {
+  const word = currentWord();
+  $("wm-progress-row").innerHTML = [...word].map((_, i) => {
+    const letterTile = state.letters[i];
+    const cls = letterTile.collected ? "filled" : (i === state.nextIdx ? "next" : "");
+    return `<div class="wm-progress-box ${cls}">${letterTile.collected ? escapeHtml(letterTile.letter.toUpperCase()) : ""}</div>`;
+  }).join("");
 }
 
-function showFeedback(success, word, firstTry) {
+function renderMaze() {
+  const el = $("wm-maze");
+  let html = "";
+  for (let r = 0; r < MAZE_ROWS; r++) {
+    for (let c = 0; c < MAZE_COLS; c++) {
+      const key = r + "," + c;
+      if (!state.revealed.has(key)) { html += `<div class="wm-cell fog"></div>`; continue; }
+
+      const isPlayer = state.player.r === r && state.player.c === c;
+      const letterTile = state.letters.find(t => t.r === r && t.c === c && !t.collected);
+      const isChest = state.chest.r === r && state.chest.c === c;
+
+      let cls = "floor", content = "";
+      if (isPlayer) { cls = "player"; content = "🤠"; }
+      else if (letterTile) { cls = "letter"; content = escapeHtml(letterTile.letter.toUpperCase()); }
+      else if (isChest) { cls = state.chest.opened ? "chest opened" : "chest"; content = state.chest.opened ? "📖" : "❔"; }
+
+      html += `<div class="wm-cell ${cls}">${content}</div>`;
+    }
+  }
+  el.innerHTML = html;
+}
+
+function movePlayer(dr, dc) {
+  if (!state || state.ending) return;
+  const nr = state.player.r + dr, nc = state.player.c + dc;
+  if (nr < 0 || nr >= MAZE_ROWS || nc < 0 || nc >= MAZE_COLS) return;
+  state.player = { r: nr, c: nc };
+  revealAround(state.player);
+  handleArrival();
+  renderMaze();
+  updateHud();
+}
+
+function handleArrival() {
+  const { r, c } = state.player;
+
+  if (!state.chest.opened && state.chest.r === r && state.chest.c === c) {
+    state.chest.opened = true;
+    $("wm-clue-banner").textContent = `🗝️ Clue: ${state.chest.clue}`;
+    $("wm-clue-banner").classList.add("shown");
+  }
+
+  const nextLetter = state.letters[state.nextIdx];
+  if (nextLetter && !nextLetter.collected && nextLetter.r === r && nextLetter.c === c) {
+    nextLetter.collected = true;
+    state.nextIdx++;
+    renderProgressRow();
+    if (state.nextIdx >= state.letters.length) wordFound();
+  }
+}
+
+$("wm-up").addEventListener("click", () => movePlayer(-1, 0));
+$("wm-down").addEventListener("click", () => movePlayer(1, 0));
+$("wm-left").addEventListener("click", () => movePlayer(0, -1));
+$("wm-right").addEventListener("click", () => movePlayer(0, 1));
+document.addEventListener("keydown", e => {
+  if (!state || state.ending || !$("game-wrap").classList.contains("active")) return;
+  if (e.key === "ArrowUp") movePlayer(-1, 0);
+  else if (e.key === "ArrowDown") movePlayer(1, 0);
+  else if (e.key === "ArrowLeft") movePlayer(0, -1);
+  else if (e.key === "ArrowRight") movePlayer(0, 1);
+});
+
+function wordFound() {
+  state.score += 10;
+  state.wordsFound++;
+  showFeedback(currentWord());
+}
+
+function showFeedback(word) {
   $("wm-play-area").style.display = "none";
   $("wm-feedback").style.display = "block";
-  $("wm-feedback-icon").textContent = success ? (firstTry ? "🌟" : "🗝️") : "🏛️";
-  $("wm-feedback-text").innerHTML = success
-    ? `<span class="correct-word">${escapeHtml(word)}</span> — the door opens!`
-    : `The door creaks open anyway — it was <span class="correct-word">${escapeHtml(word)}</span>`;
+  $("wm-feedback-icon").textContent = "🏺";
+  $("wm-feedback-text").innerHTML = `<span class="correct-word">${escapeHtml(word)}</span> — artefact found!`;
   updateHud();
-  setTimeout(nextDoor, success ? 900 : 1600);
+  setTimeout(nextChamber, 1000);
 }
 
-function nextDoor() {
+function nextChamber() {
   if (!state || state.ending) return;
   state.idx++;
-  renderCorridor();
   if (state.idx >= state.order.length) { endRound(); return; }
-  showDoor();
+  showChamber();
 }
 
 function updateHud() {
@@ -783,14 +824,13 @@ function endRound() {
   state.ending = true;
 
   const total = state.order.length;
-  const firstTryPct = total ? Math.round((state.firstTryCount / total) * 100) : 0;
 
   $("end-score").textContent = state.score;
-  $("end-firsttry").textContent = firstTryPct + "%";
-  $("end-correct").textContent = `${state.doorsOpened} / ${total}`;
+  $("end-tiles").textContent = state.tilesExplored;
+  $("end-correct").textContent = `${state.wordsFound} / ${total}`;
 
   const scoreEntry = {
-    id: playerId, name: playerName, score: state.score, accuracy: firstTryPct,
+    id: playerId, name: playerName, score: state.score, accuracy: total ? Math.round((state.wordsFound / total) * 100) : 0,
     bestStreak: 0, date: new Date().toISOString().slice(0, 10)
   };
   saveScore(scoreEntry);
