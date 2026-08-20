@@ -62,5 +62,8 @@ const GAMES = [
   {
     id: "word-maze", label: "Word Maze", icon: "🏛️", path: "word-maze/index.html",
     isAvailable: (year, term, week) => spGetWeekPool(year, term, week).words.length > 0
-  }
+  },
+  // No isAvailable — homophone pairs are a fixed key-stage list, not tied
+  // to the week's hlWords, so this game is always ready to play.
+  { id: "fill-the-gap", label: "Fill the Gap", icon: "📝", path: "fill-the-gap/index.html" }
 ];
