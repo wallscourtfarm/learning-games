@@ -307,6 +307,7 @@
         <div class="stat-box"><div class="num" id="end-correct">0</div><div class="lab">Correct</div></div>
       </div>
       <button class="btn" id="again-btn">🔁 Play again</button>
+      <button class="btn secondary" id="end-home-btn">🏠 Back to my games</button>
       <button class="btn secondary" id="menu-btn">🚪 Exit — next player sign in</button>
     </div>
     <div class="board-title">🏆 Leaderboard — best scores on this device</div>
@@ -552,6 +553,11 @@ function initAccessScreen() {
 }
 
 $("again-btn").addEventListener("click", () => { goTo("game"); startRound(); });
+$("end-home-btn").addEventListener("click", () => {
+  // Same as the in-game 🏠 button — leave without signing out, so the
+  // hub won't ask for a PIN again if this pupil picks another game.
+  location.href = "../play/index.html" + location.search;
+});
 $("hud-home-btn").addEventListener("click", () => {
   // Leave this game mid-round without signing out — the pupil stays
   // verified in this tab so the hub won't ask for their PIN again.
