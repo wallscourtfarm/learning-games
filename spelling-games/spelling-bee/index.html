@@ -602,12 +602,46 @@ function goTo(which) {
    this runs on (iPad Safari, Chrome, Firefox) supports this natively; the
    no-speech-banner above covers the rare unsupported browser. ── */
 const SPEECH_SUPPORTED = typeof window !== "undefined" && "speechSynthesis" in window;
+
+/* Left to the browser default, `lang: "en-GB"` alone often resolves to the
+   lowest-quality compact voice a device ships rather than a genuinely good
+   one — most devices actually have a much better British voice installed,
+   just not selected by default. Prefer known-good named voices (Apple's
+   "enhanced" Siri voices, Chrome/Android's Google voices, Edge's Natural
+   voices) before falling back to "any en-GB voice" and finally to the
+   plain lang-only behaviour if nothing matches. */
+const PREFERRED_VOICE_NAMES = [
+  "daniel", "kate", "serena", "stephanie", "arthur", "martha",  // Apple UK voices (Settings → Accessibility → Spoken Content → Voices → English (UK) to install the enhanced/premium versions)
+  "google uk english female", "google uk english male",         // Chrome / Android
+  "microsoft libby", "microsoft ryan", "microsoft sonia"        // Edge / Windows
+];
+let cachedVoices = [];
+function refreshVoices() {
+  if (SPEECH_SUPPORTED) cachedVoices = window.speechSynthesis.getVoices();
+}
+if (SPEECH_SUPPORTED) {
+  refreshVoices();
+  window.speechSynthesis.onvoiceschanged = refreshVoices; // voices often load asynchronously
+}
+function pickBestVoice() {
+  if (!cachedVoices.length) refreshVoices();
+  for (const preferred of PREFERRED_VOICE_NAMES) {
+    const match = cachedVoices.find(v => v.name.toLowerCase().includes(preferred));
+    if (match) return match;
+  }
+  return cachedVoices.find(v => v.lang === "en-GB")
+    || cachedVoices.find(v => v.lang && v.lang.startsWith("en"))
+    || null;
+}
+
 function speakWord(word) {
   if (!SPEECH_SUPPORTED) return;
   try {
     window.speechSynthesis.cancel(); // stop any utterance still playing
     const utter = new SpeechSynthesisUtterance(`Spell the word ${word}`);
-    utter.lang = "en-GB";
+    const voice = pickBestVoice();
+    if (voice) { utter.voice = voice; utter.lang = voice.lang; }
+    else { utter.lang = "en-GB"; }
     utter.rate = 0.85;
     const btn = $("sb-speaker-btn");
     utter.onstart = () => btn && btn.classList.add("speaking");
