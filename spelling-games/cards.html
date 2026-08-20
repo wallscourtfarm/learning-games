@@ -18,11 +18,15 @@
   }
   .toolbar h1{ font-size:22px; margin:0 0 4px; }
   .toolbar p{ font-size:13px; color:var(--muted); margin:0; max-width:520px; }
+  .toolbar-btns{ display:flex; gap:10px; flex-wrap:wrap; }
   .toolbar button{
     font-size:15px; font-weight:800; font-family:inherit; padding:12px 20px; border-radius:12px; border:none;
     background:var(--blue); color:#fff; cursor:pointer; box-shadow:0 5px 0 var(--blue-dark); white-space:nowrap;
   }
   .toolbar button:active{ transform:translateY(3px); box-shadow:0 2px 0 var(--blue-dark); }
+  .toolbar button.secondary{ background:#eef5f9; color:var(--blue-dark); box-shadow:0 5px 0 #c9dde7; }
+  .toolbar button.secondary:active{ box-shadow:0 2px 0 #c9dde7; }
+  .toolbar button:disabled{ opacity:.6; cursor:default; }
 
   .card-grid{
     max-width:900px; margin:0 auto; display:grid; grid-template-columns:1fr; gap:14px;
@@ -66,17 +70,23 @@
       <h1>🎲 Spelling Games — Pupil Cards</h1>
       <p id="week-label">Print, cut out and hand one card to each child. They scan their code (or open their page and type it) to see everything they can play this week.</p>
     </div>
-    <button onclick="window.print()">🖨️ Print cards</button>
+    <div class="toolbar-btns">
+      <button onclick="window.print()">🖨️ Print cards</button>
+      <button id="label-btn" class="secondary" onclick="downloadLabelSheet()">🏷️ Download labels (PDF)</button>
+    </div>
   </div>
 
   <div class="card-grid" id="card-grid"></div>
 
   <footer class="note">
     Proof of concept — QR codes are generated in your browser using the <a href="https://github.com/kazuhikoarase/qrcode-generator" target="_blank" rel="noopener">qrcode-generator</a> library (MIT licence, vendored locally in <code>vendor/qrcode.js</code>, no external service or network call). Pupils and the current week come live from the "Roster" and "Settings" tabs in the backend Google Sheet — type a name in the Sheet and a code + PIN fill themselves in, no code or GitHub needed. <code>roster.js</code> is only the offline fallback used if that Sheet is unreachable. Each card's QR code goes to <code>play/index.html</code> — a pupil's own page listing every game available for their year and the current week — rather than one QR per game, so a new game never means reprinting cards. Add a new game to that list by adding one entry to <code>GAMES</code> in <code>roster.js</code>.
+    <br><br>
+    "🏷️ Download labels" makes a PDF of the same code + PIN + QR code, laid out for a 99×42mm label sheet (Avery L7159, 12 per A4 sheet) instead of full cut-out cards — the identity part of the card that doesn't change from week to week, so it only needs printing once. PDF generation uses <a href="https://github.com/parallax/jsPDF" target="_blank" rel="noopener">jsPDF</a> (MIT licence, vendored locally in <code>vendor/jspdf.umd.min.js</code>). The label geometry (exact sizes and per-row/column nudges) is copied from this school's own <code>drawer-peg-labels</code> tool, which already calibrated it against a real printed sheet — re-check a test sheet if labels ever drift, rather than trusting the numbers blindly on a different printer.
   </footer>
 
 <script src="lessons-data.js"></script>
 <script src="spelling-pool.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
 <script src="vendor/qrcode.js"></script>
 <script src="roster.js"></script>
 <script>
@@ -85,6 +95,17 @@
     qr.addData(url);
     qr.make();
     return qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  }
+
+  /* Same target every game's QR points at, factored out so the label-sheet
+     PDF (below) builds identical URLs to the on-screen cards. */
+  function targetUrlFor(pupil) {
+    const target = new URL("play/index.html", location.href);
+    target.searchParams.set("u", pupil.id);
+    target.searchParams.set("y", pupil.year);
+    target.searchParams.set("t", CURRENT_WEEK.term);
+    target.searchParams.set("w", CURRENT_WEEK.week);
+    return target;
   }
 
   async function renderCards() {
@@ -102,11 +123,7 @@
       (live ? " — from the Roster/Settings tabs. Reprint after editing them." : " — from roster.js (Sheet unreachable). Change CURRENT_WEEK there and reprint.");
 
     ROSTER.forEach(pupil => {
-      const target = new URL("play/index.html", location.href);
-      target.searchParams.set("u", pupil.id);
-      target.searchParams.set("y", pupil.year);
-      target.searchParams.set("t", CURRENT_WEEK.term);
-      target.searchParams.set("w", CURRENT_WEEK.week);
+      const target = targetUrlFor(pupil);
 
       const gamesNote = GAMES.map(game => {
         const available = !game.isAvailable || game.isAvailable(pupil.year, CURRENT_WEEK.term, CURRENT_WEEK.week);
@@ -129,6 +146,122 @@
         <div class="games-note"><b>This week:</b><br>${gamesNote}</div>`;
       grid.appendChild(card);
     });
+  }
+
+  /* ── Label sheet (99×42mm, Avery L7159, 12 per A4 sheet) ──
+     Same identity content as the cut-out cards above (name, year, code,
+     PIN, QR) but without the "this week" games note, since that's the one
+     part of the card that changes weekly — the rest is permanent, so a
+     label only needs printing once per pupil rather than reprinted with
+     every card batch.
+
+     The exact label size (99.1×40.3mm, not the nominal 99×42) and the
+     per-row/per-column offsets below aren't invented — they're copied
+     from this school's drawer-peg-labels tool, which already calibrated
+     them against a real printed Avery L7159 sheet on this printer. Reuse
+     that calibration rather than the nominal spec, and re-check a test
+     sheet if labels ever drift on a different printer. */
+  const L7159 = {
+    width: 99.1, height: 40.3, border: 3, gap: 2,
+    cols: 2, rows: 6, perSheet: 12,
+    marginLeft: 6.35, marginTop: 21.15,
+    colOffsets: [-4, 1],
+    rowOffsets: [-4, -2, 0, 2, 4, 6]
+  };
+
+  /* jsPDF's addImage() needs a real PNG/JPEG, not the GIF data URL the
+     vendored QR library produces — round-trip it through a canvas. */
+  function gifDataUrlToPngDataUrl(gifDataUrl) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext("2d").drawImage(img, 0, 0);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = reject;
+      img.src = gifDataUrl;
+    });
+  }
+  async function qrPngDataUrl(url) {
+    const qr = qrcode(0, "M");
+    qr.addData(url);
+    qr.make();
+    return gifDataUrlToPngDataUrl(qr.createDataURL(8, 32));
+  }
+
+  async function downloadLabelSheet() {
+    const btn = document.getElementById("label-btn");
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Building…";
+
+    try {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const liW = L7159.width - L7159.border * 2;
+      const liH = L7159.height - L7159.border * 2;
+      const qrSize = 25;
+
+      for (let i = 0; i < ROSTER.length; i++) {
+        const pupil = ROSTER[i];
+        const posInSheet = i % L7159.perSheet;
+        const row = Math.floor(posInSheet / L7159.cols);
+        const col = posInSheet % L7159.cols;
+        if (posInSheet === 0 && i !== 0) doc.addPage();
+
+        const lx = L7159.marginLeft + col * (L7159.width + L7159.gap) + (L7159.colOffsets[col] || 0);
+        const ly = L7159.marginTop + row * (L7159.height + L7159.gap) + (L7159.rowOffsets[row] || 0);
+        const ix = lx + L7159.border;
+        const iy = ly + L7159.border;
+
+        const qrX = ix + liW - qrSize;
+        const qrY = iy + (liH - qrSize) / 2;
+        const png = await qrPngDataUrl(targetUrlFor(pupil).href);
+        doc.addImage(png, "PNG", qrX, qrY, qrSize, qrSize);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(6);
+        doc.setTextColor(91, 122, 138);
+        doc.text("Scan for your games", qrX + qrSize / 2, qrY + qrSize + 3, { align: "center" });
+
+        const textX = ix;
+        let ty = iy + 5;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.setTextColor(15, 111, 158);
+        doc.text(`SPELLING GAMES · ${pupil.year}`, textX, ty);
+        ty += 6.5;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.setTextColor(18, 38, 58);
+        doc.text(pupil.name, textX, ty);
+        ty += 7;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(91, 122, 138);
+        doc.text("Code", textX, ty);
+        doc.setFont("courier", "bold");
+        doc.setFontSize(12);
+        doc.setTextColor(18, 38, 58);
+        doc.text(pupil.id, textX + 13, ty);
+        ty += 6.5;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(91, 122, 138);
+        doc.text("PIN", textX, ty);
+        doc.setFont("courier", "bold");
+        doc.setFontSize(12);
+        doc.setTextColor(18, 38, 58);
+        doc.text(pupil.pin, textX + 13, ty);
+      }
+
+      doc.save("wfa-spelling-games-labels.pdf");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
   }
 
   renderCards();
