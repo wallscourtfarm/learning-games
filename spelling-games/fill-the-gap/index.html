@@ -217,8 +217,8 @@
         Words that sound the same can still be spelled differently — read the sentence, then pick the spelling
         that fits. Up to 8 questions per round.
       </p>
-      <label class="field-label" for="setup-tier">Choose your group</label>
-      <select id="setup-tier"><option value="">Choose…</option></select>
+      <label class="field-label" for="setup-year">Year group</label>
+      <select id="setup-year"><option value="">Choose…</option></select>
 
       <div id="setup-pool" style="display:none; margin-top:20px;"></div>
     </div>
@@ -258,7 +258,7 @@
         <input type="text" id="manual-pin" inputmode="numeric" maxlength="4" placeholder="4 digits" autocomplete="off">
         <button class="btn" id="manual-submit">▶ Start playing</button>
         <div class="pin-error" id="manual-error">&nbsp;</div>
-        <button class="setup-link" id="change-week-link">Not the right group? Change it</button>
+        <button class="setup-link" id="change-week-link">Not the right year group? Change it</button>
       </div>
     </div>
 
@@ -337,7 +337,7 @@ const $ = id => document.getElementById(id);
 let QUESTIONS = [];       // this round's questions, capped at MAX_ROUND_WORDS
 let LEADERBOARD_KEY = "";
 let POOL_ID = "";
-let currentTier = "";
+let currentYear = "";
 
 let playerName = "";
 let playerId = null;
@@ -351,32 +351,36 @@ function shuffleArray(arr) {
   return arr;
 }
 
-/* ── Setup screen: pick a homophone group ── */
-function populateTierSelect() {
-  const sel = $("setup-tier");
+/* ── Setup screen: pick a year group. The homophone pool is cumulative —
+   an older pupil gets a mix of every pair up to their year rather than
+   only the hardest tier, since the early pairs ("their"/"there") still
+   trip up a Y6 pupil just as much as a Y2 one. ── */
+function populateYearSelect() {
+  const sel = $("setup-year");
   sel.innerHTML = '<option value="">Choose…</option>' +
-    HOMOPHONE_TIERS.map(t => `<option value="${t.id}">${escapeHtml(t.label)}</option>`).join("");
+    spGetYears().map(y => `<option value="${y}">${y.replace("Y", "Year ")}</option>`).join("");
 }
-function onSetupTierChange() {
-  const tierId = $("setup-tier").value;
+function onSetupYearChange() {
+  const year = $("setup-year").value;
   const box = $("setup-pool");
-  if (!tierId) { box.style.display = "none"; return; }
+  if (!year) { box.style.display = "none"; return; }
 
-  const groups = HOMOPHONE_GROUPS.filter(g => g.tier === tierId);
+  const tierIds = spHomophoneTiersForYear(year);
+  const groups = HOMOPHONE_GROUPS.filter(g => tierIds.includes(g.tier));
   const allWords = groups.map(g => g.words.map(w => w.word).join(" / "));
   box.innerHTML = `
-    <label class="field-label">Word pairs in this group (${groups.length})</label>
+    <label class="field-label">Word pairs for this year group (${groups.length})</label>
     <div class="word-tags">${allWords.map(w => `<span class="word-tag">${escapeHtml(w)}</span>`).join("")}</div>
     <button class="btn" id="setup-continue">Continue ▶</button>`;
   box.style.display = "block";
-  $("setup-continue").addEventListener("click", () => activateTier(tierId));
+  $("setup-continue").addEventListener("click", () => activateYear(year));
 }
-$("setup-tier").addEventListener("change", onSetupTierChange);
-populateTierSelect();
+$("setup-year").addEventListener("change", onSetupYearChange);
+populateYearSelect();
 
-/* ── Turn a chosen tier into an active round ── */
-function buildQuestionPool(tierId) {
-  const groups = HOMOPHONE_GROUPS.filter(g => g.tier === tierId);
+/* ── Turn a chosen year group into an active round ── */
+function buildQuestionPool(tierIds) {
+  const groups = HOMOPHONE_GROUPS.filter(g => tierIds.includes(g.tier));
   const questions = [];
   groups.forEach(g => {
     const optionWords = g.words.map(w => w.word);
@@ -387,23 +391,23 @@ function buildQuestionPool(tierId) {
   return questions;
 }
 
-function activateTier(tierId) {
-  currentTier = tierId;
-  QUESTIONS = shuffleArray(buildQuestionPool(tierId)).slice(0, MAX_ROUND_WORDS);
+function activateYear(year) {
+  currentYear = year;
 
-  POOL_ID = tierId;
+  POOL_ID = year;
   LEADERBOARD_KEY = "wfa-fill-the-gap-leaderboard-" + POOL_ID;
 
-  renderRuleBox(tierId);
+  renderRuleBox(year);
   goTo("start");
   initAccessScreen();
 }
 
-function renderRuleBox(tierId) {
-  const tier = HOMOPHONE_TIERS.find(t => t.id === tierId);
+function renderRuleBox(year) {
+  const tierIds = spHomophoneTiersForYear(year);
+  const labels = HOMOPHONE_TIERS.filter(t => tierIds.includes(t.id)).map(t => t.label);
   $("rule-box-list").innerHTML = `<div class="rule-box">
     <div class="rule-label">This round</div>
-    <div class="rule-text">${escapeHtml(tier ? tier.label : "Homophones")} — words that sound the same but are spelled differently depending on what they mean.</div>
+    <div class="rule-text">${escapeHtml(labels.join(" + "))} — words that sound the same but are spelled differently depending on what they mean.</div>
   </div>`;
 }
 
@@ -575,6 +579,10 @@ function goTo(which) {
    options, so process of elimination gets there) — no life lost, just a
    smaller score for that question. ── */
 function startRound() {
+  // Resampled fresh every round — including "Play again" — rather than
+  // reusing whatever 8 questions got picked the first time, so replaying
+  // doesn't just repeat the same round.
+  QUESTIONS = shuffleArray(buildQuestionPool(spHomophoneTiersForYear(currentYear))).slice(0, MAX_ROUND_WORDS);
   state = { score: 0, firstTryCount: 0, correctCount: 0, idx: 0, ending: false };
   showQuestion();
 }
@@ -705,7 +713,7 @@ async function fetchRemoteLeaderboard() {
 
   const paramYear = urlParams.get("y");
   if (paramYear) {
-    activateTier(spHomophoneTierForYear(paramYear));
+    activateYear(paramYear);
   } else {
     goTo("setup");
   }

@@ -230,13 +230,15 @@ const HOMOPHONE_GROUPS = [
   ]}
 ];
 
-/* Maps a pupil's year group to the appropriate tier — used so a QR-launched
-   session (which knows the pupil's year) can skip straight to the right
-   list without asking, same as every other game defaulting to "this
-   pupil's" content. */
-function spHomophoneTierForYear(year) {
+/* Maps a pupil's year group to every tier they should practise —
+   cumulative, not just their own year's tier. The pairs that trip up a Y2
+   pupil ("their"/"there") still trip up a Y6 one, and the words introduced
+   later in KS2 (e.g. "stationary"/"stationery") come up far less often in
+   writing than the early ones — so an older pupil gets a mix of everything
+   up to their year rather than being narrowed to only the hardest set. */
+function spHomophoneTiersForYear(year) {
   const n = parseInt(String(year).replace(/[^0-9]/g, ""), 10);
-  if (!n || n <= 2) return "ks1";
-  if (n <= 4) return "y34";
-  return "y56";
+  if (!n || n <= 2) return ["ks1"];
+  if (n <= 4) return ["ks1", "y34"];
+  return ["ks1", "y34", "y56"];
 }
