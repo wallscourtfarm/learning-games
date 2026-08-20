@@ -14,6 +14,22 @@
     color: #1798d3; text-decoration: none;
   }
   .back-link:hover { text-decoration: underline; }
+
+  .hero-cta {
+    display: flex; align-items: center; gap: 18px;
+    background: linear-gradient(135deg, #1798d3, #0f6ea3);
+    border-radius: 18px; padding: 22px 26px; margin-bottom: 28px;
+    color: #fff; text-decoration: none; box-shadow: 0 8px 0 #0b5883;
+    transition: transform .08s ease;
+  }
+  .hero-cta:active { transform: translateY(5px); box-shadow: 0 3px 0 #0b5883; }
+  .hero-cta-icon { font-size: 40px; line-height: 1; }
+  .hero-cta h2 { margin: 0 0 4px; font-size: 21px; }
+  .hero-cta p { margin: 0; font-size: 14px; opacity: .92; }
+  .hero-cta-arrow { margin-left: auto; font-size: 22px; opacity: .85; }
+
+  .section-divider { font-size: 15px; margin: 0 0 4px; color: #2c4a5c; }
+  .section-note { font-size: 13px; color: #5b7a8a; margin: 0 0 16px; max-width: 640px; }
 </style>
 </head>
 <body>
@@ -30,10 +46,17 @@
 </header>
 
 <main>
-  <p style="font-size:13.5px; color:#5b7a8a; margin:-8px 0 20px; max-width:640px;">
-    Have a card from your teacher? <a href="play/index.html" style="color:#1798d3; font-weight:700;">Go to your page</a>
-    to see every game ready for you this week, instead of picking one below.
-  </p>
+  <a class="hero-cta" href="play/index.html">
+    <div class="hero-cta-icon">🎯</div>
+    <div>
+      <h2>Go to My Spelling Games</h2>
+      <p>Enter your code and PIN to see every game ready for you this week</p>
+    </div>
+    <div class="hero-cta-arrow">▶</div>
+  </a>
+
+  <h2 class="section-divider">Or browse a specific game</h2>
+  <p class="section-note">No sign-in — pick any year group and week yourself. Useful for previewing a game, not the usual way to play.</p>
   <div class="grid">
     <a class="card" href="spelling-pop/index.html">
       <div class="card-icon">🫧</div>
