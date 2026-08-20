@@ -634,7 +634,34 @@ function pickBestVoice() {
     || null;
 }
 
+/* Real pre-recorded audio (Piper TTS, "Spell the word X") lives in
+   ../audio/{slug}.mp3 for every curriculum + CEW/key-spelling word — far
+   better quality than any browser voice. Falls back to speechSynthesis for
+   the rare word with no recording (e.g. a teacher-added word not yet
+   generated), same resilience pattern as the roster's live/static fallback. */
+function slugifyWord(word) {
+  return word.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+let currentAudio = null;
+
 function speakWord(word) {
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  if (SPEECH_SUPPORTED) window.speechSynthesis.cancel(); // stop any utterance still playing
+  const btn = $("sb-speaker-btn");
+
+  const audio = new Audio(`../audio/${slugifyWord(word)}.mp3`);
+  currentAudio = audio;
+  audio.addEventListener("play", () => btn && btn.classList.add("speaking"));
+  audio.addEventListener("ended", () => btn && btn.classList.remove("speaking"));
+  audio.addEventListener("error", () => {
+    btn && btn.classList.remove("speaking");
+    if (currentAudio === audio) currentAudio = null;
+    speakWordWithBrowserVoice(word);
+  });
+  audio.play().catch(() => speakWordWithBrowserVoice(word));
+}
+
+function speakWordWithBrowserVoice(word) {
   if (!SPEECH_SUPPORTED) return;
   try {
     window.speechSynthesis.cancel(); // stop any utterance still playing
