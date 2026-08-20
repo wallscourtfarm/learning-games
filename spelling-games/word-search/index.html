@@ -586,12 +586,24 @@ function goTo(which) {
 }
 
 /* ── Grid generation — places each word in a straight line (right, down, or
-   either diagonal), longest first for tighter packing. A word that can't
-   find a fit after many random attempts is quietly left out of the round
-   rather than breaking the puzzle — rare, and only for very long words on
-   a small grid. ── */
+   either diagonal), longest first for tighter packing. Each word is given a
+   preferred direction from a shuffled, evenly-repeated pool (rather than
+   picking a fresh random direction per placement attempt) so a round doesn't
+   end up almost entirely one orientation by chance — with only ~10 words,
+   independent per-word randomness can easily land 8+ of them the same way.
+   A word that can't find a fit in any direction after many attempts is
+   quietly left out of the round rather than breaking the puzzle — rare, and
+   only for very long words on a small grid. ── */
 const WS_DIRS = [[0,1],[1,0],[1,1],[1,-1]];
 const WS_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 
 function buildGrid(words) {
   const longest = Math.max(...words.map(w => w.length));
@@ -599,34 +611,44 @@ function buildGrid(words) {
   const grid = Array.from({ length: size }, () => Array(size).fill(null));
   const placed = [];
 
-  [...words].sort((a, b) => b.length - a.length).forEach(word => {
+  const order = [...words].sort((a, b) => b.length - a.length);
+  const directionPlan = shuffleArray(
+    order.map((_, i) => WS_DIRS[i % WS_DIRS.length])
+  );
+
+  order.forEach((word, idx) => {
     const upper = word.toUpperCase();
-    for (let attempt = 0; attempt < 300; attempt++) {
-      const [dr, dc] = WS_DIRS[Math.floor(Math.random() * WS_DIRS.length)];
-      const r0 = Math.floor(Math.random() * size);
-      const c0 = Math.floor(Math.random() * size);
-      const r1 = r0 + dr * (upper.length - 1);
-      const c1 = c0 + dc * (upper.length - 1);
-      if (r1 < 0 || r1 >= size || c1 < 0 || c1 >= size) continue;
+    const preferred = directionPlan[idx];
+    const dirsToTry = [preferred, ...shuffleArray(WS_DIRS.filter(d => d !== preferred))];
 
-      let fits = true;
-      for (let i = 0; i < upper.length; i++) {
-        const existing = grid[r0 + dr * i][c0 + dc * i];
-        if (existing !== null && existing !== upper[i]) { fits = false; break; }
-      }
-      if (!fits) continue;
+    for (const [dr, dc] of dirsToTry) {
+      for (let attempt = 0; attempt < 300; attempt++) {
+        const r0 = Math.floor(Math.random() * size);
+        const c0 = Math.floor(Math.random() * size);
+        const r1 = r0 + dr * (upper.length - 1);
+        const c1 = c0 + dc * (upper.length - 1);
+        if (r1 < 0 || r1 >= size || c1 < 0 || c1 >= size) continue;
 
-      const cells = [];
-      for (let i = 0; i < upper.length; i++) {
-        const r = r0 + dr * i, c = c0 + dc * i;
-        grid[r][c] = upper[i];
-        cells.push({ r, c });
+        let fits = true;
+        for (let i = 0; i < upper.length; i++) {
+          const existing = grid[r0 + dr * i][c0 + dc * i];
+          if (existing !== null && existing !== upper[i]) { fits = false; break; }
+        }
+        if (!fits) continue;
+
+        const cells = [];
+        for (let i = 0; i < upper.length; i++) {
+          const r = r0 + dr * i, c = c0 + dc * i;
+          grid[r][c] = upper[i];
+          cells.push({ r, c });
+        }
+        placed.push({ word, cells });
+        return;
       }
-      placed.push({ word, cells });
-      return;
+      // This direction had no room — try the next one in dirsToTry.
     }
-    // Dropped — couldn't fit after 300 attempts. Rare; the word simply
-    // won't appear in this round rather than corrupting the puzzle.
+    // Dropped — couldn't fit in any direction. Rare; the word simply won't
+    // appear in this round rather than corrupting the puzzle.
   });
 
   for (let r = 0; r < size; r++) {
