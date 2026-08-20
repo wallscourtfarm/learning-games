@@ -243,7 +243,7 @@
        screen underneath it while waiting on the network. ══════════ -->
   <section id="screen-loading" class="screen active">
     <div class="brand">
-      <div class="kicker">Wallscourt Farm Academy · Spelling Games (prototype)</div>
+      <div class="kicker">Wallscourt Farm Academy · Spelling Games</div>
       <h1><span class="pop-emoji">🫧</span> Spelling Pop</h1>
     </div>
   </section>
@@ -251,7 +251,7 @@
   <!-- ══════════ SETUP SCREEN — pick year group + week ══════════ -->
   <section id="screen-setup" class="screen">
     <div class="brand">
-      <div class="kicker">Wallscourt Farm Academy · Spelling Games (prototype)</div>
+      <div class="kicker">Wallscourt Farm Academy · Spelling Games</div>
       <h1><span class="pop-emoji">🫧</span> Spelling Pop</h1>
     </div>
     <div class="panel">
@@ -276,7 +276,7 @@
   <!-- ══════════ START SCREEN — identify the player ══════════ -->
   <section id="screen-start" class="screen">
     <div class="brand">
-      <div class="kicker">Wallscourt Farm Academy · Spelling Games (prototype)</div>
+      <div class="kicker">Wallscourt Farm Academy · Spelling Games</div>
       <h1><span class="pop-emoji">🫧</span> Spelling Pop</h1>
     </div>
 
@@ -317,7 +317,7 @@
     </div>
 
     <footer class="note">
-      Proof of concept — each pupil's card (see <code>cards.html</code>) has a personal QR code and PIN, but scores are currently saved only in this browser (localStorage). A real deployment would swap this for the same lightweight sync backend already used by the SLT Schedule and Lunch Cover tools, keyed per pupil ID, so scores follow a child across devices. The PIN is a light identity check for a classroom setting, not real security — it's visible to anyone reading this page's code.
+      Each pupil's card (see <code>cards.html</code>) has a personal QR code and PIN, shared across every spelling game. Scores sync to a small backend (see <code>backend/Code.gs</code>), keyed per pupil ID, so scores follow a child across devices — falling back to this browser's own storage if that backend is unreachable. The PIN is a light identity check for a classroom setting, not real security — it's visible to anyone reading this page's code.
     </footer>
   </section>
 
