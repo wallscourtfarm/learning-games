@@ -721,10 +721,9 @@ function revealAround(pos) {
 
 function renderProgressRow() {
   const word = currentWord();
-  $("wm-progress-row").innerHTML = [...word].map((_, i) => {
-    const letterTile = state.letters[i];
-    const cls = letterTile.collected ? "filled" : (i === state.nextIdx ? "next" : "");
-    return `<div class="wm-progress-box ${cls}">${letterTile.collected ? escapeHtml(letterTile.letter.toUpperCase()) : ""}</div>`;
+  $("wm-progress-row").innerHTML = [...word].map((ch, i) => {
+    const cls = i < state.nextIdx ? "filled" : (i === state.nextIdx ? "next" : "");
+    return `<div class="wm-progress-box ${cls}">${i < state.nextIdx ? escapeHtml(ch.toUpperCase()) : ""}</div>`;
   }).join("");
 }
 
@@ -743,7 +742,7 @@ function renderMaze() {
       let cls = "floor", content = "";
       if (isPlayer) { cls = "player"; content = "🤠"; }
       else if (letterTile) { cls = "letter"; content = escapeHtml(letterTile.letter.toUpperCase()); }
-      else if (isChest) { cls = state.chest.opened ? "chest opened" : "chest"; content = state.chest.opened ? "📖" : "❔"; }
+      else if (isChest) { cls = state.chest.opened ? "chest opened" : "chest"; content = state.chest.opened ? "📖" : "📦"; }
 
       html += `<div class="wm-cell ${cls}">${content}</div>`;
     }
@@ -771,9 +770,15 @@ function handleArrival() {
     $("wm-clue-banner").classList.add("shown");
   }
 
-  const nextLetter = state.letters[state.nextIdx];
-  if (nextLetter && !nextLetter.collected && nextLetter.r === r && nextLetter.c === c) {
-    nextLetter.collected = true;
+  // Any uncollected tile showing the currently-needed letter counts — not
+  // just the one specific instance originally assigned to this position.
+  // A word like "imperfect" scatters two "e" tiles; either satisfies
+  // whichever "e" is next, so players aren't forced to find one exact tile
+  // among several that look identical.
+  const neededChar = currentWord()[state.nextIdx];
+  const tile = state.letters.find(t => !t.collected && t.r === r && t.c === c && t.letter === neededChar);
+  if (tile) {
+    tile.collected = true;
     state.nextIdx++;
     renderProgressRow();
     if (state.nextIdx >= state.letters.length) wordFound();
