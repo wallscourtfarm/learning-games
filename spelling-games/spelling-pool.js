@@ -151,6 +151,22 @@ function spBuildWordPairs(words) {
 const SP_PREFIXES = ["un","dis","mis","im","il","ir","in","re","sub","inter","super","anti","auto","de","over","under","pre","non","mid"];
 const SP_SUFFIXES = ["ing","ed","er","est","ly","ment","ness","ful","less","tion","sion","cian","ssion","sure","ture","able","ible","ant","ance","ancy","ent","ence","ency","ous","ious","eous","ive","ary","ery","ory","al","ic","ist","ism","hood","ship","dom"];
 
+/* Roots (after stripping the matched prefix) that can also take a
+   different SP_PREFIXES prefix to form another real, common English word
+   — e.g. "print" + mis- gives "misprint", but a pupil who knows "imprint"
+   or "reprint" could just as reasonably answer im- or re-, and the game
+   would wrongly mark that incorrect. Grapheme Sort's own in-round
+   collision check only catches this when both forms happen to land in
+   the same week's word list; this catches it even when only one form is
+   actually in play. Hand-reviewed against the curriculum's actual
+   prefix-week words, not an exhaustive dictionary check — worth a look if
+   a new prefix week's words expose another case like this. */
+const SP_AMBIGUOUS_PREFIX_ROOTS = new Set([
+  "focus", "able", "order", "mature", "movable", "active", "label",
+  "match", "print", "read", "take", "taken", "treat", "apply", "charge",
+  "hero", "count", "mobile"
+]);
+
 function spGetGraphemeBuckets(pool) {
   const grapheme = spFindBestBuckets(pool.rules, r => spExtractCuratedBuckets(r.explanation));
   if (grapheme) {
@@ -221,7 +237,13 @@ function spGraphemeMatches(word, grapheme) {
    only called once the rule text has confirmed this week is actually
    about prefixes/suffixes (see spGetGraphemeBuckets). A word matching
    more than one candidate, or leaving too short a remainder to be a
-   real root (e.g. "in" + "n"), is left out rather than guessed at. */
+   real root (e.g. "in" + "n"), is left out rather than guessed at. So is
+   a prefix word whose root is in SP_AMBIGUOUS_PREFIX_ROOTS — dropping it
+   here, before the final bucket-size filter below, means a week that
+   turns out to be mostly ambiguous roots correctly ends up with too few
+   buckets and gets treated as unavailable (via spGetGraphemeBuckets /
+   spFindBestBuckets), the same as any other week without enough real
+   structure to sort — rather than serving a thin or unfair round. */
 function spAffixBuckets(words, affixes, isPrefix) {
   const map = new Map();
   words.forEach(word => {
@@ -230,6 +252,7 @@ function spAffixBuckets(words, affixes, isPrefix) {
     const affix = matches[0];
     const remainder = isPrefix ? word.slice(affix.length) : word.slice(0, word.length - affix.length);
     if (remainder.length < 2) return;
+    if (isPrefix && SP_AMBIGUOUS_PREFIX_ROOTS.has(remainder)) return;
     if (!map.has(affix)) map.set(affix, []);
     map.get(affix).push(word);
   });

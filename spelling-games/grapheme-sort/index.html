@@ -643,10 +643,13 @@ function startRound() {
   // ("imperfect") — safe only because every prefix in SP_PREFIXES glues
   // straight onto the root with no spelling change, unlike suffixes.
   // But a root can genuinely take more than one prefix in real English
-  // (mismatch / rematch, misplace / replace) — if two words in this
-  // round's pool share a root, showing both as identical "match" chips
-  // would be unfair, not just hard, since there'd be no way to tell them
-  // apart on screen. Drop any word whose root collides this round.
+  // (mismatch / rematch) — if two words in this round's pool share a
+  // root, showing both as identical "match" chips would be unfair, not
+  // just hard, since there'd be no way to tell them apart on screen.
+  // Drop any word whose root collides this round. (A root that's
+  // ambiguous even when only one form is actually in the data —
+  // "misprint" vs. the unlisted but equally real "imprint"/"reprint" —
+  // is caught further upstream, in spAffixBuckets itself.)
   const rootCounts = {};
   if (BUCKET_KIND === "prefix") {
     BUCKETS.forEach(b => b.words.forEach(w => {
