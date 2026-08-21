@@ -171,7 +171,9 @@ let pendingPupil = null;
 let pinBuffer = "";
 
 function findPupil(code) {
-  return (typeof ROSTER !== "undefined" ? ROSTER : []).find(p => p.id.toUpperCase() === code.toUpperCase());
+  // Also recognises the teacher backdoor code (see spFindPupilOrTeacher
+  // in spelling-pool.js) alongside a normal roster lookup.
+  return spFindPupilOrTeacher(typeof ROSTER !== "undefined" ? ROSTER : [], code);
 }
 
 /* ── PIN keypad — same pattern as every game's QR-driven identity gate ── */
