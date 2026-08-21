@@ -40,10 +40,10 @@ function spWeekOrdinal(term, week) {
 }
 
 /**
- * Weeks a pupil is allowed to pick — the current week (from the Settings
+ * Weeks a learner is allowed to pick — the current week (from the Settings
  * tab) and everything before it, never a week whose lessons haven't
  * happened yet. Moving CURRENT_WEEK forward (e.g. every Monday) is what
- * unlocks the next week for pupils — there's no separate toggle for it.
+ * unlocks the next week for learners — there's no separate toggle for it.
  */
 function spGetAvailableWeeksForYear(year, currentWeek) {
   const all = spGetWeeksForYear(year);
@@ -153,7 +153,7 @@ const SP_SUFFIXES = ["ing","ed","er","est","ly","ment","ness","ful","less","tion
 
 /* Roots (after stripping the matched prefix) that can also take a
    different SP_PREFIXES prefix to form another real, common English word
-   — e.g. "print" + mis- gives "misprint", but a pupil who knows "imprint"
+   — e.g. "print" + mis- gives "misprint", but a learner who knows "imprint"
    or "reprint" could just as reasonably answer im- or re-, and the game
    would wrongly mark that incorrect. Grapheme Sort's own in-round
    collision check only catches this when both forms happen to land in
@@ -262,7 +262,7 @@ function spAffixBuckets(words, affixes, isPrefix) {
 }
 
 /* ── Live roster/settings fetch ──
-   Pupil setup lives in the backend's Google Sheet (see setupRosterSheet()
+   Learner setup lives in the backend's Google Sheet (see setupRosterSheet()
    in Code.gs), not in a hand-edited JS file. Every game and cards.html
    call this once at load, before falling back to the static ROSTER /
    CURRENT_WEEK in roster.js if the backend isn't set or the fetch fails —
@@ -281,29 +281,29 @@ async function spFetchLiveRoster(backendUrl) {
   }
 }
 
-/* ── "Verified this tab" — once a pupil's code + PIN is checked anywhere
+/* ── "Verified this tab" — once a learner's code + PIN is checked anywhere
    in Spelling Games (the hub page or a game reached directly via QR),
    every other game/page in the same browser tab can trust that without
    asking again. sessionStorage clears when the tab closes, so handing an
    iPad to a different child (a fresh tab, or reopening the browser) still
    requires the PIN — this only removes repeat prompts within one sitting. */
 const SP_VERIFIED_KEY = "wfa-spelling-verified-id";
-function spSetVerifiedPupil(id) {
+function spSetVerifiedLearner(id) {
   try { sessionStorage.setItem(SP_VERIFIED_KEY, String(id).toUpperCase()); } catch (e) {}
 }
-function spGetVerifiedPupilId() {
+function spGetVerifiedLearnerId() {
   try { return sessionStorage.getItem(SP_VERIFIED_KEY) || ""; } catch (e) { return ""; }
 }
-function spClearVerifiedPupil() {
+function spClearVerifiedLearner() {
   try { sessionStorage.removeItem(SP_VERIFIED_KEY); } catch (e) {}
 }
 
 /* ── Teacher login — a fixed code that works on every game and the hub,
-   without needing any real pupil's PIN. Handy for demoing a game to the
+   without needing any real learner's PIN. Handy for demoing a game to the
    whole class on the board. Deliberately NOT a roster entry — a live
    Sheet fetch replaces ROSTER wholesale, which would silently kill a
    hardcoded entry there, and it also means this never appears on a
-   printed pupil card (cards.html only ever loops over ROSTER).
+   printed learner card (cards.html only ever loops over ROSTER).
    Code is "TEACH", optionally followed by a year digit 2-6 (e.g.
    "TEACH5") to control which year's weeks the hub shows by default —
    irrelevant for every other game, since they pick a year/week before
@@ -311,7 +311,7 @@ function spClearVerifiedPupil() {
    ever needs to be less guessable than a class handing round the answer. */
 const SP_TEACHER_CODE_PREFIX = "TEACH";
 const SP_TEACHER_PIN = "7379";
-function spFindPupilOrTeacher(roster, code) {
+function spFindLearnerOrTeacher(roster, code) {
   const upper = String(code).trim().toUpperCase();
   if (upper.startsWith(SP_TEACHER_CODE_PREFIX)) {
     const yearDigit = upper.slice(SP_TEACHER_CODE_PREFIX.length);

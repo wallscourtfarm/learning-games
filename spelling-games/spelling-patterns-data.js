@@ -1,7 +1,7 @@
 /* ════════════════════════════════════════════════════════════════
    Wallscourt Farm Academy — Spelling Patterns data
 
-   Common spelling patterns that trip pupils up across every year group,
+   Common spelling patterns that trip learners up across every year group,
    not tied to the weekly hlWords progression in lessons-data.js — always
    available, unlike the week-scoped games. Two shapes:
 

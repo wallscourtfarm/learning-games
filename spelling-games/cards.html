@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Spelling Games — Pupil Cards</title>
+<title>Spelling Games — Learner Cards</title>
 <style>
   :root{
     --blue:#1798d3; --blue-dark:#0f6f9e; --navy:#12263a; --muted:#5b7a8a;
@@ -67,7 +67,7 @@
 
   <div class="toolbar">
     <div>
-      <h1>🎲 Spelling Games — Pupil Cards</h1>
+      <h1>🎲 Spelling Games — Learner Cards</h1>
       <p id="week-label">Print, cut out and hand one card to each child. They scan their code (or open their page and type it) to see everything they can play this week.</p>
     </div>
     <div class="toolbar-btns">
@@ -79,7 +79,7 @@
   <div class="card-grid" id="card-grid"></div>
 
   <footer class="note">
-    QR codes are generated in your browser using the <a href="https://github.com/kazuhikoarase/qrcode-generator" target="_blank" rel="noopener">qrcode-generator</a> library (MIT licence, vendored locally in <code>vendor/qrcode.js</code>, no external service or network call). Pupils and the current week come live from the "Roster" and "Settings" tabs in the backend Google Sheet — type a name in the Sheet and a code + PIN fill themselves in, no code or GitHub needed. <code>roster.js</code> is only the offline fallback used if that Sheet is unreachable. Each card's QR code goes to <code>play/index.html</code> — a pupil's own page listing every game available for their year and the current week — rather than one QR per game, so a new game never means reprinting cards. Add a new game to that list by adding one entry to <code>GAMES</code> in <code>roster.js</code>.
+    QR codes are generated in your browser using the <a href="https://github.com/kazuhikoarase/qrcode-generator" target="_blank" rel="noopener">qrcode-generator</a> library (MIT licence, vendored locally in <code>vendor/qrcode.js</code>, no external service or network call). Learners and the current week come live from the "Roster" and "Settings" tabs in the backend Google Sheet — type a name in the Sheet and a code + PIN fill themselves in, no code or GitHub needed. <code>roster.js</code> is only the offline fallback used if that Sheet is unreachable. Each card's QR code goes to <code>play/index.html</code> — a learner's own page listing every game available for their year and the current week — rather than one QR per game, so a new game never means reprinting cards. Add a new game to that list by adding one entry to <code>GAMES</code> in <code>roster.js</code>.
     <br><br>
     "🏷️ Download labels" makes a PDF of the same code + PIN + QR code, laid out for a 99×42mm label sheet (Avery L7159, 12 per A4 sheet) instead of full cut-out cards — the identity part of the card that doesn't change from week to week, so it only needs printing once. PDF generation uses <a href="https://github.com/parallax/jsPDF" target="_blank" rel="noopener">jsPDF</a> (MIT licence, vendored locally in <code>vendor/jspdf.umd.min.js</code>). The label geometry (exact sizes and per-row/column nudges) is copied from this school's own <code>drawer-peg-labels</code> tool, which already calibrated it against a real printed sheet — re-check a test sheet if labels ever drift, rather than trusting the numbers blindly on a different printer.
   </footer>
@@ -99,10 +99,10 @@
 
   /* Same target every game's QR points at, factored out so the label-sheet
      PDF (below) builds identical URLs to the on-screen cards. */
-  function targetUrlFor(pupil) {
+  function targetUrlFor(learner) {
     const target = new URL("play/index.html", location.href);
-    target.searchParams.set("u", pupil.id);
-    target.searchParams.set("y", pupil.year);
+    target.searchParams.set("u", learner.id);
+    target.searchParams.set("y", learner.year);
     target.searchParams.set("t", CURRENT_WEEK.term);
     target.searchParams.set("w", CURRENT_WEEK.week);
     return target;
@@ -122,11 +122,11 @@
       `Cards for ${weekInfo ? weekInfo.label : `${CURRENT_WEEK.term} ${CURRENT_WEEK.week}`}` +
       (live ? " — from the Roster/Settings tabs. Reprint after editing them." : " — from roster.js (Sheet unreachable). Change CURRENT_WEEK there and reprint.");
 
-    ROSTER.forEach(pupil => {
-      const target = targetUrlFor(pupil);
+    ROSTER.forEach(learner => {
+      const target = targetUrlFor(learner);
 
       const gamesNote = GAMES.map(game => {
-        const available = !game.isAvailable || game.isAvailable(pupil.year, CURRENT_WEEK.term, CURRENT_WEEK.week);
+        const available = !game.isAvailable || game.isAvailable(learner.year, CURRENT_WEEK.term, CURRENT_WEEK.week);
         return available ? `${game.icon} ${game.label}` : `<span class="unavailable">${game.icon} ${game.label}</span>`;
       }).join(" &nbsp; ");
 
@@ -134,10 +134,10 @@
       card.className = "card";
       card.innerHTML = `
         <div class="info">
-          <div class="kicker">Spelling Games · WFA · ${pupil.year}</div>
-          <div class="pname">${pupil.name}</div>
-          <div class="row">Code&nbsp;<b>${pupil.id}</b></div>
-          <div class="row">PIN&nbsp;<b class="pin-val">${pupil.pin}</b></div>
+          <div class="kicker">Spelling Games · WFA · ${learner.year}</div>
+          <div class="pname">${learner.name}</div>
+          <div class="row">Code&nbsp;<b>${learner.id}</b></div>
+          <div class="row">PIN&nbsp;<b class="pin-val">${learner.pin}</b></div>
         </div>
         <div class="qr-wrap">
           <div class="qr">${qrSvgFor(target.href)}</div>
@@ -152,7 +152,7 @@
      Same identity content as the cut-out cards above (name, year, code,
      PIN, QR) but without the "this week" games note, since that's the one
      part of the card that changes weekly — the rest is permanent, so a
-     label only needs printing once per pupil rather than reprinted with
+     label only needs printing once per learner rather than reprinted with
      every card batch.
 
      The exact label size (99.1×40.3mm, not the nominal 99×42) and the
@@ -206,7 +206,7 @@
       const qrSize = 25;
 
       for (let i = 0; i < ROSTER.length; i++) {
-        const pupil = ROSTER[i];
+        const learner = ROSTER[i];
         const posInSheet = i % L7159.perSheet;
         const row = Math.floor(posInSheet / L7159.cols);
         const col = posInSheet % L7159.cols;
@@ -219,7 +219,7 @@
 
         const qrX = ix + liW - qrSize;
         const qrY = iy + (liH - qrSize) / 2;
-        const png = await qrPngDataUrl(targetUrlFor(pupil).href);
+        const png = await qrPngDataUrl(targetUrlFor(learner).href);
         doc.addImage(png, "PNG", qrX, qrY, qrSize, qrSize);
         doc.setFont("helvetica", "normal");
         doc.setFontSize(6);
@@ -231,12 +231,12 @@
         doc.setFont("helvetica", "bold");
         doc.setFontSize(7);
         doc.setTextColor(15, 111, 158);
-        doc.text(`SPELLING GAMES · ${pupil.year}`, textX, ty);
+        doc.text(`SPELLING GAMES · ${learner.year}`, textX, ty);
         ty += 6.5;
         doc.setFont("helvetica", "bold");
         doc.setFontSize(14);
         doc.setTextColor(18, 38, 58);
-        doc.text(pupil.name, textX, ty);
+        doc.text(learner.name, textX, ty);
         ty += 7;
         doc.setFont("helvetica", "normal");
         doc.setFontSize(9);
@@ -245,7 +245,7 @@
         doc.setFont("courier", "bold");
         doc.setFontSize(12);
         doc.setTextColor(18, 38, 58);
-        doc.text(pupil.id, textX + 13, ty);
+        doc.text(learner.id, textX + 13, ty);
         ty += 6.5;
         doc.setFont("helvetica", "normal");
         doc.setFontSize(9);
@@ -254,7 +254,7 @@
         doc.setFont("courier", "bold");
         doc.setFontSize(12);
         doc.setTextColor(18, 38, 58);
-        doc.text(pupil.pin, textX + 13, ty);
+        doc.text(learner.pin, textX + 13, ty);
       }
 
       doc.save("wfa-spelling-games-labels.pdf");
