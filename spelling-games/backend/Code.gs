@@ -272,6 +272,14 @@ const DIGEST_RECIPIENT_EMAILS = [
 
 const DIGEST_TOP_N = 10;
 
+// Sends as this alias instead of your personal Gmail address — same
+// alias the cover-plan notify script already sends as. Must be added
+// and verified under "Send mail as" in the Gmail account that owns
+// this script first (Gmail → Settings → Accounts and Import → Send
+// mail as → Add another email address), otherwise GmailApp silently
+// falls back to your own address (see the try/catch below).
+const DIGEST_SENDER_ALIAS = 'wallscourt.scheduling@gmail.com';
+
 // The teacher backdoor code (see spFindPupilOrTeacher in spelling-pool.js)
 // always starts with this prefix — never counts it as a pupil here.
 const TEACHER_CODE_PREFIX = 'TEACH';
@@ -377,12 +385,30 @@ function sendWeeklyDigest() {
     'weekly digest from the Spelling Games score tracker.' +
     '</p></div></div>';
 
-  GmailApp.sendEmail(
-    DIGEST_RECIPIENT_EMAILS.join(','),
-    subject,
-    'Most active pupils last week: ' + stats.slice(0, DIGEST_TOP_N).map(function (p) { return p.name + ' (' + p.roundsPlayed + ')'; }).join(', '),
-    { htmlBody: htmlBody, name: 'Wallscourt Farm Academy — Spelling Games' }
-  );
+  const textBody = 'Most active pupils last week: ' +
+    stats.slice(0, DIGEST_TOP_N).map(function (p) { return p.name + ' (' + p.roundsPlayed + ')'; }).join(', ');
+
+  try {
+    // Preferred: send as the shared alias, so it doesn't look like it's
+    // coming from a personal inbox. Requires DIGEST_SENDER_ALIAS to be a
+    // verified "Send mail as" address on this script's Google account.
+    GmailApp.sendEmail(
+      DIGEST_RECIPIENT_EMAILS.join(','),
+      subject,
+      textBody,
+      { htmlBody: htmlBody, name: 'Wallscourt Farm Academy — Spelling Games', from: DIGEST_SENDER_ALIAS }
+    );
+  } catch (err) {
+    // Alias not verified yet (or was removed) — fall back to sending as
+    // whichever account owns this script, so the digest still goes out.
+    console.log('sendWeeklyDigest: could not send as ' + DIGEST_SENDER_ALIAS + ' (' + err.message + '), falling back to the default sender.');
+    GmailApp.sendEmail(
+      DIGEST_RECIPIENT_EMAILS.join(','),
+      subject,
+      textBody,
+      { htmlBody: htmlBody, name: 'Wallscourt Farm Academy — Spelling Games' }
+    );
+  }
 
   console.log('sendWeeklyDigest: sent to ' + DIGEST_RECIPIENT_EMAILS.join(','));
 }
