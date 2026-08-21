@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Grapheme Sort — Wallscourt Farm Academy</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗂️</text></svg>">
+<title>Suffix Builder — Wallscourt Farm Academy</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧩</text></svg>">
 <style>
   :root{
     --blue:#1798d3; --blue-dark:#0f6f9e; --navy:#12263a;
@@ -59,13 +59,7 @@
     font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1px;
     color:#a3720b; margin-bottom:4px;
   }
-  .rule-box .rule-title{ font-size:17px; font-weight:800; margin-bottom:4px; }
   .rule-box .rule-text{ font-size:13.5px; color:#5b4a1f; line-height:1.45; }
-  .rule-box .rule-examples{ margin-top:10px; font-size:15px; }
-  .rule-box .rule-examples b{
-    display:inline-block; background:#fff; border:1.5px solid #f3d18a; border-radius:8px;
-    padding:3px 9px; margin:0 6px 6px 0; font-weight:800; color:var(--navy);
-  }
 
   label.field-label{ display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--muted); }
   input[type=text]{
@@ -102,7 +96,7 @@
   /* ── HUD ── */
   .hud{
     width:100%; max-width:640px; display:flex; align-items:center; gap:10px;
-    padding:10px 14px; z-index:5;
+    padding:10px 14px; z-index:5; flex-wrap:wrap; justify-content:center;
   }
   .hud-home-btn{
     background:#fff; border:none; border-radius:12px; padding:8px 12px;
@@ -115,47 +109,36 @@
     box-shadow:0 3px 10px rgba(18,38,58,.08);
     font-weight:800; font-size:15px; display:flex; align-items:center; gap:6px;
   }
-  .hud-pill.grow{ flex:1; justify-content:center; }
+  .hud-pill.grow{ flex:1; justify-content:center; min-width:120px; }
   .hud-pill .lab{ font-size:10px; font-weight:700; text-transform:uppercase; color:var(--muted); letter-spacing:.5px; }
 
-  /* ── Game screen: buckets + word bank ── */
-  #game-wrap{ display:none; flex-direction:column; align-items:center; width:100%; height:100%; }
+  /* ── Game screen: root + instruction + option buttons ── */
+  #game-wrap{ display:none; flex-direction:column; align-items:center; width:100%; padding:0 20px; }
   #game-wrap.active{ display:flex; }
+  #sb-stage{
+    width:100%; max-width:480px; margin-top:16px; background:var(--card); border-radius:20px;
+    padding:32px 26px; text-align:center; box-shadow:0 10px 30px rgba(18,38,58,.10);
+  }
+  .sb-phase-label{ font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin-bottom:18px; }
+  .sb-prompt{ margin-bottom:26px; }
+  .sb-root{ font-size:32px; font-weight:900; color:var(--navy); }
+  .sb-instruction{ font-size:15px; font-weight:700; color:var(--blue-dark); margin-top:6px; }
 
-  #gs-buckets{
-    width:100%; max-width:640px; display:flex; gap:8px; padding:10px 12px; flex-wrap:wrap; justify-content:center;
+  .sb-options{ display:flex; flex-wrap:wrap; justify-content:center; gap:12px; }
+  .sb-option{
+    font-family:inherit; font-size:19px; font-weight:800; color:var(--navy);
+    background:#eef5f9; border:none; border-radius:14px; padding:14px 22px; cursor:pointer;
+    box-shadow:0 5px 0 #c9dde7; min-width:100px;
   }
-  .gs-bucket{
-    flex:1 1 110px; min-width:100px; background:#fff; border:2.5px dashed #cfe2ec; border-radius:14px;
-    padding:10px 8px 12px; text-align:center; cursor:pointer; transition:border-color .15s, background .15s;
-  }
-  .gs-bucket.armed{ border-color:var(--blue); background:#eaf6fd; }
-  .gs-bucket.wrong{ animation:shakeAnim .32s ease; border-color:var(--red); }
-  .gs-bucket .glabel{ font-size:19px; font-weight:900; color:var(--navy); }
-  .gs-bucket .gcount{ font-size:11px; font-weight:700; color:var(--muted); margin-top:2px; }
-  .gs-bucket .gwords{ display:flex; flex-wrap:wrap; gap:4px; justify-content:center; margin-top:8px; min-height:4px; }
-  .gs-bucket .gword-placed{
-    background:var(--green); color:#fff; font-size:11.5px; font-weight:700; padding:4px 8px; border-radius:999px;
-  }
+  .sb-option:active{ transform:translateY(3px); box-shadow:0 2px 0 #c9dde7; }
+  .sb-option.correct{ background:var(--green); color:#fff; box-shadow:0 5px 0 #1f9c58; }
+  .sb-option.wrong{ background:var(--red); color:#fff; box-shadow:0 5px 0 #b23a3d; opacity:.55; }
+  .sb-option:disabled{ pointer-events:none; }
+  #sb-options.shake{ animation:shakeAnim .32s ease; }
 
-  #gs-bank{
-    flex:1; width:100%; overflow-y:auto; padding:18px 16px; display:flex; flex-wrap:wrap;
-    align-content:flex-start; gap:10px; justify-content:center;
-    background:radial-gradient(circle at 30% 20%, #ffffff 0%, var(--bg1) 45%, var(--bg2) 100%);
-  }
-  .gs-chip{
-    font-family:inherit; font-size:17px; font-weight:800; padding:11px 18px; border-radius:999px;
-    border:none; background:var(--blue); color:#fff; cursor:pointer; box-shadow:0 4px 0 var(--blue-dark);
-  }
-  .gs-chip.selected{ background:var(--amber); box-shadow:0 4px 0 #b9790e; transform:translateY(-2px); }
-
-  #ground{
-    height:auto; width:100%; max-width:640px;
-    background:#dff1e4; border-top:2px solid #bfe3c9;
-    display:flex; align-items:center; justify-content:center; text-align:center;
-    padding:10px 16px;
-    font-size:12.5px; color:#3f7a54; font-weight:700; gap:6px;
-  }
+  .sb-feedback-icon{ font-size:52px; margin-bottom:10px; }
+  .sb-feedback-text{ font-size:18px; font-weight:700; color:var(--navy); line-height:1.5; }
+  .sb-feedback-text .correct-word{ color:var(--green); font-weight:900; }
 
   /* ── End screen stats ── */
   .stat-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:6px; }
@@ -173,7 +156,6 @@
     border-radius:12px; padding:12px 14px; font-size:13.5px; font-weight:600;
     margin-bottom:18px;
   }
-  .banner-error a{ color:#a3231f; font-weight:800; }
   .pin-hello{ font-size:16px; font-weight:800; text-align:center; margin-bottom:16px; }
   .pin-hello span{ color:var(--blue-dark); }
   .pin-dots{ display:flex; justify-content:center; gap:14px; margin-bottom:10px; }
@@ -196,23 +178,17 @@
     background:none; border:none; cursor:pointer; text-decoration:underline; font-family:inherit;
   }
 
-  /* ── Year / week setup screen ── */
+  /* ── Pattern setup screen ── */
   select{
     width:100%; font-size:17px; padding:12px 14px; border-radius:12px;
     border:2px solid #cfe2ec; outline:none; font-family:inherit; background:#fff; color:var(--navy);
   }
   select:focus{ border-color:var(--blue); }
-  .rule-mini{
-    background:#fff7e6; border:1.5px solid #f3d18a; border-radius:12px;
-    padding:12px 14px; margin-bottom:10px; font-size:13.5px; color:#5b4a1f; line-height:1.4;
-  }
-  .rule-mini b{ display:block; font-size:14.5px; color:var(--navy); margin-bottom:3px; font-weight:800; }
   .word-tags{ display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
   .word-tag{
     font-family:inherit; font-size:14px; font-weight:700; padding:9px 16px; border-radius:999px;
     border:2px solid #cfe2ec; background:#fff; color:var(--navy);
   }
-  .word-tag.on{ background:var(--blue); border-color:var(--blue); color:#fff; }
   .setup-link{
     display:block; text-align:center; width:100%; margin-top:10px; font-size:12.5px; color:var(--muted);
     background:none; border:none; cursor:pointer; text-decoration:underline; font-family:inherit;
@@ -222,41 +198,28 @@
 <body>
 
   <!-- ══════════ LOADING SCREEN — shown while boot() resolves identity/roster,
-       so a QR/link that already carries y/t/w/u never flashes the setup
+       so a QR/link that already carries a pattern never flashes the setup
        screen underneath it while waiting on the network. ══════════ -->
   <section id="screen-loading" class="screen active">
     <div class="brand">
       <div class="kicker">Wallscourt Farm Academy · Spelling Games</div>
-      <h1><span class="pop-emoji">🗂️</span> Grapheme Sort</h1>
+      <h1><span class="pop-emoji">🧩</span> Suffix Builder</h1>
     </div>
   </section>
 
-  <!-- ══════════ SETUP SCREEN — pick year group + week ══════════ -->
+  <!-- ══════════ SETUP SCREEN — pick a suffix pattern ══════════ -->
   <section id="screen-setup" class="screen">
     <div class="brand">
       <div class="kicker">Wallscourt Farm Academy · Spelling Games</div>
-      <h1><span class="pop-emoji">🗂️</span> Grapheme Sort</h1>
+      <h1><span class="pop-emoji">🧩</span> Suffix Builder</h1>
     </div>
     <div class="panel">
       <p style="font-size:13.5px; color:var(--muted); margin:0 0 16px;">
-        Sort words into groups — different spellings of a sound. These common patterns trip pupils up all
-        year round, so they're always available, whatever week it is.
+        See a root word and an instruction — pick the correctly-spelled result. These patterns trip pupils up
+        all year round, so they're always available. Up to 8 questions per round.
       </p>
       <label class="field-label" for="setup-pattern">Spelling pattern</label>
       <select id="setup-pattern"><option value="">Choose…</option></select>
-      <div id="setup-pattern-pool" style="display:none; margin-top:20px;"></div>
-    </div>
-
-    <div class="panel">
-      <p style="font-size:13.5px; color:var(--muted); margin:0 0 16px;">
-        Or sort this week's own words instead — only works on weeks whose rule offers a choice like this
-        (different spellings, prefixes or suffixes). Pick a year group and week to see if this week qualifies.
-      </p>
-      <label class="field-label" for="setup-year">Year group</label>
-      <select id="setup-year"><option value="">Choose…</option></select>
-
-      <label class="field-label" for="setup-week" style="margin-top:14px;">Week</label>
-      <select id="setup-week"><option value="">Choose a year group first…</option></select>
 
       <div id="setup-pool" style="display:none; margin-top:20px;"></div>
     </div>
@@ -266,7 +229,7 @@
   <section id="screen-start" class="screen">
     <div class="brand">
       <div class="kicker">Wallscourt Farm Academy · Spelling Games</div>
-      <h1><span class="pop-emoji">🗂️</span> Grapheme Sort</h1>
+      <h1><span class="pop-emoji">🧩</span> Suffix Builder</h1>
     </div>
 
     <div class="panel">
@@ -296,7 +259,7 @@
         <input type="text" id="manual-pin" inputmode="numeric" maxlength="4" placeholder="4 digits" autocomplete="off">
         <button class="btn" id="manual-submit">▶ Start playing</button>
         <div class="pin-error" id="manual-error">&nbsp;</div>
-        <button class="setup-link" id="change-week-link">Not the right one? Change pattern or week</button>
+        <button class="setup-link" id="change-week-link">Not the right pattern? Change it</button>
       </div>
     </div>
 
@@ -306,7 +269,7 @@
     </div>
 
     <footer class="note">
-      Each pupil's card (see <code>../cards.html</code>) has a personal QR code and PIN, shared across every spelling game. Buckets use the curriculum's own example words for each spelling pattern (topped up with matching words from this week's list), not a guess. On prefix weeks the word's prefix is stripped off, so it's a genuine recall task rather than sorting words that already show the answer. Scores sync to the same backend as Spelling Pop.
+      Each pupil's card (see <code>../cards.html</code>) has a personal QR code and PIN, shared across every spelling game. Getting one wrong just disables that option so you can try again — no life lost, just a smaller point score for that question. Scores sync to the same backend as Spelling Pop.
     </footer>
   </section>
 
@@ -314,25 +277,38 @@
   <div id="game-wrap">
     <div class="hud">
       <button class="hud-home-btn" id="hud-home-btn" aria-label="Back to games menu" title="Back to games menu">🏠</button>
-      <div class="hud-pill"><span class="lab">Score</span>&nbsp;<span id="gs-score">0</span></div>
-      <div class="hud-pill grow"><span class="lab">Left to sort&nbsp;</span><span id="gs-remaining">0</span></div>
+      <div class="hud-pill"><span class="lab">Score</span>&nbsp;<span id="hud-score">0</span></div>
+      <div class="hud-pill grow"><span class="lab">Question&nbsp;</span><span id="hud-progress">1 / 1</span></div>
     </div>
-    <div id="gs-buckets"></div>
-    <div id="gs-bank"></div>
-    <div id="ground">👆 Tap a word, then tap the pattern it belongs to</div>
+
+    <div id="sb-stage">
+      <div id="sb-play-area">
+        <div class="sb-phase-label">Pick the correctly-spelled result</div>
+        <div class="sb-prompt">
+          <div class="sb-root" id="sb-root"></div>
+          <div class="sb-instruction" id="sb-instruction"></div>
+        </div>
+        <div class="sb-options" id="sb-options"></div>
+      </div>
+
+      <div id="sb-feedback" style="display:none;">
+        <div class="sb-feedback-icon" id="sb-feedback-icon"></div>
+        <div class="sb-feedback-text" id="sb-feedback-text"></div>
+      </div>
+    </div>
   </div>
 
   <!-- ══════════ END SCREEN ══════════ -->
   <section id="screen-end" class="screen">
     <div class="brand">
       <div class="kicker">Round complete</div>
-      <h1>🎉 All sorted!</h1>
+      <h1>🧩 Nicely built!</h1>
     </div>
     <div class="panel">
       <div class="stat-grid">
         <div class="stat-box"><div class="num" id="end-score">0</div><div class="lab">Score</div></div>
-        <div class="stat-box"><div class="num" id="end-accuracy">0%</div><div class="lab">Accuracy</div></div>
-        <div class="stat-box"><div class="num" id="end-time">0s</div><div class="lab">Time taken</div></div>
+        <div class="stat-box"><div class="num" id="end-firsttry">0%</div><div class="lab">First-try</div></div>
+        <div class="stat-box"><div class="num" id="end-correct">0</div><div class="lab">Correct</div></div>
       </div>
       <button class="btn" id="again-btn">🔁 Play again</button>
       <button class="btn secondary" id="end-home-btn">🏠 Back to my games</button>
@@ -352,159 +328,77 @@
 /* ════════════════════════════════════════════════════════════════
    GAME IDENTITY — used to tag scores; leave as-is per game.
    ════════════════════════════════════════════════════════════════ */
-const GAME_ID = "grapheme-sort";
-const LAST_ID_KEY = "wfa-grapheme-sort-last-id";
+const GAME_ID = "suffix-builder";
+const LAST_ID_KEY = "wfa-suffix-builder-last-id";
+const MAX_ROUND_WORDS = 8;
 /* BACKEND_URL, ROSTER and CURRENT_WEEK come from ../roster.js — the same
-   deployed backend as Spelling Pop, since Code.gs keys rows by game+rule. */
+   deployed backend as every other spelling game, since Code.gs keys rows
+   by game+rule. Word data comes from ../spelling-patterns-data.js instead
+   of the weekly lessons-data.js pool, since these patterns aren't
+   week-scoped — always available, whatever week it is. */
 /* ═══════════════════════════════════════════════════════════════ */
 
 const $ = id => document.getElementById(id);
 
-let BUCKETS = [];          // active [{ grapheme, words }] for this round
-let BUCKET_KIND = "grapheme"; // "grapheme" | "prefix" | "suffix" — from spGetGraphemeBuckets
-let ROUND_BUCKET_TOTALS = {}; // grapheme -> playable word count this round (see startRound)
-let RULE_FOCUS = "";
-let RULE_EXPLANATION = "";
-let LEADERBOARD_KEY = "";  // set once a year/week pool is chosen
-let POOL_ID = "";          // "Y5-T1W1" — identifies this week's pool for scoring
-let currentPool = null;    // spGetWeekPool() result for the setup screen in progress
+let QUESTIONS = [];       // this round's questions, capped at MAX_ROUND_WORDS
+let LEADERBOARD_KEY = "";
+let POOL_ID = "";
+let currentPatternId = "";
 
 let playerName = "";
 let playerId = null;
-let state = null;
-let chips = [];
-let selectedChip = null;
+let state = null;         // { score, firstTryCount, correctCount, idx, ending, attempted }
 
-/* ── Setup screen: always-available spelling patterns, independent of
-   any week — see ../spelling-patterns-data.js. ── */
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/* ── Setup screen: pick a suffix pattern ── */
 function populatePatternSelect() {
   const sel = $("setup-pattern");
   sel.innerHTML = '<option value="">Choose…</option>' +
-    GRAPHEME_PATTERNS.map(p => `<option value="${p.id}">${escapeHtml(p.label)}</option>`).join("");
+    SUFFIX_PATTERNS.map(p => `<option value="${p.id}">${escapeHtml(p.label)}</option>`).join("");
 }
 function onSetupPatternChange() {
   const patternId = $("setup-pattern").value;
-  const box = $("setup-pattern-pool");
+  const box = $("setup-pool");
   if (!patternId) { box.style.display = "none"; return; }
-  const pattern = GRAPHEME_PATTERNS.find(p => p.id === patternId);
+
+  const pattern = SUFFIX_PATTERNS.find(p => p.id === patternId);
   box.innerHTML = `
-    <div class="rule-mini"><b>${escapeHtml(pattern.focus)}</b>${escapeHtml(pattern.explanation)}</div>
-    <label class="field-label" style="margin-top:14px;">Groups to sort</label>
-    <div class="word-tags">${pattern.buckets.map(b => `<span class="word-tag on">${escapeHtml(b.grapheme)} · ${b.words.length} words</span>`).join("")}</div>
-    <button class="btn" id="setup-pattern-continue">Continue ▶</button>`;
+    <div class="rule-mini" style="background:#fff7e6; border:1.5px solid #f3d18a; border-radius:12px; padding:12px 14px; margin-bottom:10px; font-size:13.5px; color:#5b4a1f; line-height:1.4;">
+      <b style="display:block; font-size:14.5px; color:var(--navy); margin-bottom:3px; font-weight:800;">${escapeHtml(pattern.focus)}</b>${escapeHtml(pattern.explanation)}
+    </div>
+    <label class="field-label" style="margin-top:14px;">Example words (${pattern.items.length})</label>
+    <div class="word-tags">${pattern.items.slice(0, 12).map(i => `<span class="word-tag">${escapeHtml(i.correct)}</span>`).join("")}</div>
+    <button class="btn" id="setup-continue">Continue ▶</button>`;
   box.style.display = "block";
-  $("setup-pattern-continue").addEventListener("click", () => activatePattern(patternId));
+  $("setup-continue").addEventListener("click", () => activatePattern(patternId));
 }
 $("setup-pattern").addEventListener("change", onSetupPatternChange);
 populatePatternSelect();
 
-/* Turn a chosen pattern into an active round — same shape as activatePool
-   below (BUCKETS/BUCKET_KIND/RULE_FOCUS/RULE_EXPLANATION/POOL_ID), just
-   sourced from the fixed pattern list instead of a week's own words. */
+/* ── Turn a chosen pattern into an active round ── */
 function activatePattern(patternId) {
-  const pattern = GRAPHEME_PATTERNS.find(p => p.id === patternId);
-  BUCKETS = pattern.buckets;
-  BUCKET_KIND = "grapheme";
-  RULE_FOCUS = pattern.focus;
-  RULE_EXPLANATION = pattern.explanation;
+  currentPatternId = patternId;
+
   POOL_ID = "pattern-" + patternId;
-  LEADERBOARD_KEY = "wfa-grapheme-sort-leaderboard-" + POOL_ID;
+  LEADERBOARD_KEY = "wfa-suffix-builder-leaderboard-" + POOL_ID;
 
-  renderRuleBox();
+  renderRuleBox(patternId);
   goTo("start");
   initAccessScreen();
 }
 
-/* ── Setup screen: year + week → grapheme buckets (or "not available") ── */
-function populateYearSelect() {
-  const sel = $("setup-year");
-  sel.innerHTML = '<option value="">Choose…</option>' +
-    spGetYears().map(y => `<option value="${y}">${y.replace("Y", "Year ")}</option>`).join("");
-}
-function onSetupYearChange() {
-  const year = $("setup-year").value;
-  const weekSel = $("setup-week");
-  $("setup-pool").style.display = "none";
-  if (!year) { weekSel.innerHTML = '<option value="">Choose a year group first…</option>'; return; }
-  // Only the current week and earlier — never a week not yet taught.
-  const weeks = spGetAvailableWeeksForYear(year, CURRENT_WEEK);
-  weekSel.innerHTML = '<option value="">Choose…</option>' +
-    weeks.map(w => `<option value="${w.term}|${w.week}">${w.label}</option>`).join("");
-}
-function onSetupWeekChange() {
-  const year = $("setup-year").value;
-  const val = $("setup-week").value;
-  if (!year || !val) { $("setup-pool").style.display = "none"; return; }
-  const [term, week] = val.split("|");
-  loadPoolIntoSetup(year, term, week);
-}
-function loadPoolIntoSetup(year, term, week) {
-  currentPool = spGetWeekPool(year, term, week);
-  const buckets = spGetGraphemeBuckets(currentPool);
-  const box = $("setup-pool");
-
-  if (!buckets) {
-    box.innerHTML = `<div class="banner-error">
-      This week's rule doesn't offer a choice between groups (different spellings, prefixes or suffixes), so there's nothing to sort here.
-      Try a different week, or play <a href="../spelling-pop/index.html">Spelling Pop</a> instead — it works with any week.
-    </div>`;
-    box.style.display = "block";
-    return;
-  }
-
-  const groupsLabel = buckets.kind === "prefix" ? "Prefixes to choose from" : "Groups to sort";
-  const modeNote = buckets.kind === "prefix"
-    ? `<p style="font-size:12.5px; color:var(--muted); margin:8px 0 0;">You'll see each word with its prefix removed and have to pick the right one.</p>`
-    : "";
-  box.innerHTML = `
-    <div class="rule-mini"><b>${escapeHtml(buckets.focus || "Spelling pattern")}</b>${escapeHtml(buckets.explanation)}</div>
-    <label class="field-label" style="margin-top:14px;">${groupsLabel}</label>
-    <div class="word-tags">${buckets.buckets.map(b => `<span class="word-tag on">${escapeHtml(b.grapheme)} · ${b.words.length} words</span>`).join("")}</div>
-    ${modeNote}
-    <button class="btn" id="setup-continue">Continue ▶</button>`;
-  box.style.display = "block";
-  $("setup-continue").addEventListener("click", () => {
-    activatePool(currentPool.year, currentPool.term, currentPool.week);
-  });
-}
-$("setup-year").addEventListener("change", onSetupYearChange);
-$("setup-week").addEventListener("change", onSetupWeekChange);
-populateYearSelect();
-
-/* ── Turn a chosen year/week into an active round ── */
-function activatePool(year, term, week) {
-  const pool = spGetWeekPool(year, term, week);
-  const b = spGetGraphemeBuckets(pool);
-  if (!b) {
-    // Defensive: only reachable if a QR/link points at a week that doesn't
-    // qualify. Fall back to the setup screen with the same explanation
-    // shown to someone picking manually, instead of a blank/broken game.
-    $("setup-year").value = year;
-    onSetupYearChange();
-    $("setup-week").value = `${term}|${week}`;
-    loadPoolIntoSetup(year, term, week);
-    goTo("setup");
-    return;
-  }
-
-  BUCKETS = b.buckets;
-  BUCKET_KIND = b.kind || "grapheme";
-  RULE_FOCUS = b.focus;
-  RULE_EXPLANATION = b.explanation;
-  POOL_ID = `${year}-${term}${week}`;
-  LEADERBOARD_KEY = "wfa-grapheme-sort-leaderboard-" + POOL_ID;
-
-  renderRuleBox();
-  goTo("start");
-  initAccessScreen();
-}
-
-function renderRuleBox() {
+function renderRuleBox(patternId) {
+  const pattern = SUFFIX_PATTERNS.find(p => p.id === patternId);
   $("rule-box-list").innerHTML = `<div class="rule-box">
-    <div class="rule-label">This week's spelling rule</div>
-    <div class="rule-title">${escapeHtml(RULE_FOCUS || "Spelling pattern")}</div>
-    <div class="rule-text">${escapeHtml(RULE_EXPLANATION)}</div>
-    <div class="rule-examples">${BUCKETS.map(b => `<b>${escapeHtml(b.grapheme)}</b>`).join("")}</div>
+    <div class="rule-label">This round</div>
+    <div class="rule-text"><b>${escapeHtml(pattern.label)}</b><br>${escapeHtml(pattern.explanation)}</div>
   </div>`;
 }
 
@@ -548,7 +442,7 @@ function escapeHtml(s) {
 }
 
 /* ── "Access" — QR code (?u=CODE) + PIN identifies a named pupil;
-   free-text name or manually-typed code are the fallbacks. ── */
+   a manually-typed code + PIN is the fallback. ── */
 const urlParams = new URLSearchParams(location.search);
 const qrCode = (urlParams.get("u") || "").trim().toUpperCase();
 let pendingPupil = null;
@@ -576,7 +470,7 @@ function beginAsPupil(pupil) {
 
 /* PIN keypad */
 let pinBuffer = "";
-function buildKeypad() {
+function buildPinKeypad() {
   const layout = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
   const kp = $("keypad");
   kp.innerHTML = "";
@@ -609,7 +503,7 @@ function checkPin() {
     setTimeout(() => { pinBuffer = ""; renderPinDots(); $("pin-gate").classList.remove("shake"); }, 420);
   }
 }
-buildKeypad();
+buildPinKeypad();
 
 $("pin-back").addEventListener("click", () => {
   $("pin-gate").style.display = "none";
@@ -628,7 +522,7 @@ $("manual-submit").addEventListener("click", () => {
   beginAsPupil(pupil);
 });
 
-/* Runs once a pool is active and the start (identify-yourself) screen is showing. */
+/* Runs once a round is active and the start (identify-yourself) screen is showing. */
 function initAccessScreen() {
   $("bad-code-banner").style.display = "none";
   if (qrCode) {
@@ -645,7 +539,6 @@ function initAccessScreen() {
       $("bad-code-banner").style.display = "block";
     }
   }
-
   renderLeaderboard("leaderboard-list", localStorage.getItem(LAST_ID_KEY));
 }
 
@@ -677,149 +570,112 @@ function goTo(which) {
   document.body.classList.toggle("playing", which === "game");
 }
 
-/* ── Game logic — tap a word, then tap the bucket it belongs to ── */
-function shuffleArray(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
+/* ── Game logic — see a root + instruction, pick the correctly-spelled
+   result. Getting it wrong just disables that option (2-3 options per
+   question, so process of elimination gets there) — no life lost, just
+   a smaller score for that question. ── */
+function buildQuestionPool(patternId) {
+  const pattern = SUFFIX_PATTERNS.find(p => p.id === patternId);
+  return pattern.items.map(item => ({
+    root: item.root, instruction: item.instruction, answer: item.correct,
+    options: [item.correct, ...item.wrong]
+  }));
 }
 
 function startRound() {
-  state = { score: 0, correct: 0, wrong: 0, startTime: performance.now(), ending: false };
-  selectedChip = null;
+  // Resampled fresh every round — including "Play again" — rather than
+  // reusing whatever 8 questions got picked the first time, so replaying
+  // doesn't just repeat the same round.
+  QUESTIONS = shuffleArray(buildQuestionPool(currentPatternId)).slice(0, MAX_ROUND_WORDS);
+  state = { score: 0, firstTryCount: 0, correctCount: 0, idx: 0, ending: false };
+  showQuestion();
+}
 
-  // Prefix weeks show the bare root ("perfect") instead of the answer
-  // ("imperfect") — safe only because every prefix in SP_PREFIXES glues
-  // straight onto the root with no spelling change, unlike suffixes.
-  // But a root can genuinely take more than one prefix in real English
-  // (mismatch / rematch) — if two words in this round's pool share a
-  // root, showing both as identical "match" chips would be unfair, not
-  // just hard, since there'd be no way to tell them apart on screen.
-  // Drop any word whose root collides this round. (A root that's
-  // ambiguous even when only one form is actually in the data —
-  // "misprint" vs. the unlisted but equally real "imprint"/"reprint" —
-  // is caught further upstream, in spAffixBuckets itself.)
-  const rootCounts = {};
-  if (BUCKET_KIND === "prefix") {
-    BUCKETS.forEach(b => b.words.forEach(w => {
-      const root = w.slice(b.grapheme.length);
-      rootCounts[root] = (rootCounts[root] || 0) + 1;
-    }));
-  }
+function currentQuestion() { return QUESTIONS[state.idx]; }
 
-  chips = [];
-  ROUND_BUCKET_TOTALS = {};
-  BUCKETS.forEach(b => {
-    ROUND_BUCKET_TOTALS[b.grapheme] = 0;
-    b.words.forEach(w => {
-      const label = BUCKET_KIND === "prefix" ? w.slice(b.grapheme.length) : w;
-      if (BUCKET_KIND === "prefix" && rootCounts[label] > 1) return;
-      chips.push({ word: w, label, grapheme: b.grapheme, placed: false });
-      ROUND_BUCKET_TOTALS[b.grapheme]++;
-    });
+function showQuestion() {
+  const q = currentQuestion();
+  state.attempted = false;
+  $("sb-play-area").style.display = "block";
+  $("sb-feedback").style.display = "none";
+  $("sb-root").textContent = q.root;
+  $("sb-instruction").textContent = q.instruction;
+
+  const shuffledOptions = shuffleArray(q.options.slice());
+  $("sb-options").classList.remove("shake");
+  $("sb-options").innerHTML = shuffledOptions.map(opt => `<button class="sb-option" data-word="${escapeHtml(opt)}">${escapeHtml(opt)}</button>`).join("");
+  $("sb-options").querySelectorAll(".sb-option").forEach(btn => {
+    btn.addEventListener("click", () => chooseOption(btn));
   });
-  shuffleArray(chips);
-
-  $("ground").textContent = BUCKET_KIND === "prefix"
-    ? "👆 Tap a root word, then tap the prefix that completes it"
-    : "👆 Tap a word, then tap the pattern it belongs to";
-
-  buildBuckets();
-  renderBank();
   updateHud();
 }
 
-function buildBuckets() {
-  const wrap = $("gs-buckets");
-  wrap.innerHTML = "";
-  BUCKETS.forEach(b => {
-    const total = ROUND_BUCKET_TOTALS[b.grapheme] ?? b.words.length;
-    const el = document.createElement("div");
-    el.className = "gs-bucket";
-    el.innerHTML = `
-      <div class="glabel">${escapeHtml(b.grapheme)}</div>
-      <div class="gcount">0 / ${total}</div>
-      <div class="gwords"></div>`;
-    el.addEventListener("click", () => onBucketTap(b.grapheme, el));
-    wrap.appendChild(el);
-  });
-}
+function chooseOption(btn) {
+  if (!state || state.ending || btn.disabled) return;
+  const q = currentQuestion();
+  const chosen = btn.dataset.word;
 
-function renderBank() {
-  const bank = $("gs-bank");
-  bank.innerHTML = "";
-  chips.filter(c => !c.placed).forEach(chip => {
-    const btn = document.createElement("button");
-    btn.className = "gs-chip" + (selectedChip === chip ? " selected" : "");
-    btn.textContent = chip.label;
-    btn.addEventListener("click", () => onChipTap(chip));
-    bank.appendChild(btn);
-  });
-  document.querySelectorAll(".gs-bucket").forEach(b => b.classList.toggle("armed", !!selectedChip));
-}
-
-function onChipTap(chip) {
-  selectedChip = selectedChip === chip ? null : chip;
-  renderBank();
-}
-
-function onBucketTap(grapheme, bucketEl) {
-  if (!selectedChip || state.ending) return;
-  if (selectedChip.grapheme === grapheme) {
-    selectedChip.placed = true;
-    state.correct++;
-    state.score += 10;
-
-    const wordsEl = bucketEl.querySelector(".gwords");
-    const tag = document.createElement("span");
-    tag.className = "gword-placed";
-    tag.textContent = selectedChip.word;
-    wordsEl.appendChild(tag);
-
-    const total = ROUND_BUCKET_TOTALS[grapheme] ?? BUCKETS.find(b => b.grapheme === grapheme).words.length;
-    const placed = chips.filter(c => c.placed && c.grapheme === grapheme).length;
-    bucketEl.querySelector(".gcount").textContent = `${placed} / ${total}`;
-
-    selectedChip = null;
-    renderBank();
-    updateHud();
-    if (chips.every(c => c.placed)) endRound();
+  if (chosen === q.answer) {
+    btn.classList.add("correct");
+    $("sb-options").querySelectorAll(".sb-option").forEach(b => b.disabled = true);
+    questionSolved(!state.attempted);
   } else {
-    state.wrong++;
-    bucketEl.classList.add("wrong");
-    setTimeout(() => bucketEl.classList.remove("wrong"), 320);
-    updateHud();
+    btn.classList.add("wrong");
+    btn.disabled = true;
+    state.attempted = true;
+    $("sb-options").classList.add("shake");
+    setTimeout(() => $("sb-options").classList.remove("shake"), 320);
   }
 }
 
+function questionSolved(firstTry) {
+  state.score += firstTry ? 10 : 5;
+  state.correctCount++;
+  if (firstTry) state.firstTryCount++;
+  showFeedback(currentQuestion(), firstTry);
+}
+
+function showFeedback(q, firstTry) {
+  $("sb-play-area").style.display = "none";
+  $("sb-feedback").style.display = "block";
+  $("sb-feedback-icon").textContent = firstTry ? "🌟" : "✅";
+  $("sb-feedback-text").innerHTML = `<span class="correct-word">${escapeHtml(q.answer)}</span> is correct!`;
+  updateHud();
+  setTimeout(nextQuestion, 900);
+}
+
+function nextQuestion() {
+  if (!state || state.ending) return;
+  state.idx++;
+  if (state.idx >= QUESTIONS.length) { endRound(); return; }
+  showQuestion();
+}
+
 function updateHud() {
-  $("gs-score").textContent = state.score;
-  $("gs-remaining").textContent = chips.filter(c => !c.placed).length;
+  $("hud-score").textContent = state.score;
+  $("hud-progress").textContent = `${Math.min(state.idx + 1, QUESTIONS.length)} / ${QUESTIONS.length}`;
 }
 
 function endRound() {
   if (!state || state.ending) return;
   state.ending = true;
 
-  const elapsedSec = Math.max(1, Math.round((performance.now() - state.startTime) / 1000));
-  const totalAttempts = state.correct + state.wrong;
-  const accuracy = totalAttempts ? Math.round((state.correct / totalAttempts) * 100) : 100;
+  const total = QUESTIONS.length;
+  const firstTryPct = total ? Math.round((state.firstTryCount / total) * 100) : 0;
 
   $("end-score").textContent = state.score;
-  $("end-accuracy").textContent = accuracy + "%";
-  $("end-time").textContent = elapsedSec + "s";
+  $("end-firsttry").textContent = firstTryPct + "%";
+  $("end-correct").textContent = `${state.correctCount} / ${total}`;
 
   const scoreEntry = {
-    id: playerId, name: playerName, score: state.score, accuracy,
+    id: playerId, name: playerName, score: state.score, accuracy: firstTryPct,
     bestStreak: 0, date: new Date().toISOString().slice(0, 10)
   };
   saveScore(scoreEntry);
   syncSaveScore(scoreEntry);
   renderLeaderboard("leaderboard-list-end", playerId);
 
-  setTimeout(() => goTo("end"), 400);
+  goTo("end");
 }
 
 /* ── Optional backend sync — see ../backend/. No-ops until
@@ -850,26 +706,18 @@ async function fetchRemoteLeaderboard() {
   }
 }
 
-/* ── Entry point: a QR card bakes ?y=&t=&w= in, so scanning it skips
-   straight past the setup screen. Opening the page with no params (staff
-   testing, or a guest) shows the year/week picker instead. Pupil setup
-   (ROSTER) and the default week (CURRENT_WEEK) are fetched live from the
-   Sheet first, falling back to roster.js's static copies if that fails. ── */
+/* ── Entry point: a QR/hub link can bake ?pattern= in to jump straight
+   to a specific pattern, skipping the setup screen. Opening the page
+   with no params (staff testing, or a guest) shows the pattern picker
+   instead. Pupil setup (ROSTER) is fetched live from the Sheet first,
+   falling back to roster.js's static copy if that fails. ── */
 (async function boot() {
   const live = await spFetchLiveRoster(BACKEND_URL);
-  if (live) {
-    if (live.roster && live.roster.length) ROSTER = live.roster;
-    if (live.currentWeek) CURRENT_WEEK = live.currentWeek;
-  }
+  if (live && live.roster && live.roster.length) ROSTER = live.roster;
 
   const paramPattern = urlParams.get("pattern");
-  const paramYear = urlParams.get("y");
-  const paramTerm = urlParams.get("t");
-  const paramWeek = urlParams.get("w");
-  if (paramPattern && GRAPHEME_PATTERNS.some(p => p.id === paramPattern)) {
+  if (paramPattern && SUFFIX_PATTERNS.some(p => p.id === paramPattern)) {
     activatePattern(paramPattern);
-  } else if (paramYear && paramTerm && paramWeek) {
-    activatePool(paramYear, paramTerm, paramWeek);
   } else {
     goTo("setup");
   }
