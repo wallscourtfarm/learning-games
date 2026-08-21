@@ -361,7 +361,7 @@ const LAST_ID_KEY = "wfa-grapheme-sort-last-id";
 const $ = id => document.getElementById(id);
 
 let BUCKETS = [];          // active [{ grapheme, words }] for this round
-let BUCKET_KIND = "grapheme"; // "grapheme" | "prefix" | "suffix" — from spGetGraphemeBuckets
+let BUCKET_KIND = "grapheme"; // "grapheme" | "prefix" | "suffix" (from spGetGraphemeBuckets) | "ending" (pattern-practice mode)
 let ROUND_BUCKET_TOTALS = {}; // grapheme -> playable word count this round (see startRound)
 let RULE_FOCUS = "";
 let RULE_EXPLANATION = "";
@@ -391,6 +391,7 @@ function onSetupPatternChange() {
     <div class="rule-mini"><b>${escapeHtml(pattern.focus)}</b>${escapeHtml(pattern.explanation)}</div>
     <label class="field-label" style="margin-top:14px;">Groups to sort</label>
     <div class="word-tags">${pattern.buckets.map(b => `<span class="word-tag on">${escapeHtml(b.grapheme)} · ${b.words.length} words</span>`).join("")}</div>
+    <p style="font-size:12.5px; color:var(--muted); margin:8px 0 0;">You'll see each word with its ending removed and have to pick the one that completes it.</p>
     <button class="btn" id="setup-pattern-continue">Continue ▶</button>`;
   box.style.display = "block";
   $("setup-pattern-continue").addEventListener("click", () => activatePattern(patternId));
@@ -404,7 +405,10 @@ populatePatternSelect();
 function activatePattern(patternId) {
   const pattern = GRAPHEME_PATTERNS.find(p => p.id === patternId);
   BUCKETS = pattern.buckets;
-  BUCKET_KIND = "grapheme";
+  // Every pattern here is an ending (its grapheme is always the word's
+  // last few letters), so it gets the same root-stripped recall
+  // treatment as prefix mode — see the comment in startRound().
+  BUCKET_KIND = "ending";
   RULE_FOCUS = pattern.focus;
   RULE_EXPLANATION = pattern.explanation;
   POOL_ID = "pattern-" + patternId;
@@ -693,18 +697,32 @@ function startRound() {
   // Prefix weeks show the bare root ("perfect") instead of the answer
   // ("imperfect") — safe only because every prefix in SP_PREFIXES glues
   // straight onto the root with no spelling change, unlike suffixes.
-  // But a root can genuinely take more than one prefix in real English
+  // "ending" is the same idea for a pattern practice round (k-ck, ch-tch,
+  // the tion family, l-endings) — every grapheme there is always the
+  // word's last few letters, so showing the full word ("catch") let a
+  // pupil just read the visible "tch" straight off the chip instead of
+  // recalling it; stripping the ending down to "ca" makes them recall
+  // which spelling actually completes the word, the same genuine recall
+  // task prefix mode already gives.
+  //
+  // Both directions share the same root-collision risk: a root can
+  // genuinely take more than one prefix or ending in real English
   // (mismatch / rematch) — if two words in this round's pool share a
-  // root, showing both as identical "match" chips would be unfair, not
-  // just hard, since there'd be no way to tell them apart on screen.
-  // Drop any word whose root collides this round. (A root that's
-  // ambiguous even when only one form is actually in the data —
-  // "misprint" vs. the unlisted but equally real "imprint"/"reprint" —
-  // is caught further upstream, in spAffixBuckets itself.)
+  // root, showing both as identical chips would be unfair, not just
+  // hard, since there'd be no way to tell them apart on screen. Drop any
+  // word whose root collides this round. (A root that's ambiguous even
+  // when only one form is actually in the data — "misprint" vs. the
+  // unlisted but equally real "imprint"/"reprint" — is caught further
+  // upstream, in spAffixBuckets itself; that only applies to prefixes.)
+  function stripAffix(word, grapheme) {
+    if (BUCKET_KIND === "prefix") return word.slice(grapheme.length);
+    if (BUCKET_KIND === "ending") return word.slice(0, word.length - grapheme.length);
+    return word;
+  }
   const rootCounts = {};
-  if (BUCKET_KIND === "prefix") {
+  if (BUCKET_KIND === "prefix" || BUCKET_KIND === "ending") {
     BUCKETS.forEach(b => b.words.forEach(w => {
-      const root = w.slice(b.grapheme.length);
+      const root = stripAffix(w, b.grapheme);
       rootCounts[root] = (rootCounts[root] || 0) + 1;
     }));
   }
@@ -714,8 +732,8 @@ function startRound() {
   BUCKETS.forEach(b => {
     ROUND_BUCKET_TOTALS[b.grapheme] = 0;
     b.words.forEach(w => {
-      const label = BUCKET_KIND === "prefix" ? w.slice(b.grapheme.length) : w;
-      if (BUCKET_KIND === "prefix" && rootCounts[label] > 1) return;
+      const label = stripAffix(w, b.grapheme);
+      if ((BUCKET_KIND === "prefix" || BUCKET_KIND === "ending") && rootCounts[label] > 1) return;
       chips.push({ word: w, label, grapheme: b.grapheme, placed: false });
       ROUND_BUCKET_TOTALS[b.grapheme]++;
     });
@@ -724,6 +742,8 @@ function startRound() {
 
   $("ground").textContent = BUCKET_KIND === "prefix"
     ? "👆 Tap a root word, then tap the prefix that completes it"
+    : BUCKET_KIND === "ending"
+    ? "👆 Tap a word, then tap the ending that completes it"
     : "👆 Tap a word, then tap the pattern it belongs to";
 
   buildBuckets();
