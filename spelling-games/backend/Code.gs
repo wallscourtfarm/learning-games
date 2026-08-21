@@ -255,15 +255,17 @@ function onOpen() {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   Weekly "most active pupils" digest — celebrates whoever has played
-   the most rounds this week, emailed to staff. Reads straight off the
-   Scores tab (no new sheet needed) and cross-references Roster for
-   each pupil's year group.
+   Weekly "most active pupils" digest — celebrates whoever played the
+   most rounds last week, emailed to staff every Monday morning. Reads
+   straight off the Scores tab (no new sheet needed) and cross-
+   references Roster for each pupil's year group.
    ════════════════════════════════════════════════════════════════ */
 
-// Who receives the digest. Start with just your own address while you
-// check it looks right, then add other staff once you're happy — same
-// pattern as NOTIFICATION_EMAILS in the cover-plan notify script.
+// Who receives the digest. To update this list: open the bound
+// Google Sheet → Extensions → Apps Script, edit the emails below,
+// then click Save (the disk icon, or Ctrl/Cmd+S). No redeploy needed —
+// the change applies to the very next send, whether that's the next
+// scheduled Monday run or a manual "Send weekly digest now".
 const DIGEST_RECIPIENT_EMAILS = [
   'innes.mclean@clf.uk',
 ];
@@ -320,7 +322,7 @@ function computeWeeklyActivity(sinceDate) {
 
 function buildDigestHtml(stats, sinceDate, now) {
   if (stats.length === 0) {
-    return '<p style="color:#64748b;font-size:13px;">No games were played this week.</p>';
+    return '<p style="color:#64748b;font-size:13px;">No games were played last week.</p>';
   }
 
   const tz = Session.getScriptTimeZone();
@@ -354,20 +356,20 @@ function sendWeeklyDigest() {
   const stats = computeWeeklyActivity(sinceDate);
 
   if (stats.length === 0) {
-    console.log('sendWeeklyDigest: no activity this week, skipping send.');
+    console.log('sendWeeklyDigest: no activity last week, skipping send.');
     return;
   }
 
   const tz = Session.getScriptTimeZone();
   const dateStr = Utilities.formatDate(now, tz, 'EEEE d MMMM yyyy');
-  const subject = 'Spelling Games — most active pupils this week (' + Utilities.formatDate(now, tz, 'd MMM') + ')';
+  const subject = 'Spelling Games — most active pupils last week (' + Utilities.formatDate(now, tz, 'd MMM') + ')';
   const summaryHtml = buildDigestHtml(stats, sinceDate, now);
 
   const htmlBody =
     '<div style="font-family:Arial,sans-serif;max-width:600px;color:#222;">' +
     '<div style="background:#1798d3;height:8px;border-radius:6px 6px 0 0;"></div>' +
     '<div style="border:1px solid #ddd;border-top:none;padding:20px 22px;border-radius:0 0 6px 6px;">' +
-    '<h1 style="font-size:16px;margin:0 0 2px;color:#1798d3;">🏆 Spelling Games — Most Active This Week</h1>' +
+    '<h1 style="font-size:16px;margin:0 0 2px;color:#1798d3;">🏆 Spelling Games — Most Active Last Week</h1>' +
     '<p style="font-size:13px;color:#64748b;margin:0 0 18px;">Generated ' + dateStr + '</p>' +
     summaryHtml +
     '<p style="margin-top:16px;font-size:11px;color:#999;">' +
@@ -378,7 +380,7 @@ function sendWeeklyDigest() {
   GmailApp.sendEmail(
     DIGEST_RECIPIENT_EMAILS.join(','),
     subject,
-    'Most active pupils this week: ' + stats.slice(0, DIGEST_TOP_N).map(function (p) { return p.name + ' (' + p.roundsPlayed + ')'; }).join(', '),
+    'Most active pupils last week: ' + stats.slice(0, DIGEST_TOP_N).map(function (p) { return p.name + ' (' + p.roundsPlayed + ')'; }).join(', '),
     { htmlBody: htmlBody, name: 'Wallscourt Farm Academy — Spelling Games' }
   );
 
@@ -397,12 +399,12 @@ function setupWeeklyDigestTrigger() {
 
   ScriptApp.newTrigger('sendWeeklyDigest')
     .timeBased()
-    .onWeekDay(ScriptApp.WeekDay.FRIDAY)
-    .atHour(15)
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(8)
     .create();
 
   try {
-    SpreadsheetApp.getUi().alert('Weekly digest scheduled for every Friday afternoon.');
+    SpreadsheetApp.getUi().alert('Weekly digest scheduled for every Monday morning.');
   } catch (e) {
     // getUi() only works when run from a Sheet open in the browser, not
     // straight from the Apps Script editor — the trigger is still created.
