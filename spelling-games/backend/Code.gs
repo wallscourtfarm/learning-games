@@ -272,13 +272,16 @@ const DIGEST_RECIPIENT_EMAILS = [
 
 const DIGEST_TOP_N = 10;
 
-// Sends as this alias instead of your personal Gmail address — same
-// alias the cover-plan notify script already sends as. Must be added
-// and verified under "Send mail as" in the Gmail account that owns
-// this script first (Gmail → Settings → Accounts and Import → Send
-// mail as → Add another email address), otherwise GmailApp silently
-// falls back to your own address (see the try/catch below).
-const DIGEST_SENDER_ALIAS = 'wallscourt.scheduling@gmail.com';
+// Sends as this alias instead of your personal Gmail address — a
+// placeholder name below, swap it for whichever address you'd like to
+// use (a dedicated one, separate from the cover-plan tool's alias, is
+// fine — it doesn't need to be a real inbox anyone checks). Whatever
+// you pick must be added and verified under "Send mail as" in the
+// Gmail account that owns this script first (Gmail → Settings →
+// Accounts and Import → Send mail as → Add another email address),
+// otherwise GmailApp silently falls back to your own address (see the
+// try/catch below).
+const DIGEST_SENDER_ALIAS = 'wallscourt.spellinggames@gmail.com';
 
 // The teacher backdoor code (see spFindPupilOrTeacher in spelling-pool.js)
 // always starts with this prefix — never counts it as a pupil here.
