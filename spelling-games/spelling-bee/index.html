@@ -225,8 +225,18 @@
     </div>
     <div class="panel">
       <p style="font-size:13.5px; color:var(--muted); margin:0 0 16px;">
-        A real spelling test — you hear the word, not see it, then type what you heard. Works with any week's word
-        list. Pick a year group and week to build this round.
+        A real spelling test — you hear the word, not see it, then type what you heard. These common patterns
+        trip pupils up all year round, so they're always available, whatever week it is.
+      </p>
+      <label class="field-label" for="setup-pattern">Spelling pattern</label>
+      <select id="setup-pattern"><option value="">Choose…</option></select>
+      <div id="setup-pattern-pool" style="display:none; margin-top:20px;"></div>
+    </div>
+
+    <div class="panel">
+      <p style="font-size:13.5px; color:var(--muted); margin:0 0 16px;">
+        Or match this week's own word list instead — works with any week. Pick a year group and week to build
+        this round.
       </p>
       <label class="field-label" for="setup-year">Year group</label>
       <select id="setup-year"><option value="">Choose…</option></select>
@@ -277,7 +287,7 @@
         <input type="text" id="manual-pin" inputmode="numeric" maxlength="4" placeholder="4 digits" autocomplete="off">
         <button class="btn" id="manual-submit">▶ Start playing</button>
         <div class="pin-error" id="manual-error">&nbsp;</div>
-        <button class="setup-link" id="change-week-link">Not the right week? Change year/week</button>
+        <button class="setup-link" id="change-week-link">Not the right one? Change pattern or week</button>
       </div>
     </div>
 
@@ -346,6 +356,7 @@
 
 <script src="../lessons-data.js"></script>
 <script src="../spelling-pool.js"></script>
+<script src="../spelling-patterns-data.js"></script>
 <script src="../roster.js"></script>
 <script>
 /* ════════════════════════════════════════════════════════════════
@@ -369,6 +380,54 @@ let currentPool = null;
 let playerName = "";
 let playerId = null;
 let state = null;         // { score, correct, wrong, idx, order, ending }
+
+/* ── Setup screen: always-available spelling patterns, independent of
+   any week — see ../spelling-patterns-data.js. Grapheme patterns flatten
+   every bucket's words; suffix patterns dictate the correctly-spelled
+   result (not the root, and not the wrong forms) since that's the word
+   actually worth testing. ── */
+function allSpellingPatterns() {
+  return [
+    ...GRAPHEME_PATTERNS.map(p => ({ id: p.id, label: p.label, focus: p.focus, explanation: p.explanation, words: p.buckets.flatMap(b => b.words) })),
+    ...SUFFIX_PATTERNS.map(p => ({ id: p.id, label: p.label, focus: p.focus, explanation: p.explanation, words: p.items.map(i => i.correct) }))
+  ];
+}
+function populatePatternSelect() {
+  const sel = $("setup-pattern");
+  sel.innerHTML = '<option value="">Choose…</option>' +
+    allSpellingPatterns().map(p => `<option value="${p.id}">${escapeHtml(p.label)}</option>`).join("");
+}
+function onSetupPatternChange() {
+  const patternId = $("setup-pattern").value;
+  const box = $("setup-pattern-pool");
+  if (!patternId) { box.style.display = "none"; return; }
+  const pattern = allSpellingPatterns().find(p => p.id === patternId);
+  box.innerHTML = `
+    <div class="rule-mini"><b>${escapeHtml(pattern.focus)}</b>${escapeHtml(pattern.explanation)}</div>
+    <label class="field-label" style="margin-top:14px;">Words this round (${pattern.words.length})</label>
+    <div class="word-tags">${pattern.words.map(w => `<span class="word-tag">${escapeHtml(w)}</span>`).join("")}</div>
+    <button class="btn" id="setup-pattern-continue">Continue ▶</button>`;
+  box.style.display = "block";
+  $("setup-pattern-continue").addEventListener("click", () => activatePattern(patternId));
+}
+$("setup-pattern").addEventListener("change", onSetupPatternChange);
+populatePatternSelect();
+
+/* Turn a chosen pattern into an active round — same shape as activatePool
+   below (WORDS/RULES/POOL_ID/LEADERBOARD_KEY), just sourced from the
+   fixed pattern list instead of a week's own words. */
+function activatePattern(patternId) {
+  const pattern = allSpellingPatterns().find(p => p.id === patternId);
+  RULES = [{ focus: pattern.focus, explanation: pattern.explanation }];
+  WORDS = pattern.words.slice();
+
+  POOL_ID = "pattern-" + patternId;
+  LEADERBOARD_KEY = "wfa-spelling-bee-leaderboard-" + POOL_ID;
+
+  renderRuleBox();
+  goTo("start");
+  initAccessScreen();
+}
 
 /* ── Setup screen: year + week → word list ── */
 function populateYearSelect() {
@@ -493,7 +552,9 @@ const qrCode = (urlParams.get("u") || "").trim().toUpperCase();
 let pendingPupil = null;
 
 function findPupil(code) {
-  return (typeof ROSTER !== "undefined" ? ROSTER : []).find(p => p.id.toUpperCase() === code.toUpperCase());
+  // Also recognises the teacher backdoor code (see spFindPupilOrTeacher
+  // in spelling-pool.js) alongside a normal roster lookup.
+  return spFindPupilOrTeacher(typeof ROSTER !== "undefined" ? ROSTER : [], code);
 }
 
 function showPinGate(pupil) {
@@ -839,10 +900,13 @@ async function fetchRemoteLeaderboard() {
     if (live.currentWeek) CURRENT_WEEK = live.currentWeek;
   }
 
+  const paramPattern = urlParams.get("pattern");
   const paramYear = urlParams.get("y");
   const paramTerm = urlParams.get("t");
   const paramWeek = urlParams.get("w");
-  if (paramYear && paramTerm && paramWeek) {
+  if (paramPattern && allSpellingPatterns().some(p => p.id === paramPattern)) {
+    activatePattern(paramPattern);
+  } else if (paramYear && paramTerm && paramWeek) {
     activatePool(paramYear, paramTerm, paramWeek);
   } else {
     goTo("setup");

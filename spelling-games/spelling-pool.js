@@ -297,3 +297,26 @@ function spGetVerifiedPupilId() {
 function spClearVerifiedPupil() {
   try { sessionStorage.removeItem(SP_VERIFIED_KEY); } catch (e) {}
 }
+
+/* ── Teacher login — a fixed code that works on every game and the hub,
+   without needing any real pupil's PIN. Handy for demoing a game to the
+   whole class on the board. Deliberately NOT a roster entry — a live
+   Sheet fetch replaces ROSTER wholesale, which would silently kill a
+   hardcoded entry there, and it also means this never appears on a
+   printed pupil card (cards.html only ever loops over ROSTER).
+   Code is "TEACH", optionally followed by a year digit 2-6 (e.g.
+   "TEACH5") to control which year's weeks the hub shows by default —
+   irrelevant for every other game, since they pick a year/week before
+   asking for identity at all. PIN is fixed below; change both if this
+   ever needs to be less guessable than a class handing round the answer. */
+const SP_TEACHER_CODE_PREFIX = "TEACH";
+const SP_TEACHER_PIN = "7379";
+function spFindPupilOrTeacher(roster, code) {
+  const upper = String(code).trim().toUpperCase();
+  if (upper.startsWith(SP_TEACHER_CODE_PREFIX)) {
+    const yearDigit = upper.slice(SP_TEACHER_CODE_PREFIX.length);
+    const year = /^[2-6]$/.test(yearDigit) ? "Y" + yearDigit : "Y5";
+    return { id: upper, name: "Teacher", pin: SP_TEACHER_PIN, year, isTeacher: true };
+  }
+  return (roster || []).find(p => p.id.toUpperCase() === upper);
+}

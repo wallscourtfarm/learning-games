@@ -473,7 +473,9 @@ const qrCode = (urlParams.get("u") || "").trim().toUpperCase();
 let pendingPupil = null;
 
 function findPupil(code) {
-  return (typeof ROSTER !== "undefined" ? ROSTER : []).find(p => p.id.toUpperCase() === code.toUpperCase());
+  // Also recognises the teacher backdoor code (see spFindPupilOrTeacher
+  // in spelling-pool.js) alongside a normal roster lookup.
+  return spFindPupilOrTeacher(typeof ROSTER !== "undefined" ? ROSTER : [], code);
 }
 
 function showPinGate(pupil) {
