@@ -21,6 +21,11 @@
 //        below for how those tabs get created. This is the pupil-setup tool:
 //        a teacher types names into the Sheet, no code or GitHub involved.
 //
+// Weekly "most active pupils" email digest — see setupWeeklyDigestTrigger()
+// below. Run it once from the Apps Script editor (or the "Spelling Games"
+// Sheet menu) to schedule a weekly email celebrating the pupils who've
+// played the most rounds. Edit DIGEST_RECIPIENT_EMAILS first.
+//
 // POST body (Content-Type: text/plain, JSON-encoded) — one finished round:
 //        { pupilId, pupilName, game, ruleId, score, accuracy, bestStreak }
 //        → { status: 'ok' }
@@ -243,5 +248,163 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Spelling Games')
     .addItem('Set up Roster tab', 'setupRosterSheet')
+    .addSeparator()
+    .addItem('Send weekly digest now', 'sendWeeklyDigest')
+    .addItem('Schedule weekly digest…', 'setupWeeklyDigestTrigger')
     .addToUi();
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Weekly "most active pupils" digest — celebrates whoever has played
+   the most rounds this week, emailed to staff. Reads straight off the
+   Scores tab (no new sheet needed) and cross-references Roster for
+   each pupil's year group.
+   ════════════════════════════════════════════════════════════════ */
+
+// Who receives the digest. Start with just your own address while you
+// check it looks right, then add other staff once you're happy — same
+// pattern as NOTIFICATION_EMAILS in the cover-plan notify script.
+const DIGEST_RECIPIENT_EMAILS = [
+  'innes.mclean@clf.uk',
+];
+
+const DIGEST_TOP_N = 10;
+
+// The teacher backdoor code (see spFindPupilOrTeacher in spelling-pool.js)
+// always starts with this prefix — never counts it as a pupil here.
+const TEACHER_CODE_PREFIX = 'TEACH';
+
+function computeWeeklyActivity(sinceDate) {
+  const roster = getRosterAndSettings().roster;
+  const yearById = {};
+  roster.forEach(function (p) { yearById[p.id] = p.year; });
+
+  const byPupil = {};
+  readAllRows().forEach(function (r) {
+    const id = String(r.pupilId || '').toUpperCase();
+    if (!id || id.indexOf(TEACHER_CODE_PREFIX) === 0) return;
+    const ts = new Date(r.timestamp);
+    if (isNaN(ts) || ts < sinceDate) return;
+
+    if (!byPupil[id]) {
+      byPupil[id] = {
+        id: id,
+        name: r.pupilName || id,
+        year: yearById[id] || '',
+        roundsPlayed: 0,
+        totalScore: 0,
+        games: {}
+      };
+    }
+    const entry = byPupil[id];
+    entry.roundsPlayed += 1;
+    entry.totalScore += Number(r.score) || 0;
+    if (r.game) entry.games[r.game] = true;
+    if (yearById[id]) entry.year = yearById[id]; // roster year wins over a stale one on the row
+  });
+
+  return Object.keys(byPupil).map(function (id) {
+    const e = byPupil[id];
+    return {
+      id: e.id,
+      name: e.name,
+      year: e.year,
+      roundsPlayed: e.roundsPlayed,
+      totalScore: e.totalScore,
+      gamesPlayed: Object.keys(e.games).length
+    };
+  }).sort(function (a, b) {
+    return b.roundsPlayed - a.roundsPlayed || b.totalScore - a.totalScore;
+  });
+}
+
+function buildDigestHtml(stats, sinceDate, now) {
+  if (stats.length === 0) {
+    return '<p style="color:#64748b;font-size:13px;">No games were played this week.</p>';
+  }
+
+  const tz = Session.getScriptTimeZone();
+  const rangeStr = Utilities.formatDate(sinceDate, tz, 'd MMM') + ' – ' + Utilities.formatDate(now, tz, 'd MMM yyyy');
+
+  const top = stats.slice(0, DIGEST_TOP_N);
+  const rows = top.map(function (p, i) {
+    return '<tr>' +
+      '<td style="padding:6px 10px;font-size:13px;color:#94a3b8;">' + (i + 1) + '</td>' +
+      '<td style="padding:6px 10px;font-size:13px;color:#1e293b;font-weight:bold;">' + p.name + '</td>' +
+      '<td style="padding:6px 10px;font-size:12px;color:#64748b;">' + (p.year || '') + '</td>' +
+      '<td style="padding:6px 10px;font-size:13px;color:#1798d3;font-weight:bold;text-align:center;">' + p.roundsPlayed + '</td>' +
+      '<td style="padding:6px 10px;font-size:12px;color:#64748b;text-align:center;">' + p.gamesPlayed + '</td>' +
+      '</tr>';
+  }).join('');
+
+  return '<p style="font-size:13px;color:#334155;margin:0 0 12px;">Most rounds played, <strong>' + rangeStr + '</strong>:</p>' +
+    '<table style="width:100%;border-collapse:collapse;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;">' +
+    '<thead><tr style="background:#eef2f7;">' +
+    '<th></th>' +
+    '<th style="text-align:left;padding:6px 10px;font-size:11px;color:#64748b;text-transform:uppercase;">Pupil</th>' +
+    '<th style="text-align:left;padding:6px 10px;font-size:11px;color:#64748b;text-transform:uppercase;">Year</th>' +
+    '<th style="padding:6px 10px;font-size:11px;color:#64748b;text-transform:uppercase;">Rounds</th>' +
+    '<th style="padding:6px 10px;font-size:11px;color:#64748b;text-transform:uppercase;">Games</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+function sendWeeklyDigest() {
+  const now = new Date();
+  const sinceDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const stats = computeWeeklyActivity(sinceDate);
+
+  if (stats.length === 0) {
+    console.log('sendWeeklyDigest: no activity this week, skipping send.');
+    return;
+  }
+
+  const tz = Session.getScriptTimeZone();
+  const dateStr = Utilities.formatDate(now, tz, 'EEEE d MMMM yyyy');
+  const subject = 'Spelling Games — most active pupils this week (' + Utilities.formatDate(now, tz, 'd MMM') + ')';
+  const summaryHtml = buildDigestHtml(stats, sinceDate, now);
+
+  const htmlBody =
+    '<div style="font-family:Arial,sans-serif;max-width:600px;color:#222;">' +
+    '<div style="background:#1798d3;height:8px;border-radius:6px 6px 0 0;"></div>' +
+    '<div style="border:1px solid #ddd;border-top:none;padding:20px 22px;border-radius:0 0 6px 6px;">' +
+    '<h1 style="font-size:16px;margin:0 0 2px;color:#1798d3;">🏆 Spelling Games — Most Active This Week</h1>' +
+    '<p style="font-size:13px;color:#64748b;margin:0 0 18px;">Generated ' + dateStr + '</p>' +
+    summaryHtml +
+    '<p style="margin-top:16px;font-size:11px;color:#999;">' +
+    'Celebrate these pupils in class, and encourage others to catch up! This is an automated ' +
+    'weekly digest from the Spelling Games score tracker.' +
+    '</p></div></div>';
+
+  GmailApp.sendEmail(
+    DIGEST_RECIPIENT_EMAILS.join(','),
+    subject,
+    'Most active pupils this week: ' + stats.slice(0, DIGEST_TOP_N).map(function (p) { return p.name + ' (' + p.roundsPlayed + ')'; }).join(', '),
+    { htmlBody: htmlBody, name: 'Wallscourt Farm Academy — Spelling Games' }
+  );
+
+  console.log('sendWeeklyDigest: sent to ' + DIGEST_RECIPIENT_EMAILS.join(','));
+}
+
+/* Run this ONCE from the Apps Script editor (pick setupWeeklyDigestTrigger
+   from the function dropdown) or from the "Spelling Games" Sheet menu, to
+   schedule the digest automatically. Safe to run again later — it clears
+   any existing weekly-digest trigger first, so you won't end up with
+   duplicates. Change the day/time below and re-run to reschedule. */
+function setupWeeklyDigestTrigger() {
+  ScriptApp.getProjectTriggers()
+    .filter(function (t) { return t.getHandlerFunction() === 'sendWeeklyDigest'; })
+    .forEach(function (t) { ScriptApp.deleteTrigger(t); });
+
+  ScriptApp.newTrigger('sendWeeklyDigest')
+    .timeBased()
+    .onWeekDay(ScriptApp.WeekDay.FRIDAY)
+    .atHour(15)
+    .create();
+
+  try {
+    SpreadsheetApp.getUi().alert('Weekly digest scheduled for every Friday afternoon.');
+  } catch (e) {
+    // getUi() only works when run from a Sheet open in the browser, not
+    // straight from the Apps Script editor — the trigger is still created.
+  }
 }
