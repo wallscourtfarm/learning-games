@@ -205,7 +205,7 @@ const HOMOPHONE_GROUPS = [
     { word: "proceed", sentence: "Please ___ to the hall once you are ready." }
   ]},
   { id: "principal-principle", tier: "y56", words: [
-    { word: "principal", sentence: "The school ___ welcomed the new pupils." },
+    { word: "principal", sentence: "The school ___ welcomed the new learners." },
     { word: "principle", sentence: "Honesty is an important ___ to live by." }
   ]},
   { id: "profit-prophet", tier: "y56", words: [
@@ -230,11 +230,11 @@ const HOMOPHONE_GROUPS = [
   ]}
 ];
 
-/* Maps a pupil's year group to every tier they should practise —
+/* Maps a learner's year group to every tier they should practise —
    cumulative, not just their own year's tier. The pairs that trip up a Y2
-   pupil ("their"/"there") still trip up a Y6 one, and the words introduced
+   learner ("their"/"there") still trip up a Y6 one, and the words introduced
    later in KS2 (e.g. "stationary"/"stationery") come up far less often in
-   writing than the early ones — so an older pupil gets a mix of everything
+   writing than the early ones — so an older learner gets a mix of everything
    up to their year rather than being narrowed to only the hardest set. */
 function spHomophoneTiersForYear(year) {
   const n = parseInt(String(year).replace(/[^0-9]/g, ""), 10);

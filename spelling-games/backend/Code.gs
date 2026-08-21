@@ -8,22 +8,22 @@
 //
 // GET  ?action=leaderboard&game=spelling-pop&rule=tch-short-vowel&top=10
 //        → { leaderboard: [ {pupilId, pupilName, score, accuracy, date}, ... ] }
-//        Best single score per pupil, for this game (+ rule if given), highest first.
+//        Best single score per learner, for this game (+ rule if given), highest first.
 //        Omit `rule` for an all-time leaderboard across every week's rule.
 //
 // GET  ?action=history&pupilId=AM72&game=spelling-pop
 //        → { history: [ {timestamp, score, accuracy, ruleId}, ... ] }
-//        Every round that pupil has played, most recent first.
+//        Every round that learner has played, most recent first.
 //
 // GET  ?action=roster
 //        → { roster: [ {id, name, pin, year}, ... ], currentWeek: {term, week} }
 //        Read from the "Roster" and "Settings" tabs — see setupRosterSheet()
-//        below for how those tabs get created. This is the pupil-setup tool:
+//        below for how those tabs get created. This is the learner-setup tool:
 //        a teacher types names into the Sheet, no code or GitHub involved.
 //
-// Weekly "most active pupils" email digest — see setupWeeklyDigestTrigger()
+// Weekly "most active learners" email digest — see setupWeeklyDigestTrigger()
 // below. Run it once from the Apps Script editor (or the "Spelling Games"
-// Sheet menu) to schedule a weekly email celebrating the pupils who've
+// Sheet menu) to schedule a weekly email celebrating the learners who've
 // played the most rounds. Edit DIGEST_RECIPIENT_EMAILS first.
 //
 // POST body (Content-Type: text/plain, JSON-encoded) — one finished round:
@@ -31,7 +31,7 @@
 //        → { status: 'ok' }
 //
 // Note: like the other WFA staff-tools sync scripts, this trusts whatever the
-// client sends — there's no server-side check that pupilId is a real pupil.
+// client sends — there's no server-side check that pupilId is a real learner.
 // Fine for an internal classroom tool; don't point anything sensitive at it.
 
 const SHEET_NAME = 'Scores';
@@ -111,14 +111,14 @@ function getLeaderboard(params) {
     (!game || r.game === game) && (!rule || r.ruleId === rule)
   );
 
-  // Keep each pupil's single best score for this game/rule.
-  const bestByPupil = {};
+  // Keep each learner's single best score for this game/rule.
+  const bestByLearner = {};
   rows.forEach(r => {
-    const cur = bestByPupil[r.pupilId];
-    if (!cur || r.score > cur.score) bestByPupil[r.pupilId] = r;
+    const cur = bestByLearner[r.pupilId];
+    if (!cur || r.score > cur.score) bestByLearner[r.pupilId] = r;
   });
 
-  return Object.values(bestByPupil)
+  return Object.values(bestByLearner)
     .sort((a, b) => b.score - a.score)
     .slice(0, top)
     .map(r => ({ pupilId: r.pupilId, pupilName: r.pupilName, score: r.score, accuracy: r.accuracy, date: r.timestamp }));
@@ -139,7 +139,7 @@ function json(obj) {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   Pupil setup — read from the Roster/Settings tabs, no code involved
+   Learner setup — read from the Roster/Settings tabs, no code involved
    once setupRosterSheet() below has been run once.
    ════════════════════════════════════════════════════════════════ */
 
@@ -182,7 +182,7 @@ function getRosterAndSettings() {
    First Name is typed — a teacher never has to invent either. First
    Name / Last Name / Year lead (columns A-C) so a class list's name +
    year columns can be pasted straight in. Safe to run again later: it
-   only fills in what's missing, never touches existing pupil rows or
+   only fills in what's missing, never touches existing learner rows or
    overwrites the current term/week. */
 function setupRosterSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -255,10 +255,10 @@ function onOpen() {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   Weekly "most active pupils" digest — celebrates whoever played the
+   Weekly "most active learners" digest — celebrates whoever played the
    most rounds last week, emailed to staff every Monday morning. Reads
    straight off the Scores tab (no new sheet needed) and cross-
-   references Roster for each pupil's year group.
+   references Roster for each learner's year group.
    ════════════════════════════════════════════════════════════════ */
 
 // Who receives the digest. To update this list: open the bound
@@ -272,16 +272,19 @@ const DIGEST_RECIPIENT_EMAILS = [
 
 const DIGEST_TOP_N = 10;
 
-// Sends as this alias instead of your personal Gmail address — same
-// alias the cover-plan notify script already sends as. Must be added
-// and verified under "Send mail as" in the Gmail account that owns
-// this script first (Gmail → Settings → Accounts and Import → Send
-// mail as → Add another email address), otherwise GmailApp silently
-// falls back to your own address (see the try/catch below).
-const DIGEST_SENDER_ALIAS = 'wallscourt.scheduling@gmail.com';
+// Sends as this alias instead of your personal Gmail address — a
+// placeholder name below, swap it for whichever address you'd like to
+// use (a dedicated one, separate from the cover-plan tool's alias, is
+// fine — it doesn't need to be a real inbox anyone checks). Whatever
+// you pick must be added and verified under "Send mail as" in the
+// Gmail account that owns this script first (Gmail → Settings →
+// Accounts and Import → Send mail as → Add another email address),
+// otherwise GmailApp silently falls back to your own address (see the
+// try/catch below).
+const DIGEST_SENDER_ALIAS = 'wallscourt.spellinggames@gmail.com';
 
-// The teacher backdoor code (see spFindPupilOrTeacher in spelling-pool.js)
-// always starts with this prefix — never counts it as a pupil here.
+// The teacher backdoor code (see spFindLearnerOrTeacher in spelling-pool.js)
+// always starts with this prefix — never counts it as a learner here.
 const TEACHER_CODE_PREFIX = 'TEACH';
 
 function computeWeeklyActivity(sinceDate) {
@@ -289,15 +292,15 @@ function computeWeeklyActivity(sinceDate) {
   const yearById = {};
   roster.forEach(function (p) { yearById[p.id] = p.year; });
 
-  const byPupil = {};
+  const byLearner = {};
   readAllRows().forEach(function (r) {
     const id = String(r.pupilId || '').toUpperCase();
     if (!id || id.indexOf(TEACHER_CODE_PREFIX) === 0) return;
     const ts = new Date(r.timestamp);
     if (isNaN(ts) || ts < sinceDate) return;
 
-    if (!byPupil[id]) {
-      byPupil[id] = {
+    if (!byLearner[id]) {
+      byLearner[id] = {
         id: id,
         name: r.pupilName || id,
         year: yearById[id] || '',
@@ -306,15 +309,15 @@ function computeWeeklyActivity(sinceDate) {
         games: {}
       };
     }
-    const entry = byPupil[id];
+    const entry = byLearner[id];
     entry.roundsPlayed += 1;
     entry.totalScore += Number(r.score) || 0;
     if (r.game) entry.games[r.game] = true;
     if (yearById[id]) entry.year = yearById[id]; // roster year wins over a stale one on the row
   });
 
-  return Object.keys(byPupil).map(function (id) {
-    const e = byPupil[id];
+  return Object.keys(byLearner).map(function (id) {
+    const e = byLearner[id];
     return {
       id: e.id,
       name: e.name,
@@ -351,7 +354,7 @@ function buildDigestHtml(stats, sinceDate, now) {
     '<table style="width:100%;border-collapse:collapse;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;">' +
     '<thead><tr style="background:#eef2f7;">' +
     '<th></th>' +
-    '<th style="text-align:left;padding:6px 10px;font-size:11px;color:#64748b;text-transform:uppercase;">Pupil</th>' +
+    '<th style="text-align:left;padding:6px 10px;font-size:11px;color:#64748b;text-transform:uppercase;">Learner</th>' +
     '<th style="text-align:left;padding:6px 10px;font-size:11px;color:#64748b;text-transform:uppercase;">Year</th>' +
     '<th style="padding:6px 10px;font-size:11px;color:#64748b;text-transform:uppercase;">Rounds</th>' +
     '<th style="padding:6px 10px;font-size:11px;color:#64748b;text-transform:uppercase;">Games</th>' +
@@ -370,7 +373,7 @@ function sendWeeklyDigest() {
 
   const tz = Session.getScriptTimeZone();
   const dateStr = Utilities.formatDate(now, tz, 'EEEE d MMMM yyyy');
-  const subject = 'Spelling Games — most active pupils last week (' + Utilities.formatDate(now, tz, 'd MMM') + ')';
+  const subject = 'Spelling Games — most active learners last week (' + Utilities.formatDate(now, tz, 'd MMM') + ')';
   const summaryHtml = buildDigestHtml(stats, sinceDate, now);
 
   const htmlBody =
@@ -381,11 +384,11 @@ function sendWeeklyDigest() {
     '<p style="font-size:13px;color:#64748b;margin:0 0 18px;">Generated ' + dateStr + '</p>' +
     summaryHtml +
     '<p style="margin-top:16px;font-size:11px;color:#999;">' +
-    'Celebrate these pupils in class, and encourage others to catch up! This is an automated ' +
+    'Celebrate these learners in class, and encourage others to catch up! This is an automated ' +
     'weekly digest from the Spelling Games score tracker.' +
     '</p></div></div>';
 
-  const textBody = 'Most active pupils last week: ' +
+  const textBody = 'Most active learners last week: ' +
     stats.slice(0, DIGEST_TOP_N).map(function (p) { return p.name + ' (' + p.roundsPlayed + ')'; }).join(', ');
 
   try {

@@ -215,7 +215,7 @@
     </div>
     <div class="panel">
       <p style="font-size:13.5px; color:var(--muted); margin:0 0 16px;">
-        See a root word and an instruction — pick the correctly-spelled result. These patterns trip pupils up
+        See a root word and an instruction — pick the correctly-spelled result. These patterns trip learners up
         all year round, so they're always available. Up to 8 questions per round.
       </p>
       <label class="field-label" for="setup-pattern">Spelling pattern</label>
@@ -239,9 +239,9 @@
         We didn't recognise that spelling code. Ask your teacher for a new card, or use the options below.
       </div>
 
-      <!-- Shown once a pupil is identified, via QR scan or manual code -->
+      <!-- Shown once a learner is identified, via QR scan or manual code -->
       <div id="pin-gate" style="display:none;">
-        <div class="pin-hello">Hi <span id="pin-pupil-name"></span>! Enter your spelling PIN.</div>
+        <div class="pin-hello">Hi <span id="pin-learner-name"></span>! Enter your spelling PIN.</div>
         <div class="pin-dots" id="pin-dots">
           <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
         </div>
@@ -269,7 +269,7 @@
     </div>
 
     <footer class="note">
-      Each pupil's card (see <code>../cards.html</code>) has a personal QR code and PIN, shared across every spelling game. Getting one wrong just disables that option so you can try again — no life lost, just a smaller point score for that question. Scores sync to the same backend as Spelling Pop.
+      Each learner's card (see <code>../cards.html</code>) has a personal QR code and PIN, shared across every spelling game. Getting one wrong just disables that option so you can try again — no life lost, just a smaller point score for that question. Scores sync to the same backend as Spelling Pop.
     </footer>
   </section>
 
@@ -441,31 +441,31 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-/* ── "Access" — QR code (?u=CODE) + PIN identifies a named pupil;
+/* ── "Access" — QR code (?u=CODE) + PIN identifies a named learner;
    a manually-typed code + PIN is the fallback. ── */
 const urlParams = new URLSearchParams(location.search);
 const qrCode = (urlParams.get("u") || "").trim().toUpperCase();
-let pendingPupil = null;
+let pendingLearner = null;
 
-function findPupil(code) {
-  // Also recognises the teacher backdoor code (see spFindPupilOrTeacher
+function findLearner(code) {
+  // Also recognises the teacher backdoor code (see spFindLearnerOrTeacher
   // in spelling-pool.js) alongside a normal roster lookup.
-  return spFindPupilOrTeacher(typeof ROSTER !== "undefined" ? ROSTER : [], code);
+  return spFindLearnerOrTeacher(typeof ROSTER !== "undefined" ? ROSTER : [], code);
 }
 
-function showPinGate(pupil) {
-  pendingPupil = pupil;
-  $("pin-pupil-name").textContent = pupil.name;
+function showPinGate(learner) {
+  pendingLearner = learner;
+  $("pin-learner-name").textContent = learner.name;
   $("guest-gate").style.display = "none";
   $("pin-gate").style.display = "block";
   pinBuffer = "";
   renderPinDots();
 }
 
-function beginAsPupil(pupil) {
-  playerName = pupil.name;
-  playerId = pupil.id;
-  localStorage.setItem(LAST_ID_KEY, pupil.id);
+function beginAsLearner(learner) {
+  playerName = learner.name;
+  playerId = learner.id;
+  localStorage.setItem(LAST_ID_KEY, learner.id);
   goTo("game");
   startRound();
 }
@@ -488,7 +488,7 @@ function renderPinDots() {
   document.querySelectorAll("#pin-dots .dot").forEach((d, i) => d.classList.toggle("filled", i < pinBuffer.length));
 }
 function pressDigit(d) {
-  if (!pendingPupil || pinBuffer.length >= 4) return;
+  if (!pendingLearner || pinBuffer.length >= 4) return;
   pinBuffer += d;
   renderPinDots();
   $("pin-error").innerHTML = "&nbsp;";
@@ -496,9 +496,9 @@ function pressDigit(d) {
 }
 function pressDelete() { pinBuffer = pinBuffer.slice(0, -1); renderPinDots(); }
 function checkPin() {
-  if (pinBuffer === pendingPupil.pin) {
-    spSetVerifiedPupil(pendingPupil.id);
-    beginAsPupil(pendingPupil);
+  if (pinBuffer === pendingLearner.pin) {
+    spSetVerifiedLearner(pendingLearner.id);
+    beginAsLearner(pendingLearner);
   } else {
     $("pin-gate").classList.add("shake");
     $("pin-error").textContent = "That's not quite right — try again.";
@@ -515,28 +515,28 @@ $("pin-back").addEventListener("click", () => {
 $("manual-submit").addEventListener("click", () => {
   const code = $("manual-code").value.trim().toUpperCase();
   const pin = $("manual-pin").value.trim();
-  const pupil = code ? findPupil(code) : null;
-  if (!pupil || pupil.pin !== pin) {
+  const learner = code ? findLearner(code) : null;
+  if (!learner || learner.pin !== pin) {
     $("manual-error").textContent = "That code and PIN don't match — check with your teacher.";
     return;
   }
-  spSetVerifiedPupil(pupil.id);
-  beginAsPupil(pupil);
+  spSetVerifiedLearner(learner.id);
+  beginAsLearner(learner);
 });
 
 /* Runs once a round is active and the start (identify-yourself) screen is showing. */
 function initAccessScreen() {
   $("bad-code-banner").style.display = "none";
   if (qrCode) {
-    pendingPupil = findPupil(qrCode);
-    if (pendingPupil) {
-      // Already proved this pupil's PIN once in this tab (e.g. via the
+    pendingLearner = findLearner(qrCode);
+    if (pendingLearner) {
+      // Already proved this learner's PIN once in this tab (e.g. via the
       // "My Spelling Games" hub) — go straight in instead of asking again.
-      if (spGetVerifiedPupilId() === pendingPupil.id.toUpperCase()) {
-        beginAsPupil(pendingPupil);
+      if (spGetVerifiedLearnerId() === pendingLearner.id.toUpperCase()) {
+        beginAsLearner(pendingLearner);
         return;
       }
-      showPinGate(pendingPupil);
+      showPinGate(pendingLearner);
     } else {
       $("bad-code-banner").style.display = "block";
     }
@@ -547,19 +547,19 @@ function initAccessScreen() {
 $("again-btn").addEventListener("click", () => { goTo("game"); startRound(); });
 $("end-home-btn").addEventListener("click", () => {
   // Same as the in-game 🏠 button — leave without signing out, so the
-  // hub won't ask for a PIN again if this pupil picks another game.
+  // hub won't ask for a PIN again if this learner picks another game.
   location.href = "../play/index.html" + location.search;
 });
 $("hud-home-btn").addEventListener("click", () => {
-  // Leave this game mid-round without signing out — the pupil stays
+  // Leave this game mid-round without signing out — the learner stays
   // verified in this tab so the hub won't ask for their PIN again.
   location.href = "../play/index.html" + location.search;
 });
 $("menu-btn").addEventListener("click", () => {
-  // Full sign-out: clears this tab's verified pupil and returns to the
+  // Full sign-out: clears this tab's verified learner and returns to the
   // hub's identify screen, so the next child on the same iPad must enter
-  // their own code + PIN rather than picking up mid-session as this pupil.
-  spClearVerifiedPupil();
+  // their own code + PIN rather than picking up mid-session as this learner.
+  spClearVerifiedLearner();
   location.href = "../play/index.html";
 });
 
@@ -711,7 +711,7 @@ async function fetchRemoteLeaderboard() {
 /* ── Entry point: a QR/hub link can bake ?pattern= in to jump straight
    to a specific pattern, skipping the setup screen. Opening the page
    with no params (staff testing, or a guest) shows the pattern picker
-   instead. Pupil setup (ROSTER) is fetched live from the Sheet first,
+   instead. Learner setup (ROSTER) is fetched live from the Sheet first,
    falling back to roster.js's static copy if that fails. ── */
 (async function boot() {
   const live = await spFetchLiveRoster(BACKEND_URL);
