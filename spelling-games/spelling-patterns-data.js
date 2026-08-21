@@ -33,7 +33,7 @@ const GRAPHEME_PATTERNS = [
     focus: "the /ch/ sound at the end of a word",
     explanation: "After a short vowel in a one-syllable word, the /ch/ sound is usually spelled -tch (catch, watch, stretch). After a long vowel, a consonant, or in most other cases, it's usually just -ch (each, teach, lunch, march). A few common exceptions (much, such, rich, which) just have to be learned.",
     buckets: [
-      { grapheme: "tch", words: ["catch","watch","match","witch","fetch","stretch","hutch","patch","batch","ditch","notch","sketch","switch","snatch","kitchen"] },
+      { grapheme: "tch", words: ["catch","watch","match","witch","fetch","stretch","hutch","patch","batch","ditch","notch","sketch","switch","snatch"] },
       { grapheme: "ch", words: ["each","reach","teach","beach","coach","speech","church","march","branch","lunch","bench","french","much","such","rich","which"] }
     ]
   },
