@@ -267,7 +267,17 @@ function onOpen() {
 // the change applies to the very next send, whether that's the next
 // scheduled Monday run or a manual "Send weekly digest now".
 const DIGEST_RECIPIENT_EMAILS = [
-  'innes.mclean@clf.uk',
+  'jonathan.miller@clf.uk',   // Jonathan Miller - WFA
+  'sally.doughty@clf.uk',     // Sally Doughty - WFA
+  'laura.savory@clf.uk',      // Laura Savory - KOA
+  'innes.mclean@clf.uk',      // Innes McLean - WFA
+  'reuben.boocock@clf.uk',    // Reuben Boocock - WFA
+  'jamie.williams@clf.uk',    // Jamie Williams - WFA
+  'william.underwood@clf.uk', // William Underwood - WFA
+  'leyla.mclaughlin@clf.uk',  // Leyla McLaughlin - WFA
+  'ellen.sullivan@clf.uk',    // Ellen Sullivan - WFA
+  'jo.hewitt@clf.uk',         // Jo Hewitt - WFA
+  'millie.young@clf.uk',      // Millie Young - WFA
 ];
 
 const DIGEST_TOP_N = 10;
