@@ -11,9 +11,9 @@
   a.card { min-height: 180px; }
   .back-link {
     display: inline-block; margin: 0 0 4px; font-size: 13px; font-weight: 600;
-    color: #1798d3; text-decoration: none;
+    color: rgba(255,255,255,0.9); text-decoration: none;
   }
-  .back-link:hover { text-decoration: underline; }
+  .back-link:hover { color: #fff; text-decoration: underline; }
 
   .hero-cta {
     display: flex; align-items: center; gap: 18px;
@@ -26,7 +26,11 @@
   .hero-cta.green { background: linear-gradient(135deg,#2fbf71,#1f9c58); box-shadow: 0 8px 0 #17753f; }
   .hero-cta.green:active { box-shadow: 0 3px 0 #17753f; }
   .hero-cta-icon { font-size: 40px; line-height: 1; }
-  .hero-cta h2 { margin: 0 0 4px; font-size: 21px; }
+  .hero-cta h2 {
+    margin: 0 0 4px; font-size: 21px; font-weight: 800; text-transform: none;
+    letter-spacing: normal; color: #fff; border-bottom: none; padding-bottom: 0;
+    display: block;
+  }
   .hero-cta p { margin: 0; font-size: 14px; opacity: .92; }
   .hero-cta-arrow { margin-left: auto; font-size: 22px; opacity: .85; }
 
@@ -133,7 +137,7 @@
 </main>
 
 <div class="footer">
-  Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation
+  Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; v25.08.26a
 </div>
 
 </body>
