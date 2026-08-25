@@ -310,7 +310,7 @@ function spClearVerifiedLearner() {
    asking for identity at all. PIN is fixed below; change both if this
    ever needs to be less guessable than a class handing round the answer. */
 const SP_TEACHER_CODE_PREFIX = "TEACH";
-const SP_TEACHER_PIN = "7379";
+const SP_TEACHER_PIN = "2013";
 function spFindLearnerOrTeacher(roster, code) {
   const upper = String(code).trim().toUpperCase();
   if (upper.startsWith(SP_TEACHER_CODE_PREFIX)) {
