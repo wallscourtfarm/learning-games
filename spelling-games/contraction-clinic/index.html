@@ -194,7 +194,7 @@
     <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
       <div id="leaderboard-list"></div>
     </div>
-    <div class="version">Contraction Clinic 28.08.26a · Wallscourt Farm Academy</div>
+    <div class="version">Contraction Clinic 28.08.26b · Wallscourt Farm Academy</div>
   </section>
 
   <!-- ══════════ GAME SCREEN ══════════ -->
@@ -235,7 +235,7 @@
     <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
       <div id="leaderboard-list-end"></div>
     </div>
-    <div class="version">Contraction Clinic 28.08.26a · Wallscourt Farm Academy</div>
+    <div class="version">Contraction Clinic 28.08.26b · Wallscourt Farm Academy</div>
   </section>
 
 <script src="../spelling-pool.js"></script>
@@ -563,7 +563,9 @@ function showWord() {
   const pair = current();
   const puzzle = buildPuzzle(pair);
   state.puzzle = puzzle;
-  state.remaining = puzzle.fullLetters.slice();  // letters not yet tapped away, in order
+  // Letters not yet tapped away, in order — each tagged with its ORIGINAL
+  // tile index so taps stay aligned even after some letters are gone.
+  state.remaining = puzzle.fullLetters.map((ch, i) => ({ ch, i }));
   state.omittedTotal = 0;
   state.taps = 0;
 
@@ -577,7 +579,9 @@ function showWord() {
   // letter belongs to" stays readable for phrases like "should not".
   // Deliberately NOT a .cc-tile — finishWord counts .cc-tile elements to
   // find the surviving letters and place the apostrophe.
-  const gapAt = pair.full.indexOf(" ");
+  // Spacer goes before the first letter of the second word — count the
+  // letters in word one, since tile indices skip the space.
+  const gapAt = (pair.full.split(" ")[0].match(/[a-z]/gi) || []).length;
   $("cc-tiles").innerHTML = puzzle.fullLetters.map((ch, i) => {
     const spacer = gapAt > 0 && i === gapAt ? '<span class="cc-gap"></span>' : "";
     return `${spacer}<button class="cc-tile" data-i="${i}">${ch.toUpperCase()}</button>`;
@@ -611,8 +615,8 @@ $("cc-tiles").addEventListener("click", e => {
 
   // Try removing this letter; keep it removed only if the contraction is
   // still reachable from what's left.
-  const trial = state.remaining.filter((_, k) => k !== idx);
-  if (!canStillFinish(trial, target)) {
+  const trial = state.remaining.filter(t => t.i !== idx);
+  if (!canStillFinish(trial.map(t => t.ch), target)) {
     state.taps++;
     $("cc-tiles").classList.add("shake");
     $("cc-feedback").textContent = "That letter stays! Try another.";
