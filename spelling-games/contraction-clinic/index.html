@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Contraction Clinic — Wallscourt Farm Academy</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💊</text></svg>">
+<style>
+  :root{
+    --blue:#1798d3; --blue-dark:#0f6f9e; --navy:#12263a;
+    --green:#2fbf71; --red:#e5484d; --amber:#f5a524;
+    --bg1:#eaf6fd; --bg2:#dcf0fb; --card:#fff; --muted:#5b7a8a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;
+    background:linear-gradient(160deg,var(--bg1),var(--bg2));
+    color:var(--navy);
+    display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+    min-height:100%; overflow-x:hidden; overflow-y:auto;
+    touch-action:manipulation; user-select:none;
+  }
+  @keyframes shakeAnim{ 20%{transform:translateX(-8px) rotate(-4deg);} 50%{transform:translateX(8px) rotate(4deg);} 80%{transform:translateX(-4px);} 100%{transform:translateX(0);} }
+  @keyframes popOut{ to{ transform:scale(0) rotate(20deg); opacity:0; } }
+  @keyframes dropIn{ from{ transform:translateY(-26px) scale(1.6); opacity:0; } to{ transform:translateY(0) scale(1); opacity:1; } }
+
+  .screen{ width:100%; max-width:640px; margin:0 auto; padding:20px 20px 32px; display:none; }
+  .screen.active{display:block;}
+
+  .brand{ text-align:center; padding-top:18px; }
+  .brand .kicker{ font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--blue-dark); opacity:.75; }
+  .brand h1{ margin:4px 0 2px; font-size:clamp(28px,7vw,40px); font-weight:800; }
+
+  .panel{ background:var(--card); border-radius:18px; padding:22px 22px 26px; box-shadow:0 10px 30px rgba(18,38,58,.10); margin-top:16px; }
+
+  label.field-label{ display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:var(--muted); }
+  input[type=text]{
+    width:100%; font-size:18px; padding:12px 14px; border-radius:12px;
+    border:2px solid #cfe2ec; outline:none; font-family:inherit;
+  }
+  input[type=text]:focus{ border-color:var(--blue); }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    font-size:17px; font-weight:800; font-family:inherit;
+    padding:14px 22px; border-radius:14px; border:none; cursor:pointer;
+    width:100%; margin-top:16px;
+    background:var(--blue); color:#fff; box-shadow:0 6px 0 var(--blue-dark);
+    transition:transform .05s;
+  }
+  .btn:active{ transform:translateY(4px); box-shadow:0 2px 0 var(--blue-dark); }
+  .btn.secondary{ background:#eef5f9; color:var(--blue-dark); box-shadow:0 6px 0 #c9dde7; }
+  .btn.secondary:active{ box-shadow:0 2px 0 #c9dde7; }
+
+  .board-title{ font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin:22px 0 8px; }
+  .board-row{ display:flex; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid #eef3f6; font-size:14.5px; }
+  .board-row .rank{ width:22px; font-weight:800; color:var(--muted); text-align:center; }
+  .board-row .rname{ flex:1; font-weight:700; }
+  .board-row .rscore{ font-weight:800; color:var(--blue-dark); }
+  .board-row.you{ background:#eaf8f0; border-radius:10px; }
+  .board-empty{ font-size:13.5px; color:var(--muted); padding:8px 4px; }
+
+  .hud{ width:100%; max-width:640px; display:flex; align-items:center; gap:10px; padding:10px 14px; z-index:5; }
+  .hud-home-btn{
+    background:#fff; border:none; border-radius:12px; padding:8px 12px;
+    box-shadow:0 3px 10px rgba(18,38,58,.08); font-size:20px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; line-height:1;
+  }
+  .hud-home-btn:active{ transform:translateY(1px); }
+  .hud-pill{
+    background:#fff; border-radius:12px; padding:8px 14px;
+    box-shadow:0 3px 10px rgba(18,38,58,.08);
+    font-weight:800; font-size:15px; display:flex; align-items:center; gap:6px;
+  }
+  .hud-pill.grow{ flex:1; justify-content:center; }
+  .hud-pill .lab{ font-size:10px; font-weight:700; text-transform:uppercase; color:var(--muted); letter-spacing:.5px; }
+
+  /* ── Game screen ── */
+  #game-wrap{ display:none; flex-direction:column; align-items:center; width:100%; padding:0 20px; }
+  #game-wrap.active{ display:flex; }
+  #cc-stage{
+    width:100%; max-width:520px; margin-top:16px; background:var(--card); border-radius:20px;
+    padding:24px 20px 28px; text-align:center; box-shadow:0 10px 30px rgba(18,38,58,.10);
+  }
+  .cc-prompt{ font-size:15px; color:var(--muted); margin:0 0 4px; }
+  .cc-word-pair{
+    font-size:clamp(20px,5vw,26px); font-weight:800; margin:10px 0 4px; color:var(--navy);
+  }
+  .cc-word-pair .plus{ color:var(--blue); margin:0 8px; }
+  .cc-sub{ font-size:13px; color:var(--muted); margin:0 0 18px; }
+
+  #cc-tiles{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-bottom:8px; }
+  #cc-tiles.shake{ animation:shakeAnim .32s ease; }
+  .cc-tile{
+    width:44px; height:52px; border-radius:12px; border:none; cursor:pointer;
+    background:var(--blue); color:#fff; font-size:25px; font-weight:800; font-family:inherit;
+    box-shadow:0 4px 0 var(--blue-dark);
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .05s;
+  }
+  .cc-tile:active{ transform:translateY(3px); box-shadow:0 1px 0 var(--blue-dark); }
+  .cc-tile.gone{ animation:popOut .28s ease forwards; pointer-events:none; }
+  .cc-gap{ width:16px; height:1px; }
+  .cc-tile.apostrophe{
+    background:var(--amber); box-shadow:0 4px 0 #b37708;
+    animation:dropIn .4s ease;
+    cursor:default; pointer-events:none;
+  }
+  .cc-tile.done{ cursor:default; pointer-events:none; background:var(--green); box-shadow:0 4px 0 #17753f; }
+
+  .cc-feedback{ min-height:24px; margin-top:14px; font-size:16px; font-weight:800; }
+  .cc-feedback.good{ color:var(--green); }
+  .cc-feedback.bad{ color:var(--red); }
+  .cc-hint{ font-size:12.5px; color:var(--muted); margin-top:6px; }
+
+  .stat-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:6px; }
+  .stat-box{ background:#f5fafc; border-radius:12px; padding:14px 6px; text-align:center; }
+  .stat-box .num{ font-size:24px; font-weight:900; color:var(--blue-dark); }
+  .stat-box .lab{ font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-top:2px; }
+
+  .banner-error{
+    background:#fdeceb; border:1.5px solid #f3b7b3; color:#a3231f;
+    border-radius:12px; padding:12px 14px; font-size:13.5px; font-weight:600; margin-bottom:18px;
+  }
+  .pin-hello{ font-size:16px; font-weight:800; text-align:center; margin-bottom:16px; }
+  .pin-hello span{ color:var(--blue-dark); }
+  .pin-dots{ display:flex; justify-content:center; gap:14px; margin-bottom:10px; }
+  .pin-dots .dot{ width:18px; height:18px; border-radius:50%; border:2.5px solid #cfe2ec; background:#fff; transition:background .15s, border-color .15s; }
+  .pin-dots .dot.filled{ background:var(--blue); border-color:var(--blue); }
+  .pin-error{ text-align:center; font-size:13px; font-weight:700; color:var(--red); min-height:18px; margin-top:10px; margin-bottom:8px; }
+  #pin-gate.shake .pin-dots{ animation:shakeAnim .32s ease; }
+  .keypad{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:280px; margin:6px auto 0; }
+  .keypad button{
+    font-size:22px; font-weight:800; font-family:inherit; padding:16px 0; border-radius:14px;
+    border:none; background:#eef5f9; color:var(--navy); cursor:pointer; box-shadow:0 4px 0 #d3e4ec;
+  }
+  .keypad button:active{ transform:translateY(3px); box-shadow:0 1px 0 #d3e4ec; }
+  .keypad button.wide{ font-size:15px; color:var(--muted); }
+  .pin-back{
+    display:block; text-align:center; width:100%; margin-top:16px; font-size:13px; color:var(--muted);
+    background:none; border:none; cursor:pointer; text-decoration:underline; font-family:inherit;
+  }
+  .version{ text-align:center; font-size:11px; color:var(--muted); opacity:.8; padding:0 20px 20px; }
+</style>
+</head>
+<body>
+
+  <section id="screen-loading" class="screen active">
+    <div class="brand">
+      <div class="kicker">Wallscourt Farm Academy · Spelling Games</div>
+      <h1>💊 Contraction Clinic</h1>
+    </div>
+  </section>
+
+  <!-- ══════════ START SCREEN — identify the player ══════════ -->
+  <section id="screen-start" class="screen">
+    <div class="brand">
+      <div class="kicker">Wallscourt Farm Academy · Spelling Games</div>
+      <h1>💊 Contraction Clinic</h1>
+    </div>
+
+    <div class="panel">
+      <p style="font-size:13.5px; color:var(--muted); margin:0 0 16px;">
+        Two words go in, one shorter word comes out. Tap the letters that disappear — the apostrophe
+        drops in to show exactly where they were. Always available, whatever week it is.
+      </p>
+
+      <div id="bad-code-banner" class="banner-error" style="display:none;">
+        We didn't recognise that spelling code. Ask your teacher for a new card, or use the options below.
+      </div>
+
+      <div id="pin-gate" style="display:none;">
+        <div class="pin-hello">Hi <span id="pin-learner-name"></span>! Enter your spelling PIN.</div>
+        <div class="pin-dots" id="pin-dots">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        </div>
+        <div class="pin-error" id="pin-error">&nbsp;</div>
+        <div class="keypad" id="keypad"></div>
+        <button class="pin-back" id="pin-back">Not you? Use a different way in</button>
+      </div>
+
+      <div id="guest-gate">
+        <label class="field-label" for="manual-code">Your code</label>
+        <input type="text" id="manual-code" maxlength="6" placeholder="e.g. AM72" style="text-transform:uppercase;" autocomplete="off">
+        <label class="field-label" for="manual-pin" style="margin-top:10px;">Your PIN</label>
+        <input type="text" id="manual-pin" inputmode="numeric" maxlength="4" placeholder="4 digits" autocomplete="off">
+        <button class="btn" id="manual-submit">▶ Start playing</button>
+        <div class="pin-error" id="manual-error">&nbsp;</div>
+      </div>
+    </div>
+
+    <div class="board-title">🏆 Leaderboard — best scores on this device</div>
+    <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
+      <div id="leaderboard-list"></div>
+    </div>
+    <div class="version">Contraction Clinic 28.08.26a · Wallscourt Farm Academy</div>
+  </section>
+
+  <!-- ══════════ GAME SCREEN ══════════ -->
+  <div id="game-wrap">
+    <div class="hud">
+      <button class="hud-home-btn" id="hud-home-btn" aria-label="Back to games menu" title="Back to games menu">🏠</button>
+      <div class="hud-pill"><span class="lab">Score</span>&nbsp;<span id="hud-score">0</span></div>
+      <div class="hud-pill grow"><span class="lab">Word&nbsp;</span><span id="hud-progress">1 / 1</span></div>
+    </div>
+
+    <div id="cc-stage">
+      <p class="cc-prompt">Make the contraction:</p>
+      <div class="cc-word-pain" id="cc-words" style="margin:10px 0 4px;"></div>
+      <p class="cc-sub" id="cc-sub">Tap every letter that disappears.</p>
+      <div id="cc-tiles"></div>
+      <div class="cc-feedback" id="cc-feedback">&nbsp;</div>
+      <div class="cc-hint" id="cc-hint"></div>
+    </div>
+  </div>
+
+  <!-- ══════════ END SCREEN ══════════ -->
+  <section id="screen-end" class="screen">
+    <div class="brand">
+      <div class="kicker">Round complete</div>
+      <h1>🎉 Perfectly patched up!</h1>
+    </div>
+    <div class="panel">
+      <div class="stat-grid">
+        <div class="stat-box"><div class="num" id="end-score">0</div><div class="lab">Score</div></div>
+        <div class="stat-box"><div class="num" id="end-clean">0</div><div class="lab">Clean ops</div></div>
+        <div class="stat-box"><div class="num" id="end-total">0</div><div class="lab">Words</div></div>
+      </div>
+      <button class="btn" id="again-btn">🔁 Play again</button>
+      <button class="btn secondary" id="end-home-btn">🏠 Back to my games</button>
+      <button class="btn secondary" id="menu-btn">🚪 Exit — next player sign in</button>
+    </div>
+    <div class="board-title">🏆 Leaderboard — best scores on this device</div>
+    <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
+      <div id="leaderboard-list-end"></div>
+    </div>
+    <div class="version">Contraction Clinic 28.08.26a · Wallscourt Farm Academy</div>
+  </section>
+
+<script src="../spelling-pool.js"></script>
+<script src="../roster.js"></script>
+<script>
+/* ════════════════════════════════════════════════════════════════
+   GAME IDENTITY — used to tag scores; leave as-is per game.
+   ════════════════════════════════════════════════════════════════ */
+const GAME_ID = "contraction-clinic";
+const LEADERBOARD_KEY = "wfa-contraction-clinic-lb";
+/* ═══════════════════════════════════════════════════════════════ */
+
+const $ = id => document.getElementById(id);
+
+/* ── The fixed contraction set — "full phrase" → "contraction".
+   Everything else (which letters vanish, where the apostrophe sits) is
+   derived from these two strings, so a wrong entry can't sneak in. ── */
+const CONTRACTIONS = [
+  { full: "I am",         short: "I'm" },
+  { full: "you are",      short: "you're" },
+  { full: "he is",        short: "he's" },
+  { full: "she is",       short: "she's" },
+  { full: "it is",        short: "it's" },
+  { full: "we are",       short: "we're" },
+  { full: "they are",     short: "they're" },
+  { full: "that is",      short: "that's" },
+  { full: "what is",      short: "what's" },
+  { full: "here is",      short: "here's" },
+  { full: "do not",       short: "don't" },
+  { full: "does not",     short: "doesn't" },
+  { full: "did not",      short: "didn't" },
+  { full: "is not",       short: "isn't" },
+  { full: "are not",      short: "aren't" },
+  { full: "was not",      short: "wasn't" },
+  { full: "were not",     short: "weren't" },
+  { full: "has not",      short: "hasn't" },
+  { full: "have not",     short: "haven't" },
+  { full: "had not",      short: "hadn't" },
+  // "will not → won't" is deliberately absent: the game's mechanic is
+  // tapping away letters, but won't is irregular (the o and n swap), so
+  // it can't be built by deletion. Teach that one on the board!
+  { full: "would not",    short: "wouldn't" },
+  { full: "could not",    short: "couldn't" },
+  { full: "should not",   short: "shouldn't" },
+  { full: "must not",     short: "mustn't" },
+  { full: "cannot",       short: "can't" },
+  { full: "I will",       short: "I'll" },
+  { full: "we will",      short: "we'll" },
+  { full: "you will",     short: "you'll" },
+  { full: "she will",     short: "she'll" },
+  { full: "they will",    short: "they'll" },
+  { full: "I have",       short: "I've" },
+  { full: "we have",      short: "we've" },
+  { full: "they have",    short: "they've" },
+  { full: "I had",        short: "I'd" },
+  { full: "she would",    short: "she'd" },
+  { full: "let us",       short: "let's" }
+];
+const WORDS_PER_ROUND = 8;
+
+let playerName = "";
+let playerId = null;
+let state = null;   // { score, clean, idx, order, tiles[], mustOmit, omitted, taps, ending }
+
+/* ── Derive the puzzle for one contraction ──
+   Tiles are the letters of the full phrase (spaces dropped). A letter can
+   be tapped away while fewer than (fullCount − shortCount) of that letter
+   have already gone — the apostrophe's landing spot comes straight from
+   the contraction string, so the finished row spells exactly `short`. */
+function buildPuzzle(pair) {
+  const fullLetters = pair.full.toLowerCase().replace(/[^a-z]/g, "").split("");
+  const shortLetters = pair.short.toLowerCase().replace(/[^a-z']/g, "").replace("'", "").split("");
+  const apostropheAfter = pair.short.toLowerCase().indexOf("'"); // letters before the apostrophe
+
+  const targetCount = {};
+  shortLetters.forEach(ch => targetCount[ch] = (targetCount[ch] || 0) + 1);
+  const fullCount = {};
+  fullLetters.forEach(ch => fullCount[ch] = (fullCount[ch] || 0) + 1);
+
+  const mustOmit = {};
+  Object.keys(fullCount).forEach(ch => {
+    const need = fullCount[ch] - (targetCount[ch] || 0);
+    if (need > 0) mustOmit[ch] = need;
+  });
+  const totalOmit = Object.values(mustOmit).reduce((a, b) => a + b, 0);
+
+  return { fullLetters, targetLetters: shortLetters, apostropheAfter, totalOmit };
+}
+
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/* ── Leaderboard (localStorage stand-in for a real backend) ── */
+function loadLeaderboard() {
+  try { return JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || "[]"); }
+  catch (e) { return []; }
+}
+function saveScore(entry) {
+  const board = loadLeaderboard();
+  board.push(entry);
+  board.sort((a, b) => b.score - a.score);
+  const top = board.slice(0, 10);
+  localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(top));
+  return top;
+}
+async function renderLeaderboard(targetId, highlightId) {
+  const remote = await fetchRemoteLeaderboard();
+  const board = remote || loadLeaderboard();
+  const el = $(targetId);
+  if (!board.length) {
+    el.innerHTML = '<div class="board-empty">No scores yet — be the first to play!</div>';
+    return;
+  }
+  const firstYouIdx = highlightId ? board.findIndex(r => r.id === highlightId) : -1;
+  el.innerHTML = board.map((row, i) => `
+    <div class="board-row ${i === firstYouIdx ? 'you' : ''}">
+      <div class="rank">${i + 1}</div>
+      <div class="rname">${escapeHtml(row.name)}</div>
+      <div class="rscore">${row.score} pts</div>
+    </div>`).join("");
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ── "Access" — QR code (?u=CODE) + PIN, or manual code + PIN.
+   No word list to pick here, so the game starts as soon as you're in. ── */
+const urlParams = new URLSearchParams(location.search);
+const qrCode = (urlParams.get("u") || "").trim().toUpperCase();
+let pendingLearner = null;
+
+function findLearner(code) {
+  // Also recognises the teacher backdoor code (see spFindLearnerOrTeacher
+  // in spelling-pool.js) alongside a normal roster lookup.
+  return spFindLearnerOrTeacher(typeof ROSTER !== "undefined" ? ROSTER : [], code);
+}
+
+function showPinGate(learner) {
+  pendingLearner = learner;
+  $("pin-learner-name").textContent = learner.name;
+  $("guest-gate").style.display = "none";
+  $("pin-gate").style.display = "block";
+  pinBuffer = "";
+  renderPinDots();
+}
+
+function beginAsLearner(learner) {
+  playerName = learner.name;
+  playerId = learner.id;
+  goTo("game");
+  startRound();
+}
+
+let pinBuffer = "";
+function buildKeypad() {
+  const layout = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
+  const kp = $("keypad");
+  kp.innerHTML = "";
+  layout.forEach(k => {
+    const btn = document.createElement("button");
+    if (k === "") { btn.style.visibility = "hidden"; btn.disabled = true; }
+    else if (k === "⌫") { btn.textContent = k; btn.className = "wide"; btn.addEventListener("click", pressDelete); }
+    else { btn.textContent = k; btn.addEventListener("click", () => pressDigit(k)); }
+    kp.appendChild(btn);
+  });
+}
+function renderPinDots() {
+  document.querySelectorAll("#pin-dots .dot").forEach((d, i) => d.classList.toggle("filled", i < pinBuffer.length));
+}
+function pressDigit(d) {
+  if (!pendingLearner || pinBuffer.length >= 4) return;
+  pinBuffer += d;
+  renderPinDots();
+  $("pin-error").innerHTML = "&nbsp;";
+  if (pinBuffer.length === 4) checkPin();
+}
+function pressDelete() { pinBuffer = pinBuffer.slice(0, -1); renderPinDots(); }
+function checkPin() {
+  if (pinBuffer === pendingLearner.pin) {
+    spSetVerifiedLearner(pendingLearner.id);
+    beginAsLearner(pendingLearner);
+  } else {
+    $("pin-gate").classList.add("shake");
+    $("pin-error").textContent = "That's not quite right — try again.";
+    setTimeout(() => { pinBuffer = ""; renderPinDots(); $("pin-gate").classList.remove("shake"); }, 420);
+  }
+}
+buildKeypad();
+
+$("pin-back").addEventListener("click", () => {
+  $("pin-gate").style.display = "none";
+  $("guest-gate").style.display = "block";
+});
+
+$("manual-submit").addEventListener("click", () => {
+  const code = $("manual-code").value.trim().toUpperCase();
+  const pin = $("manual-pin").value.trim();
+  const learner = code ? findLearner(code) : null;
+  if (!learner || learner.pin !== pin) {
+    $("manual-error").textContent = "That code and PIN don't match — check with your teacher.";
+    return;
+  }
+  spSetVerifiedLearner(learner.id);
+  beginAsLearner(learner);
+});
+
+function initAccessScreen() {
+  $("bad-code-banner").style.display = "none";
+  if (qrCode) {
+    pendingLearner = findLearner(qrCode);
+    if (pendingLearner) {
+      // Already proved this learner's PIN once in this tab (e.g. via the
+      // "My Spelling Games" hub) — go straight in instead of asking again.
+      if (spGetVerifiedLearnerId() === pendingLearner.id.toUpperCase()) {
+        beginAsLearner(pendingLearner);
+        return;
+      }
+      showPinGate(pendingLearner);
+    } else {
+      $("bad-code-banner").style.display = "block";
+    }
+  }
+  renderLeaderboard("leaderboard-list", null);
+}
+
+$("again-btn").addEventListener("click", () => { goTo("game"); startRound(); });
+$("end-home-btn").addEventListener("click", () => {
+  location.href = "../play/index.html" + location.search;
+});
+$("hud-home-btn").addEventListener("click", () => {
+  location.href = "../play/index.html" + location.search;
+});
+$("menu-btn").addEventListener("click", () => {
+  // Full sign-out: clears this tab's verified learner, so the next child
+  // on the same iPad must enter their own code + PIN.
+  spClearVerifiedLearner();
+  location.href = "../play/index.html";
+});
+
+function goTo(which) {
+  $("screen-loading").classList.toggle("active", false);
+  $("screen-start").classList.toggle("active", which === "start");
+  $("screen-end").classList.toggle("active", which === "end");
+  $("game-wrap").classList.toggle("active", which === "game");
+}
+
+/* ── Saying the words aloud — browser voice only here: the shared
+   ../audio recordings say "Spell the word X", which doesn't fit a game
+   about two words becoming one. ── */
+const SPEECH_SUPPORTED = typeof window !== "undefined" && "speechSynthesis" in window;
+
+const PREFERRED_VOICE_NAMES = [
+  "daniel", "kate", "serena", "stephanie", "arthur", "martha",
+  "google uk english female", "google uk english male",
+  "microsoft libby", "microsoft ryan", "microsoft sonia"
+];
+let cachedVoices = [];
+function refreshVoices() {
+  if (SPEECH_SUPPORTED) cachedVoices = window.speechSynthesis.getVoices();
+}
+if (SPEECH_SUPPORTED) {
+  refreshVoices();
+  window.speechSynthesis.onvoiceschanged = refreshVoices;
+}
+function pickBestVoice() {
+  if (!cachedVoices.length) refreshVoices();
+  for (const preferred of PREFERRED_VOICE_NAMES) {
+    const match = cachedVoices.find(v => v.name.toLowerCase().includes(preferred));
+    if (match) return match;
+  }
+  return cachedVoices.find(v => v.lang === "en-GB")
+    || cachedVoices.find(v => v.lang && v.lang.startsWith("en"))
+    || null;
+}
+
+function sayPrompt(full) {
+  if (!SPEECH_SUPPORTED) return;
+  try {
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(`${full}. Say it shorter!`);
+    const voice = pickBestVoice();
+    if (voice) { utter.voice = voice; utter.lang = voice.lang; }
+    else { utter.lang = "en-GB"; }
+    utter.rate = 0.85;
+    window.speechSynthesis.speak(utter);
+  } catch (e) {
+    console.warn("Speech synthesis failed:", e);
+  }
+}
+
+function sayPair(full, short) {
+  if (!SPEECH_SUPPORTED) return;
+  try {
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(`${full} becomes ${short}.`);
+    const voice = pickBestVoice();
+    if (voice) { utter.voice = voice; utter.lang = voice.lang; }
+    else { utter.lang = "en-GB"; }
+    utter.rate = 0.85;
+    window.speechSynthesis.speak(utter);
+  } catch (e) {
+    console.warn("Speech synthesis failed:", e);
+  }
+}
+
+/* ── Game logic ── */
+function startRound() {
+  state = { score: 0, clean: 0, idx: 0, order: shuffleArray(CONTRACTIONS.slice()).slice(0, WORDS_PER_ROUND), taps: 0, ending: false };
+  showWord();
+}
+
+function current() { return state.order[state.idx]; }
+
+function updateHud() {
+  $("hud-score").textContent = state.score;
+  $("hud-progress").textContent = `${Math.min(state.idx + 1, state.order.length)} / ${state.order.length}`;
+}
+
+function showWord() {
+  const pair = current();
+  const puzzle = buildPuzzle(pair);
+  state.puzzle = puzzle;
+  state.remaining = puzzle.fullLetters.slice();  // letters not yet tapped away, in order
+  state.omittedTotal = 0;
+  state.taps = 0;
+
+  $("cc-words").innerHTML = `<span class="cc-word-pair">${escapeHtml(pair.full)}<span class="plus">➜</span>? ? ?</span>`;
+  $("cc-sub").textContent = "Tap every letter that disappears.";
+  $("cc-feedback").textContent = " ";
+  $("cc-feedback").className = "cc-feedback";
+  $("cc-hint").textContent = "";
+
+  // The word gap is shown as a small invisible spacer so "which word a
+  // letter belongs to" stays readable for phrases like "should not".
+  // Deliberately NOT a .cc-tile — finishWord counts .cc-tile elements to
+  // find the surviving letters and place the apostrophe.
+  const gapAt = pair.full.indexOf(" ");
+  $("cc-tiles").innerHTML = puzzle.fullLetters.map((ch, i) => {
+    const spacer = gapAt > 0 && i === gapAt ? '<span class="cc-gap"></span>' : "";
+    return `${spacer}<button class="cc-tile" data-i="${i}">${ch.toUpperCase()}</button>`;
+  }).join("");
+
+  updateHud();
+  sayPrompt(pair.full);
+}
+
+/* A tap may only remove a letter that still leaves the contraction
+   reachable — i.e. the target letters must remain a subsequence of what's
+   left. This handles repeated letters correctly ("it is" → "it's":
+   tapping the FIRST i would leave "t i s", which can't spell "its", so
+   the check rejects it and only the second i is removable). */
+function canStillFinish(remaining, target) {
+  if (remaining.length < target.length) return false;
+  let ti = 0;
+  for (const ch of remaining) {
+    if (ch === target[ti]) ti++;
+  }
+  return ti === target.length;
+}
+
+$("cc-tiles").addEventListener("click", e => {
+  if (!state || state.ending) return;
+  const tile = e.target.closest(".cc-tile");
+  if (!tile || tile.classList.contains("gone") || tile.classList.contains("apostrophe")) return;
+
+  const idx = Number(tile.dataset.i);
+  const target = state.puzzle.targetLetters;
+
+  // Try removing this letter; keep it removed only if the contraction is
+  // still reachable from what's left.
+  const trial = state.remaining.filter((_, k) => k !== idx);
+  if (!canStillFinish(trial, target)) {
+    state.taps++;
+    $("cc-tiles").classList.add("shake");
+    $("cc-feedback").textContent = "That letter stays! Try another.";
+    $("cc-feedback").className = "cc-feedback bad";
+    setTimeout(() => $("cc-tiles").classList.remove("shake"), 400);
+    return;
+  }
+
+  state.remaining = trial;
+  state.omittedTotal++;
+  tile.classList.add("gone");
+  $("cc-feedback").textContent = " ";
+  $("cc-feedback").className = "cc-feedback";
+
+  if (state.omittedTotal === state.puzzle.totalOmit) finishWord();
+});
+
+function finishWord() {
+  const pair = current();
+  const p = state.puzzle;
+
+  // Reveal the surviving letters, then drop the apostrophe into its slot.
+  const tiles = [...$("cc-tiles").querySelectorAll(".cc-tile")];
+  const surviving = tiles.filter(t => !t.classList.contains("gone"));
+  surviving.forEach(t => t.classList.add("done"));
+  const insertAt = apostropheInsertIndex(p, surviving);
+  const ap = document.createElement("button");
+  ap.className = "cc-tile apostrophe";
+  ap.textContent = "'";
+  surviving[insertAt].parentNode.insertBefore(ap, surviving[insertAt] || null);
+
+  const clean = state.taps === 0;
+  if (clean) state.clean++;
+  state.score += clean ? 10 : 5;
+  updateHud();
+
+  $("cc-words").innerHTML = `<span class="cc-word-pair">${escapeHtml(pair.full)}<span class="plus">➜</span><span style="color:var(--green)">${escapeHtml(pair.short)}</span></span>`;
+  $("cc-feedback").textContent = clean
+    ? `✅ ${pair.short} — the apostrophe shows the missing letters!`
+    : `✅ ${pair.short} — got there!`;
+  $("cc-feedback").className = "cc-feedback good";
+  sayPair(pair.full, pair.short);
+
+  setTimeout(nextWord, 2100);
+}
+
+/* Where among the surviving tiles does the apostrophe go? The contraction
+   string answers it directly: the apostrophe follows the first N surviving
+   letters, where N is how many letters come before the ' in `short`. */
+function apostropheInsertIndex(p, surviving) {
+  const n = p.apostropheAfter;
+  if (n >= surviving.length) return surviving.length; // append at the end
+  return n;
+}
+
+function nextWord() {
+  if (!state || state.ending) return;
+  state.idx++;
+  if (state.idx >= state.order.length) { endRound(); return; }
+  showWord();
+}
+
+function endRound() {
+  if (!state || state.ending) return;
+  state.ending = true;
+
+  $("end-score").textContent = state.score;
+  $("end-clean").textContent = `${state.clean} / ${state.order.length}`;
+  $("end-total").textContent = state.order.length;
+
+  const scoreEntry = {
+    id: playerId, name: playerName, score: state.score,
+    accuracy: state.order.length ? Math.round((state.clean / state.order.length) * 100) : 0,
+    bestStreak: 0, date: new Date().toISOString().slice(0, 10)
+  };
+  saveScore(scoreEntry);
+  syncSaveScore(scoreEntry);
+  renderLeaderboard("leaderboard-list-end", playerId);
+
+  goTo("end");
+}
+
+/* ── Optional backend sync — see ../backend/. No-ops until
+   BACKEND_URL is set, so the game works standalone until it's deployed. ── */
+function syncSaveScore(entry) {
+  if (!BACKEND_URL || !entry.id) return;
+  fetch(BACKEND_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      pupilId: entry.id, pupilName: entry.name, game: GAME_ID, ruleId: "contractions",
+      score: entry.score, accuracy: entry.accuracy, bestStreak: entry.bestStreak
+    }),
+    headers: { "Content-Type": "text/plain" }
+  }).catch(e => console.warn("Score sync failed, kept locally only:", e));
+}
+
+async function fetchRemoteLeaderboard() {
+  if (!BACKEND_URL) return null;
+  try {
+    const url = `${BACKEND_URL}?action=leaderboard&game=${encodeURIComponent(GAME_ID)}&rule=contractions&top=10`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    return (data.leaderboard || []).map(r => ({ id: r.pupilId, name: r.pupilName, score: r.score }));
+  } catch (e) {
+    console.warn("Remote leaderboard fetch failed, showing local scores:", e);
+    return null;
+  }
+}
+
+/* ── Entry point ── */
+(async function boot() {
+  const live = await spFetchLiveRoster(BACKEND_URL);
+  if (live) {
+    if (live.roster && live.roster.length) ROSTER = live.roster;
+    if (live.currentWeek) CURRENT_WEEK = live.currentWeek;
+  }
+
+  goTo("start");
+  initAccessScreen();
+})();
+</script>
+</body>
+</html>
