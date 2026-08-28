@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Word Chomper — Wallscourt Farm Academy</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🟡</text></svg>">
+<style>
+  :root{
+    --blue:#1798d3; --blue-dark:#0f6f9e; --navy:#12263a;
+    --green:#2fbf71; --red:#e5484d; --amber:#f5a524;
+    --bg1:#eaf6fd; --bg2:#dcf0fb;
+    --card:#ffffff; --muted:#5b7a8a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;
+    background:linear-gradient(160deg,var(--bg1),var(--bg2));
+    color:var(--navy);
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100%;
+    overflow-x:hidden;
+    touch-action:manipulation;
+    user-select:none;
+    -webkit-user-select:none;
+  }
+  body.playing{ overflow:hidden; }
+
+  @keyframes shakeAnim{ 20%{transform:translateX(-7px);} 50%{transform:translateX(7px);} 80%{transform:translateX(-3px);} 100%{transform:translateX(0);} }
+  @keyframes popIn{ 0%{transform:scale(.4);opacity:0;} 70%{transform:scale(1.15);} 100%{transform:scale(1);opacity:1;} }
+  @keyframes floatUp{ 0%{transform:translateY(0);opacity:1;} 100%{transform:translateY(-26px);opacity:0;} }
+
+  .screen{
+    width:100%; max-width:640px; margin:0 auto;
+    padding:20px 20px 32px;
+    display:none;
+  }
+  .screen.active{display:block;}
+
+  .brand{ text-align:center; padding-top:18px; }
+  .brand .kicker{
+    font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+    color:var(--blue-dark); opacity:.75;
+  }
+  .brand h1{ margin:4px 0 2px; font-size:clamp(28px,7vw,40px); font-weight:800; }
+
+  .panel{
+    background:var(--card); border-radius:18px; padding:22px 22px 26px;
+    box-shadow:0 10px 30px rgba(18,38,58,.10);
+    margin-top:16px;
+  }
+
+  .rule-box{
+    background:#fff7e6; border:1.5px solid #f3d18a; border-radius:14px;
+    padding:14px 16px; margin-bottom:18px;
+  }
+  .rule-box .rule-label{
+    font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1px;
+    color:#a06a00; margin-bottom:4px;
+  }
+  .rule-box p{ margin:0; font-size:14.5px; line-height:1.5; }
+
+  h2{ font-size:13px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin:20px 0 8px; }
+
+  /* ── Word list picker ── */
+  .list-picker{ display:flex; flex-direction:column; gap:10px; }
+  .list-opt{
+    display:flex; align-items:center; gap:12px;
+    border:2px solid #d7e9f4; border-radius:14px; padding:12px 14px;
+    cursor:pointer; background:#fff; transition:border-color .15s, background .15s;
+  }
+  .list-opt .li-icon{ font-size:26px; }
+  .list-opt .li-title{ font-weight:700; font-size:16px; }
+  .list-opt .li-sub{ font-size:12.5px; color:var(--muted); }
+  .list-opt input{ display:none; }
+  .list-opt.selected{ border-color:var(--blue); background:#eaf6fd; }
+  .list-opt.selected::after{ content:"✓"; margin-left:auto; color:var(--blue); font-weight:800; font-size:20px; }
+
+  .btn{
+    display:block; width:100%;
+    background:var(--blue); color:#fff; border:none; border-radius:14px;
+    font-size:18px; font-weight:800; padding:15px 18px;
+    cursor:pointer; margin-top:16px; font-family:inherit;
+  }
+  .btn:active{ transform:scale(.98); }
+  .btn.green{ background:var(--green); }
+  .btn.ghost-btn{
+    background:none; color:var(--blue-dark); border:2px solid #c5e2f2; font-size:14.5px;
+    padding:11px; margin-top:10px; font-weight:700;
+  }
+
+  input.code-input{
+    width:100%; font-size:26px; text-align:center; letter-spacing:8px; text-transform:uppercase;
+    padding:12px; border:2px solid #d7e9f4; border-radius:14px; font-family:inherit; font-weight:700;
+    color:var(--navy); background:#fff;
+  }
+  input.code-input:focus{ outline:none; border-color:var(--blue); }
+
+  .error-msg{ color:var(--red); font-size:14px; text-align:center; min-height:20px; margin-top:8px; font-weight:600; }
+
+  /* ── Leaderboard ── */
+  .lb-row{
+    display:flex; align-items:center; gap:10px;
+    padding:8px 4px; border-bottom:1px solid #eef4f8; font-size:15px;
+  }
+  .lb-row:last-child{ border-bottom:none; }
+  .lb-row .lb-pos{ width:26px; font-weight:800; color:var(--muted); }
+  .lb-row .lb-name{ flex:1; font-weight:600; }
+  .lb-row .lb-score{ font-weight:800; color:var(--blue-dark); }
+  .lb-row.me{ background:#eaf6fd; border-radius:10px; padding-left:10px; padding-right:10px; }
+  .lb-empty{ color:var(--muted); font-size:14px; text-align:center; padding:10px 0; }
+
+  /* ── Game screen ── */
+  .hud{
+    display:flex; align-items:center; justify-content:space-between;
+    max-width:560px; width:100%; margin:10px auto 6px; padding:0 4px;
+    font-weight:800; font-size:16px;
+  }
+  .hud .lives{ letter-spacing:2px; font-size:15px; }
+  .hud .score{ color:var(--blue-dark); }
+  .icon-btn{
+    background:#fff; border:2px solid #d7e9f4; border-radius:10px;
+    font-size:16px; padding:4px 10px; cursor:pointer; font-family:inherit;
+  }
+  .icon-btn:active{ transform:scale(.94); }
+
+  .word-tiles{
+    display:flex; justify-content:center; gap:5px; flex-wrap:wrap;
+    max-width:560px; margin:0 auto 8px; min-height:44px;
+  }
+  .wt{
+    width:34px; height:40px; border-radius:9px;
+    background:#fff; border:2px solid #c9e4f3;
+    display:flex; align-items:center; justify-content:center;
+    font-size:23px; font-weight:800; text-transform:uppercase;
+    color:var(--navy);
+  }
+  .wt.done{ background:var(--green); border-color:var(--green); color:#fff; animation:popIn .25s ease; }
+  .wt.next{ border-color:var(--amber); box-shadow:0 0 0 3px #fdf0d3; }
+
+  .maze-wrap{ position:relative; max-width:560px; margin:0 auto; }
+  #wc-canvas{ display:block; width:100%; border-radius:14px; touch-action:none; }
+  .maze-wrap.shake #wc-canvas{ animation:shakeAnim .35s ease; }
+
+  #wc-banner{
+    position:absolute; inset:0; display:none;
+    align-items:center; justify-content:center; pointer-events:none;
+  }
+  #wc-banner.show{ display:flex; }
+  #wc-banner .bn{
+    background:rgba(18,38,58,.88); color:#fff; border-radius:16px;
+    padding:16px 26px; font-size:clamp(20px,5.5vw,30px); font-weight:800;
+    text-align:center; max-width:86%; animation:popIn .25s ease;
+  }
+  #wc-banner .bn .sub{ display:block; font-size:14px; font-weight:600; opacity:.85; margin-top:4px; }
+
+  .swipe-hint{
+    text-align:center; color:var(--muted); font-size:13px; margin-top:8px; font-weight:600;
+  }
+
+  /* ── End screen ── */
+  .end-title{ text-align:center; font-size:clamp(26px,7vw,36px); font-weight:800; margin:8px 0 2px; }
+  .end-score{ text-align:center; font-size:19px; font-weight:800; color:var(--blue-dark); margin-bottom:4px; }
+  .stars{ text-align:center; font-size:38px; letter-spacing:6px; margin:6px 0 2px; }
+  .words-done{ display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:12px; }
+  .wd-chip{
+    background:#eaf6fd; color:var(--blue-dark); border-radius:999px;
+    padding:6px 14px; font-weight:700; font-size:15px;
+  }
+  .version{
+    text-align:center; color:var(--muted); font-size:11.5px; margin-top:22px; opacity:.7;
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════ SETUP ══════════ -->
+<div class="screen active" id="sc-setup">
+  <div class="brand">
+    <div class="kicker">Wallscourt Farm Academy</div>
+    <h1>🟡 Word Chomper</h1>
+  </div>
+
+  <!-- Learner gate -->
+  <div class="panel" id="gate-code">
+    <div class="rule-box">
+      <div class="rule-label">Who's playing?</div>
+      <p>Type the 4-letter code from your game card.</p>
+    </div>
+    <input class="code-input" id="code-input" maxlength="4" autocapitalize="characters" autocomplete="off" inputmode="text" placeholder="AB12">
+    <div class="error-msg" id="code-error"></div>
+    <button class="btn" id="code-go">Let's go!</button>
+    <button class="btn ghost-btn" id="guest-go">Play without a card 👻</button>
+  </div>
+
+  <div class="panel" id="gate-pin" style="display:none;">
+    <div class="rule-box">
+      <div class="rule-label">Hi <span id="pin-name"></span>!</div>
+      <p>Type your 4-number spelling PIN.</p>
+    </div>
+    <input class="code-input" id="pin-input" maxlength="4" inputmode="numeric" autocomplete="off" placeholder="••••">
+    <div class="error-msg" id="pin-error"></div>
+    <button class="btn" id="pin-go">That's me!</button>
+  </div>
+
+  <!-- Word list + start -->
+  <div class="panel" id="setup-main" style="display:none;">
+    <div class="rule-box">
+      <div class="rule-label">How to play</div>
+      <p>Chomp the letters to spell the word — in the right order! Watch out for the ghosts 👻. Chomping the wrong letter wakes them up!</p>
+    </div>
+
+    <h2>Choose your words</h2>
+    <div class="list-picker" id="list-picker">
+      <label class="list-opt" data-list="y1">
+        <span class="li-icon">🌱</span>
+        <span><span class="li-title">Year 1 words</span><br><span class="li-sub">Common exception words</span></span>
+        <input type="radio" name="wlist" value="y1">
+      </label>
+      <label class="list-opt" data-list="y2">
+        <span class="li-icon">🌱🌱</span>
+        <span><span class="li-title">Year 2 words</span><br><span class="li-sub">Common exception words</span></span>
+        <input type="radio" name="wlist" value="y2">
+      </label>
+      <label class="list-opt" data-list="y34">
+        <span class="li-icon">🌳</span>
+        <span><span class="li-title">Years 3 &amp; 4 (LKS2)</span><br><span class="li-sub">Statutory spelling list</span></span>
+        <input type="radio" name="wlist" value="y34">
+      </label>
+      <label class="list-opt" data-list="y56">
+        <span class="li-icon">🏔️</span>
+        <span><span class="li-title">Years 5 &amp; 6 (UKS2)</span><br><span class="li-sub">Statutory spelling list</span></span>
+        <input type="radio" name="wlist" value="y56">
+      </label>
+    </div>
+
+    <button class="btn green" id="start-btn">Start chomping! 🟡</button>
+    <button class="btn ghost-btn" id="signout-btn" style="display:none;">Not me — change player</button>
+  </div>
+
+  <h2>Top chompers</h2>
+  <div class="panel" id="lb-setup"><div id="leaderboard-list"></div></div>
+  <div class="version">Word Chomper 28.08.26b · Wallscourt Farm Academy</div>
+</div>
+
+<!-- ══════════ GAME ══════════ -->
+<div class="screen" id="sc-game">
+  <div class="hud">
+    <span class="lives" id="hud-lives">🟡🟡🟡</span>
+    <span class="score" id="hud-score">0</span>
+    <button class="icon-btn" id="mute-btn">🔊</button>
+  </div>
+  <div class="word-tiles" id="word-tiles"></div>
+  <div class="maze-wrap" id="maze-wrap">
+    <canvas id="wc-canvas"></canvas>
+    <div id="wc-banner"><div class="bn" id="banner-text"></div></div>
+  </div>
+  <div class="swipe-hint" id="swipe-hint">Swipe or use ⬆️⬇️⬅️➡️ to move</div>
+</div>
+
+<!-- ══════════ END ══════════ -->
+<div class="screen" id="sc-over">
+  <div class="brand"><div class="kicker">Wallscourt Farm Academy</div></div>
+  <div class="end-score" id="over-title">Great chomping!</div>
+  <div class="stars" id="over-stars"></div>
+  <div class="end-score" id="over-score"></div>
+  <div class="panel">
+    <h2 style="margin-top:0;">Words you spelled</h2>
+    <div class="words-done" id="words-done"></div>
+  </div>
+  <h2>Top chompers</h2>
+  <div class="panel" id="lb-over"><div id="leaderboard-over"></div></div>
+  <button class="btn green" id="again-btn">Play again 🟡</button>
+  <button class="btn ghost-btn" id="home-btn">Choose words / players</button>
+  <div class="version">Word Chomper 28.08.26b · Wallscourt Farm Academy</div>
+</div>
+
+<script src="../spelling-pool.js"></script>
+<script src="../roster.js"></script>
+<script>
+"use strict";
+
+/* ════════════════════════════════════════════════════════════════
+   Word Chomper — a Pacman-style maze for practising spelling.
+
+   A target word is shown at the top with blanks. Letter pellets are
+   scattered through the maze: chomp the NEXT letter of the word to
+   fill the next blank; chomping a wrong letter buzzes and winds the
+   ghosts up for a few seconds. Spell the whole word to bank it and
+   move on. Eight words wins the round.
+
+   Ghosts chase by BFS through the maze; two ghosts, the second joins
+   after a few words. Speeds always stay just below the chomper's, so
+   a careful player can always escape.
+
+   ROSTER / BACKEND_URL come from ../roster.js (learner cards + PIN,
+   same as the other spelling games). Scores live in localStorage.
+   ════════════════════════════════════════════════════════════════ */
+
+const $ = id => document.getElementById(id);
+
+/* ── Word lists — National Curriculum statutory spellings ── */
+const WORD_LISTS = {
+  y1: ["the","do","to","today","of","said","says","are","were","was","is","his","has","you","your","they","be","he","she","me","we","no","go","so","by","my","here","there","where","love","come","some","one","once","ask","friend","school","put","push","pull","full","house","our"],
+  y2: ["door","floor","poor","because","find","kind","mind","behind","child","children","wild","climb","most","only","both","old","cold","gold","hold","told","every","everybody","even","great","break","steak","pretty","beautiful","after","fast","last","past","father","class","grass","pass","plant","path","bath","hour","move","prove","improve","sure","sugar","eye","could","should","would","who","whole","any","many","clothes","busy","people","water","again","half","money","parents","Christmas"],
+  y34: ["accident","actually","address","answer","appear","arrive","believe","bicycle","breath","breathe","build","business","calendar","caught","centre","century","certain","circle","complete","consider","continue","decide","describe","different","difficult","disappear","early","earth","eight","enough","exercise","experience","experiment","extreme","famous","favourite","February","forward","fruit","grammar","group","guard","guide","happen","health","heart","height","history","imagine","increase","important","interest","island","knowledge","learn","length","library","material","medicine","mention","minute","natural","naughty","notice","occasion","often","opposite","ordinary","particular","perhaps","popular","position","possess","possession","possible","potatoes","pressure","probably","promise","purpose","quarter","question","recent","regular","reign","remember","sentence","separate","special","straight","strange","strength","suppose","surprise","therefore","thought","through","various","weight","woman","women","young"],
+  y56: ["accompany","achieve","aggressive","amateur","ancient","apparent","available","average","awkward","bargain","bruise","category","cemetery","committee","community","conscience","conscious","correspond","criticise","curiosity","definite","desperate","determined","develop","dictionary","disastrous","embarrass","equipped","especially","exaggerate","excellent","existence","familiar","foreign","forty","frequently","government","guarantee","harass","hindrance","identity","immediate","individual","interfere","interrupt","language","leisure","lightning","marvellous","muscle","necessary","neighbour","nuisance","occupy","occur","occurrence","parliament","persuade","physical","prejudice","privilege","profession","programme","queue","recognise","recommend","relevant","religious","restaurant","rhyme","rhythm","sacrifice","secretary","shoulder","signature","sincere","sincerely","soldier","stomach","sufficient","suggest","symbol","system","thorough","twelfth","tyranny","vegetable","vehicle"]
+};
+const LIST_META = {
+  y1:  { label: "Year 1 words",          icon: "🌱" },
+  y2:  { label: "Year 2 words",          icon: "🌱🌱" },
+  y34: { label: "Year 3 & 4 words (LKS2)", icon: "🌳" },
+  y56: { label: "Year 5 & 6 words (UKS2)", icon: "🏔️" }
+};
+/* Ghost pace per list — younger children get a gentler chase. */
+const GHOST_PACE = { y1: .7, y2: .85, y34: 1, y56: 1.1 };
+const MIN_LEN = 3, MAX_LEN = 10;   // keep maze rounds brisk
+const WORDS_PER_ROUND = 8;
+
+/* ── The maze — 15×13, symmetric, tunnel row in the middle ── */
+const MAZE = [
+  "###############",
+  "#......#......#",
+  "#.##.#.#.#.##.#",
+  "#.............#",
+  "#.##.#.#.#.##.#",
+  "#..#.......#..#",
+  "##.#.#####.#.##",
+  "...#.#####.#...",
+  "##.#.#####.#.##",
+  "#..#.......#..#",
+  "#.##.#.#.#.##.#",
+  "#......#......#",
+  "###############"
+];
+const ROWS = MAZE.length, COLS = MAZE[0].length;
+const TUNNEL_ROW = 7;
+const PLAYER_START = { r: 11, c: 4 };
+const GHOST_STARTS = [ { r: 3, c: 5 }, { r: 3, c: 9 } ];
+
+const isWall = (r, c) => {
+  if (c < 0 || c >= COLS) return r !== TUNNEL_ROW;   // tunnel wrap
+  if (r < 0 || r >= ROWS) return true;
+  return MAZE[r][c] === "#";
+};
+const openNeighbours = (r, c) =>
+  [[1,0],[-1,0],[0,1],[0,-1]]
+    .map(([dr,dc]) => [r+dr, c+dc])
+    .filter(([nr,nc]) => !isWall(nr, nc));
+
+/* BFS distance map from a target cell — ghosts consult this on arrival. */
+function distMap(tr, tc) {
+  const d = Array.from({length: ROWS}, () => Array(COLS).fill(Infinity));
+  if (isWall(tr, tc)) return d;
+  d[tr][tc] = 0;
+  const q = [[tr, tc]];
+  for (let i = 0; i < q.length; i++) {
+    const [r, c] = q[i];
+    for (const [nr, nc] of openNeighbours(r, c)) {
+      if (d[nr][nc] === Infinity) { d[nr][nc] = d[r][c] + 1; q.push([nr, nc]); }
+    }
+  }
+  return d;
+}
+
+/* ── State ── */
+let player = null, ghosts = [], dots = new Set();
+let currentList = "y34", wordBag = [], currentWord = "", nextIndex = 0;
+let wordsDone = [], score = 0, lives = 3, wordNumber = 0;
+let running = false, paused = false, lastTs = 0;
+let playerName = "Guest", playerId = null, pendingLearner = null;
+let invincibleUntil = 0, boostUntil = 0, wakaFlip = false;
+let animId = null;
+
+const LEADERBOARD_KEY = list => "wfa-word-chomper-lb-" + list;
+const MUTE_KEY = "wfa-word-chomper-muted";
+
+/* ── Sound — tiny WebAudio beeps, no assets ── */
+let audioCtx = null;
+function beep(freq, dur, type, vol, when = 0) {
+  if (localStorage.getItem(MUTE_KEY) === "1") return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type || "square"; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol || .08, audioCtx.currentTime + when);
+    g.gain.exponentialRampToValueAtTime(.001, audioCtx.currentTime + when + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(audioCtx.currentTime + when); o.stop(audioCtx.currentTime + when + dur);
+  } catch (e) { /* audio is a nicety, never a crash */ }
+}
+const sndWaka  = () => { wakaFlip = !wakaFlip; beep(wakaFlip ? 240 : 180, .07, "square", .05); };
+const sndDing  = () => { beep(660, .12, "sine", .12); beep(880, .18, "sine", .12, .09); };
+const sndWord  = () => { [523,659,784,1047].forEach((f,i) => beep(f, .16, "triangle", .11, i*.11)); };
+const sndBuzz  = () => { beep(140, .22, "sawtooth", .1); };
+const sndCaught= () => { beep(300, .3, "sawtooth", .12); beep(150, .45, "sawtooth", .12, .18); };
+const sndWin   = () => { [523,659,784,1047,784,1047,1319].forEach((f,i) => beep(f, .18, "triangle", .12, i*.13)); };
+
+function speakWord(word) {
+  if (localStorage.getItem(MUTE_KEY) === "1" || !("speechSynthesis" in window)) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(word);
+    u.lang = "en-GB"; u.rate = .8;
+    speechSynthesis.speak(u);
+  } catch (e) { /* speech is a nicety too */ }
+}
+
+/* ══════════ Screens & learner gate ══════════ */
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  $(id).classList.add("active");
+  document.body.classList.toggle("playing", id === "sc-game");
+  window.scrollTo(0, 0);
+}
+
+function findLearner(code) {
+  return spFindLearnerOrTeacher(typeof ROSTER !== "undefined" ? ROSTER : [], code);
+}
+
+function beginAs(learner) {
+  playerName = learner.name;
+  playerId = learner.id;
+  $("signout-btn").style.display = "block";
+  const y = learner.year || "";
+  defaultListFor(y);
+  $("setup-main").style.display = "block";
+  $("gate-code").style.display = "none";
+  $("gate-pin").style.display = "none";
+  renderLeaderboard("leaderboard-list", playerId);
+}
+
+function defaultListFor(year) {
+  const map = { "Y1": "y1", "Y2": "y2", "Y3": "y34", "Y4": "y34", "Y5": "y56", "Y6": "y56" };
+  selectList(map[year] || "y34");
+}
+
+function selectList(id) {
+  currentList = id;
+  document.querySelectorAll("#list-picker .list-opt").forEach(o =>
+    o.classList.toggle("selected", o.dataset.list === id));
+}
+
+$("code-go").addEventListener("click", tryCode);
+$("code-input").addEventListener("keydown", e => { if (e.key === "Enter") tryCode(); });
+function tryCode() {
+  const code = $("code-input").value.trim().toUpperCase();
+  const learner = code ? findLearner(code) : null;
+  if (!learner) {
+    $("code-error").textContent = "Hmm, we can't find that code — check your card!";
+    return;
+  }
+  $("code-error").textContent = "";
+  pendingLearner = learner;
+  $("pin-name").textContent = learner.name;
+  $("gate-code").style.display = "none";
+  $("gate-pin").style.display = "block";
+  $("pin-input").value = "";
+  $("pin-input").focus();
+}
+
+$("pin-go").addEventListener("click", tryPin);
+$("pin-input").addEventListener("keydown", e => { if (e.key === "Enter") tryPin(); });
+function tryPin() {
+  if (!pendingLearner) return;
+  if ($("pin-input").value.trim() !== String(pendingLearner.pin)) {
+    $("pin-error").textContent = "Oops — that's not your PIN. Try again!";
+    $("pin-input").value = "";
+    return;
+  }
+  $("pin-error").textContent = "";
+  spSetVerifiedLearner(pendingLearner.id);
+  beginAs(pendingLearner);
+}
+
+$("guest-go").addEventListener("click", () => {
+  playerName = "Guest"; playerId = null;
+  $("signout-btn").style.display = "none";
+  selectList("y34");
+  $("setup-main").style.display = "block";
+  $("gate-code").style.display = "none";
+  $("gate-pin").style.display = "none";
+  renderLeaderboard("leaderboard-list", null);
+});
+
+$("signout-btn").addEventListener("click", () => {
+  spClearVerifiedLearner();
+  playerId = null; playerName = "Guest";
+  $("setup-main").style.display = "none";
+  $("gate-code").style.display = "block";
+  $("code-input").value = "";
+});
+
+document.querySelectorAll("#list-picker .list-opt").forEach(o =>
+  o.addEventListener("click", () => selectList(o.dataset.list)));
+
+/* ── Leaderboard (localStorage stand-in for the shared backend) ── */
+function loadBoard(list) {
+  try { return JSON.parse(localStorage.getItem(LEADERBOARD_KEY(list)) || "[]"); }
+  catch (e) { return []; }
+}
+function saveScore(list, name, sc, words) {
+  if (sc <= 0) return;
+  const board = loadBoard(list);
+  board.push({ name, id: playerId, score: sc, words, date: new Date().toISOString() });
+  board.sort((a, b) => b.score - a.score);
+  localStorage.setItem(LEADERBOARD_KEY(list), JSON.stringify(board.slice(0, 10)));
+}
+function renderLeaderboard(elId, highlightId) {
+  const board = loadBoard(currentList);
+  const el = $(elId);
+  if (!board.length) { el.innerHTML = '<div class="lb-empty">No scores yet — be the first chomper!</div>'; return; }
+  el.innerHTML = board.map((e, i) => `
+    <div class="lb-row ${e.id === highlightId ? "me" : ""}">
+      <span class="lb-pos">${["🥇","🥈","🥉"][i] || (i+1)}</span>
+      <span class="lb-name">${e.name}</span>
+      <span class="lb-score">${e.score}</span>
+    </div>`).join("");
+}
+
+/* ══════════ Game engine ══════════ */
+const canvas = $("wc-canvas"), ctx = canvas.getContext("2d");
+let cellPx = 32;
+
+function sizeCanvas() {
+  const wrapW = Math.min($("maze-wrap").clientWidth || 560, 560);
+  cellPx = Math.floor(wrapW / COLS);
+  const w = cellPx * COLS, h = cellPx * ROWS;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  canvas.style.width = w + "px"; canvas.style.height = h + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function makeEntity(r, c, speed) {
+  return { r, c, tr: r, tc: c, t: 0, dir: [0, 0], speed, moving: false };
+}
+
+function startGame() {
+  wordBag = shuffle(WORD_LISTS[currentList].filter(w => w.length >= MIN_LEN && w.length <= MAX_LEN));
+  wordsDone = []; score = 0; lives = 3; wordNumber = 0;
+  player = makeEntity(PLAYER_START.r, PLAYER_START.c, 4.4);
+  player.dir = [0, 0];
+  queuedDir = null;
+  showScreen("sc-game");
+  sizeCanvas();   // canvas is invisible until its screen is active
+  nextWord();
+  running = true; paused = false; lastTs = 0;
+  cancelAnimationFrame(animId);
+  animId = requestAnimationFrame(loop);
+}
+
+function nextWord() {
+  if (wordNumber >= WORDS_PER_ROUND || !wordBag.length) { endGame(true); return; }
+  currentWord = wordBag.pop();
+  nextIndex = 0; wordNumber++;
+  ghosts = GHOST_STARTS.map((s, i) => ({
+    r: s.r, c: s.c, tr: s.r, tc: s.c, t: 0, dir: [0, 0], moving: false, speed: 2,
+    pr: s.r, pc: s.c, i,
+    active: i === 0 || wordNumber > 2   // second ghost joins after a few words
+  }));
+  scatterDots();
+  scatterLetters();
+  player.r = PLAYER_START.r; player.c = PLAYER_START.c;
+  player.tr = player.r; player.tc = player.c; player.t = 0; player.dir = [0,0]; player.moving = false;
+  invincibleUntil = performance.now() + 1500;
+  boostUntil = 0;
+  renderWordTiles();
+  updateHud();
+  banner(`${LIST_META[currentList].icon} Word ${wordNumber} of ${WORDS_PER_ROUND}`, currentWord, 1600);
+  speakWord(currentWord);
+}
+
+/* Small dots on every open cell; letter pellets replace some of them. */
+function scatterDots() {
+  dots = new Set();
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (!isWall(r, c)) dots.add(r + "," + c);
+}
+
+function shuffle(a) {
+  const arr = a.slice();
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/* Letter pellets: a few of the currently-needed letter plus decoys
+   drawn from the word's own letters and a few lookalikes. */
+let pellets = [];
+function scatterLetters() {
+  pellets = [];
+  const used = new Set([cellKey(PLAYER_START)]);
+  ghosts.forEach(g => used.add(cellKey(g)));
+  const spots = shuffle(
+    Array.from({length: ROWS}, (_, r) => Array.from({length: COLS}, (_, c) => [r, c]))
+      .flat()
+      .filter(([r, c]) => !isWall(r, c) && !used.has(r + "," + c) && farFromPlayer(r, c))
+  );
+  const chosen = spots.slice(0, 12);
+  const needed = currentWord[nextIndex];
+  const decoyPool = shuffle(
+    currentWord.slice(nextIndex + 1).split("")
+      .concat(shuffle("aeioursnmlcdt".split("")).slice(0, 4))
+  );
+  chosen.forEach(([r, c], i) => {
+    const letter = i < 3 ? needed : decoyPool[i % decoyPool.length];
+    pellets.push({ r, c, letter });
+    dots.delete(r + "," + c);
+  });
+}
+function farFromPlayer(r, c) {
+  return Math.abs(r - PLAYER_START.r) + Math.abs(c - PLAYER_START.c) >= 4;
+}
+function cellKey(e) { return e.r + "," + e.c; }
+
+/* Keep at least two pellets of the letter the chomper needs next. */
+function topUpNeededLetter() {
+  const needed = currentWord[nextIndex];
+  if (!needed) return;
+  let count = pellets.filter(p => p.letter === needed).length;
+  while (count < 2) {
+    const spot = randomFreeCell();
+    if (!spot) break;
+    if (dots.has(cellKey(spot))) dots.delete(cellKey(spot));
+    pellets.push({ r: spot.r, c: spot.c, letter: needed });
+    count++;
+  }
+}
+function randomFreeCell() {
+  for (let tries = 0; tries < 60; tries++) {
+    const r = Math.floor(Math.random() * ROWS), c = Math.floor(Math.random() * COLS);
+    if (isWall(r, c)) continue;
+    const key = r + "," + c;
+    if (pellets.some(p => p.r === r && p.c === c)) continue;
+    if (r === player.r && c === player.c) continue;
+    if (ghosts.some(g => g.r === r && g.c === c)) continue;
+    if (!farFromPlayer(r, c)) continue;
+    return { r, c };
+  }
+  return null;
+}
+
+/* ── Word tiles (the blanks at the top) ── */
+function renderWordTiles() {
+  $("word-tiles").innerHTML = currentWord.split("").map((ch, i) => {
+    const done = i < nextIndex;
+    const next = i === nextIndex;
+    return `<div class="wt ${done ? "done" : ""} ${next ? "next" : ""}">${done ? ch : ""}</div>`;
+  }).join("");
+}
+
+function updateHud() {
+  $("hud-score").textContent = score;
+  $("hud-lives").textContent = "🟡".repeat(lives) || "—";
+}
+
+/* ── Banner overlay ── */
+let bannerTimer = null;
+function banner(main, sub, ms) {
+  $("banner-text").innerHTML = main + (sub ? `<span class="sub">${sub}</span>` : "");
+  $("wc-banner").classList.add("show");
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(() => $("wc-banner").classList.remove("show"), ms || 1400);
+}
+
+/* ── Movement ── */
+let queuedDir = null;
+
+function trySetDir(d) {
+  queuedDir = d;
+  // instant reverse mid-move feels right in a chomping game
+  if (player.moving && d[0] === -player.dir[0] && d[1] === -player.dir[1]) {
+    const r = player.r, c = player.c;
+    player.r = player.tr; player.c = player.tc;
+    player.tr = r; player.tc = c;
+    player.t = 1 - player.t;
+    player.dir = d;
+  }
+}
+
+function stepPlayer(dt) {
+  const e = player;
+  if (!e.moving) {
+    const d = queuedDir || e.dir;
+    if (d && !isWall(e.r + d[0], e.c + d[1])) {
+      e.dir = d; e.tr = e.r + d[0]; e.tc = e.c + d[1]; e.t = 0; e.moving = true;
+    } else { e.t = 0; return; }
+  }
+  e.t += e.speed * dt;
+  while (e.t >= 1) {
+    e.t -= 1;
+    e.r = e.tr; e.c = wrapC(e.tc);
+    onCellReached(e);
+    const d = queuedDir || e.dir;
+    if (d && !isWall(e.r + d[0], e.c + d[1])) { e.dir = d; e.tr = e.r + d[0]; e.tc = e.c + d[1]; }
+    else if (!isWall(e.r + e.dir[0], e.c + e.dir[1])) { e.tr = e.r + e.dir[0]; e.tc = e.c + e.dir[1]; }
+    else { e.moving = false; e.t = 0; return; }
+  }
+}
+function wrapC(c) { return (c + COLS) % COLS; }
+
+function onCellReached(e) {
+  if (e === player) eatAt(e.r, e.c);
+}
+
+function stepGhost(g, dt) {
+  if (!g.active) return;
+  if (!g.moving) { pickGhostDir(g); if (!g.moving) return; }
+  g.t += g.speed * dt;
+  while (g.t >= 1) {
+    g.t -= 1;
+    g.r = g.tr; g.c = wrapC(g.tc);
+    pickGhostDir(g);
+    if (!g.moving) return;
+  }
+}
+
+function pickGhostDir(g) {
+  const target = g.i === 0
+    ? { r: player.r, c: player.c }
+    : { r: player.r + player.dir[0] * 3, c: player.c + player.dir[1] * 3 };
+  const tc = Math.max(0, Math.min(COLS - 1, target.c));   // ambush target clamped into the maze
+  const d = distMap(target.r, tc);
+  const opts = openNeighbours(g.r, g.c)
+    .filter(([nr, nc]) => !(nr === g.pr && nc === g.pc))
+    .map(([nr, nc]) => [nr, nc, d[nr][wrapC(nc)] ?? 999]);   // wrapC: tunnel exit scores via the far side
+  if (!opts.length) {
+    const back = openNeighbours(g.r, g.c);
+    if (!back.length) { g.moving = false; return; }
+    chooseGhostMove(g, back[Math.floor(Math.random() * back.length)]);
+    return;
+  }
+  let pick;
+  if (Math.random() < .2) pick = opts[Math.floor(Math.random() * opts.length)];
+  else pick = opts.reduce((a, b) => (b[2] < a[2] ? b : a));
+  chooseGhostMove(g, [pick[0], pick[1]]);
+}
+function chooseGhostMove(g, [nr, nc]) {
+  g.pr = g.r; g.pc = g.c;
+  let dc = nc - g.c;
+  if (dc > 1) dc = -1;          // wrapped through the tunnel
+  if (dc < -1) dc = 1;
+  g.dir = [nr - g.r, dc];
+  g.tr = nr; g.tc = nc;
+  g.t = 0; g.moving = true;
+}
+
+/* ── Eating ── */
+function eatAt(r, c) {
+  const key = r + "," + c;
+  if (dots.has(key)) {
+    dots.delete(key);
+    score += 5;
+    sndWaka();
+    updateHud();
+  }
+  const pi = pellets.findIndex(p => p.r === r && p.c === c);
+  if (pi === -1) return;
+  const p = pellets[pi];
+  const needed = currentWord[nextIndex];
+  if (needed && p.letter.toLowerCase() === needed.toLowerCase()) {
+    pellets.splice(pi, 1);
+    nextIndex++;
+    score += 50;
+    sndDing();
+    renderWordTiles();
+    updateHud();
+    if (nextIndex >= currentWord.length) wordComplete();
+    else topUpNeededLetter();
+  } else {
+    // wrong letter — buzz, shake, and the ghosts wake up
+    pellets.splice(pi, 1);
+    score = Math.max(0, score - 5);
+    sndBuzz();
+    boostUntil = performance.now() + 2500;
+    const wrap = $("maze-wrap");
+    wrap.classList.remove("shake"); void wrap.offsetWidth; wrap.classList.add("shake");
+    updateHud();
+    setTimeout(() => { if (running) topUpDecoy(); }, 1200);
+  }
+}
+
+function topUpDecoy() {
+  const spot = randomFreeCell();
+  if (!spot) return;
+  if (dots.has(cellKey(spot))) dots.delete(cellKey(spot));
+  const pool = "aeioursnmlcdtgphb".split("");
+  pellets.push({ r: spot.r, c: spot.c, letter: pool[Math.floor(Math.random() * pool.length)] });
+}
+
+function wordComplete() {
+  score += 100;
+  wordsDone.push(currentWord);
+  sndWord();
+  banner("✔ " + currentWord, "+100 · super spelling!", 1500);
+  updateHud();
+  if (wordNumber >= WORDS_PER_ROUND || !wordBag.length) {
+    setTimeout(() => endGame(true), 1600);
+  } else {
+    setTimeout(() => { if (running) nextWord(); }, 1600);
+  }
+}
+
+function caught() {
+  if (performance.now() < invincibleUntil) return;
+  lives--;
+  sndCaught();
+  updateHud();
+  if (lives <= 0) { endGame(false); return; }
+  banner("👻 Caught!", lives + (lives === 1 ? " life left" : " lives left"), 1400);
+  resetPositions();
+  invincibleUntil = performance.now() + 2000;
+}
+
+function resetPositions() {
+  player.r = PLAYER_START.r; player.c = PLAYER_START.c;
+  player.tr = player.r; player.tc = player.c; player.t = 0; player.dir = [0,0]; player.moving = false;
+  ghosts.forEach((g, i) => {
+    const s = GHOST_STARTS[i];
+    g.r = s.r; g.c = s.c; g.tr = s.r; g.tc = s.c; g.t = 0; g.dir = [0,0]; g.moving = false; g.pr = s.r; g.pc = s.c;
+  });
+}
+
+function endGame(won) {
+  running = false;
+  cancelAnimationFrame(animId);
+  if (won) sndWin();
+  saveScore(currentList, playerName, score, wordsDone.length);
+  $("over-title").textContent = won ? pick(["Brilliant chomping!", "Super spelling!", "You did it! 🎉"]) : "Ghosted! 👻";
+  $("over-stars").textContent = won ? "⭐".repeat(Math.max(1, lives)) : "💫";
+  $("over-score").textContent = `${score} points · ${wordsDone.length} word${wordsDone.length === 1 ? "" : "s"} spelled`;
+  $("words-done").innerHTML = wordsDone.length
+    ? wordsDone.map(w => `<span class="wd-chip">${w}</span>`).join("")
+    : '<span style="color:var(--muted)">No words banked yet — have another go!</span>';
+  showScreen("sc-over");
+  renderLeaderboard("leaderboard-over", playerId);
+}
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+/* ── Main loop ── */
+function loop(ts) {
+  if (!running) return;
+  animId = requestAnimationFrame(loop);
+  if (!lastTs) { lastTs = ts; return; }
+  let dt = Math.min((ts - lastTs) / 1000, .05);
+  lastTs = ts;
+  if (paused) return;
+
+  const now = performance.now();
+  // chomper runs at 4.4 — ghosts start well below and only creep up, so the
+  // chase is always escapable, even after a wrong-letter boost; pace scales
+  // down for younger children's word lists
+  const pace = GHOST_PACE[currentList] || 1;
+  ghosts.forEach((g, i) => {
+    g.speed = Math.min((1.7 + wordNumber * .08 + i * .2) * pace, 3.2)
+            + (now < boostUntil ? .8 : 0);
+  });
+  stepPlayer(dt);
+  ghosts.forEach(g => stepGhost(g, dt));
+
+  // ghost vs chomper — same cell, or passing between the same two cells
+  for (const g of ghosts) {
+    if (!g.active) continue;
+    if (g.r === player.r && g.c === player.c) { caught(); break; }
+    if (g.moving && player.moving &&
+        g.r === player.tr && g.c === player.tc &&      // ghost heading to where the chomper is
+        g.tr === player.r && g.tc === player.c &&      // …from where the chomper came: head-on swap
+        g.t + player.t >= .9) { caught(); break; }
+  }
+
+  draw(now);
+}
+
+/* ── Drawing ── */
+function draw(now) {
+  const W = COLS * cellPx, H = ROWS * cellPx;
+  ctx.fillStyle = "#12263a";
+  ctx.fillRect(0, 0, W, H);
+
+  // walls
+  ctx.fillStyle = "#1798d3";
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (MAZE[r][c] === "#") {
+        ctx.fillRect(c * cellPx + 1, r * cellPx + 1, cellPx - 2, cellPx - 2);
+      }
+
+  // dots
+  ctx.fillStyle = "#ffd9a0";
+  dots.forEach(key => {
+    const [r, c] = key.split(",").map(Number);
+    ctx.beginPath();
+    ctx.arc((c + .5) * cellPx, (r + .5) * cellPx, Math.max(2, cellPx * .09), 0, 7);
+    ctx.fill();
+  });
+
+  // letter pellets
+  pellets.forEach(p => {
+    const x = (p.c + .5) * cellPx, y = (p.r + .5) * cellPx;
+    const rad = cellPx * .38;
+    ctx.beginPath(); ctx.arc(x, y, rad, 0, 7);
+    ctx.fillStyle = "#fff"; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = "#1798d3"; ctx.stroke();
+    ctx.fillStyle = "#12263a";
+    ctx.font = `800 ${Math.floor(cellPx * .42)}px 'Segoe UI',system-ui,sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(p.letter.toUpperCase(), x, y + 1);
+  });
+
+  // ghosts
+  ghosts.forEach((g, i) => {
+    if (!g.active) return;
+    const { x, y } = entPx(g);
+    const now2 = now;
+    const boosted = now2 < boostUntil;
+    drawGhost(x, y, cellPx * .42, i === 0 ? "#ff5a5f" : "#ff8fd0", boosted);
+  });
+
+  // chomper
+  const { x, y } = entPx(player);
+  if (now > invincibleUntil || Math.floor(now / 120) % 2 === 0) {
+    drawChomper(x, y, cellPx * .44);
+  }
+}
+
+function entPx(e) {
+  const fromC = e.c, toC = e.moving ? e.tc : e.c;
+  // handle tunnel wrap when drawing (draw from the nearer side)
+  let fc = fromC, tc2 = toC;
+  if (Math.abs(tc2 - fc) > 1) { if (tc2 === 0) tc2 = COLS; else fc = COLS; }
+  const t = e.moving ? Math.min(e.t, 1) : 0;
+  return { x: (fc + (tc2 - fc) * t + .5) * cellPx, y: (e.r + (e.moving ? e.tr - e.r : 0) * t + .5) * cellPx };
+}
+
+function drawChomper(x, y, rad) {
+  const open = .25 + .2 * Math.abs(Math.sin(performance.now() / 130));
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.arc(x, y, rad, open * Math.PI, (2 - open) * Math.PI);
+  ctx.closePath();
+  ctx.fillStyle = "#f5c518";
+  ctx.fill();
+  ctx.fillStyle = "#12263a";
+  ctx.beginPath();
+  ctx.arc(x, y - rad * .45, rad * .14, 0, 7);
+  ctx.fill();
+}
+
+function drawGhost(x, y, rad, color, boosted) {
+  ctx.beginPath();
+  ctx.arc(x, y - rad * .1, rad, Math.PI, 0);
+  const bottom = y + rad * .85;
+  ctx.lineTo(x + rad, bottom - rad * .25);
+  // wavy skirt
+  const waves = 3, w = (rad * 2) / (waves * 2);
+  for (let i = 0; i < waves * 2; i++) {
+    const wx = x + rad - i * w;
+    ctx.lineTo(wx - w / 2, bottom - (i % 2 === 0 ? rad * .3 : 0));
+  }
+  ctx.closePath();
+  ctx.fillStyle = color; ctx.fill();
+  if (boosted) {
+    ctx.lineWidth = 2.5; ctx.strokeStyle = "#e5484d";
+    ctx.beginPath(); ctx.arc(x, y - rad * .1, rad + 3, 0, 7); ctx.stroke();
+  }
+  // eyes
+  ctx.fillStyle = "#fff";
+  [-.35, .35].forEach(dx => {
+    ctx.beginPath(); ctx.arc(x + dx * rad, y - rad * .3, rad * .28, 0, 7); ctx.fill();
+  });
+  ctx.fillStyle = "#12263a";
+  [-.35, .35].forEach(dx => {
+    ctx.beginPath(); ctx.arc(x + dx * rad + rad * .08, y - rad * .3, rad * .14, 0, 7); ctx.fill();
+  });
+}
+
+/* ══════════ Controls ══════════ */
+const KEY_DIRS = {
+  ArrowUp: [ -1, 0 ], ArrowDown: [ 1, 0 ], ArrowLeft: [ 0, -1 ], ArrowRight: [ 0, 1 ],
+  w: [ -1, 0 ], s: [ 1, 0 ], a: [ 0, -1 ], d: [ 0, 1 ]
+};
+document.addEventListener("keydown", e => {
+  if (!running) return;
+  const d = KEY_DIRS[e.key];
+  if (d) { e.preventDefault(); trySetDir(d); }
+});
+
+let touchStart = null;
+canvas.addEventListener("touchstart", e => {
+  touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+}, { passive: true });
+canvas.addEventListener("touchmove", e => {
+  if (!touchStart || !running) return;
+  const dx = e.touches[0].clientX - touchStart.x;
+  const dy = e.touches[0].clientY - touchStart.y;
+  if (Math.abs(dx) > 22 || Math.abs(dy) > 22) {
+    trySetDir(Math.abs(dx) > Math.abs(dy) ? [0, Math.sign(dx)] : [Math.sign(dy), 0]);
+    touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }
+}, { passive: true });
+canvas.addEventListener("touchend", () => { touchStart = null; }, { passive: true });
+
+/* ── Mute toggle ── */
+function refreshMuteBtn() {
+  $("mute-btn").textContent = localStorage.getItem(MUTE_KEY) === "1" ? "🔇" : "🔊";
+}
+$("mute-btn").addEventListener("click", () => {
+  const muted = localStorage.getItem(MUTE_KEY) === "1";
+  localStorage.setItem(MUTE_KEY, muted ? "0" : "1");
+  refreshMuteBtn();
+  if (!muted && "speechSynthesis" in window) speechSynthesis.cancel();
+});
+refreshMuteBtn();
+
+/* Auto-pause when the tab hides (iPad split-view etc.) */
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && running) { paused = true; }
+  else if (!document.hidden && running) { paused = false; lastTs = 0; }
+});
+
+/* ── Wire up buttons ── */
+$("start-btn").addEventListener("click", startGame);
+$("again-btn").addEventListener("click", () => {
+  showScreen("sc-setup");
+  $("setup-main").style.display = "block";
+  $("gate-code").style.display = "none";
+  $("gate-pin").style.display = "none";
+  renderLeaderboard("leaderboard-list", playerId);
+});
+$("home-btn").addEventListener("click", () => {
+  showScreen("sc-setup");
+  $("setup-main").style.display = "block";
+  $("gate-code").style.display = "none";
+  $("gate-pin").style.display = "none";
+  renderLeaderboard("leaderboard-list", playerId);
+});
+
+/* ══════════ Boot — live roster, then the learner gate ══════════ */
+(async function boot() {
+  try {
+    const live = await spFetchLiveRoster(BACKEND_URL);
+    if (live && live.roster && live.roster.length) ROSTER = live.roster;
+  } catch (e) { /* fall back to the static roster in roster.js */ }
+
+  const params = new URLSearchParams(location.search);
+  const code = params.get("u");
+  if (code) {
+    const learner = findLearner(code);
+    if (learner) {
+      pendingLearner = learner;
+      $("pin-name").textContent = learner.name;
+      $("gate-code").style.display = "none";
+      $("gate-pin").style.display = "block";
+      $("pin-input").focus();
+      return;
+    }
+  }
+  // already verified this learner once? skip the code/PIN dance
+  const savedId = spGetVerifiedLearnerId();
+  if (savedId) {
+    const learner = (typeof ROSTER !== "undefined" ? ROSTER : []).find(l => l.id === savedId);
+    if (learner) { beginAs(learner); return; }
+  }
+  $("code-input").focus();
+})();
+</script>
+</body>
+</html>

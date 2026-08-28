@@ -66,5 +66,8 @@ const GAMES = [
   // No isAvailable — homophone pairs are a fixed key-stage list, not tied
   // to the week's hlWords, so these games are always ready to play.
   { id: "fill-the-gap", label: "Fill the Gap", icon: "📝", path: "fill-the-gap/index.html" },
-  { id: "spot-the-mistake", label: "Spot the Mistake", icon: "🧐", path: "spot-the-mistake/index.html" }
+  { id: "spot-the-mistake", label: "Spot the Mistake", icon: "🧐", path: "spot-the-mistake/index.html" },
+  // Word Chomper practises the statutory CEW / NC word lists rather than
+  // the week's pool, so like the games above it's always ready to play.
+  { id: "word-chomper", label: "Word Chomper", icon: "🟡", path: "word-chomper/index.html" }
 ];
