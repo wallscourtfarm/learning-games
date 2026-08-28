@@ -99,6 +99,29 @@
 
   .error-msg{ color:var(--red); font-size:14px; text-align:center; min-height:20px; margin-top:8px; font-weight:600; }
 
+  /* ── PIN gate (matches spelling-bee) ── */
+  .pin-hello{ font-size:16px; font-weight:800; text-align:center; margin-bottom:16px; }
+  .pin-hello span{ color:var(--blue-dark); }
+  .pin-dots{ display:flex; justify-content:center; gap:14px; margin-bottom:10px; }
+  .pin-dots .dot{
+    width:18px; height:18px; border-radius:50%; border:2.5px solid #cfe2ec; background:#fff;
+    transition:background .15s, border-color .15s;
+  }
+  .pin-dots .dot.filled{ background:var(--blue); border-color:var(--blue); }
+  .pin-error{ text-align:center; font-size:13px; font-weight:700; color:var(--red); min-height:18px; margin-top:10px; margin-bottom:8px; }
+  #pin-gate.shake .pin-dots{ animation:shakeAnim .32s ease; }
+  .keypad{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:280px; margin:6px auto 0; }
+  .keypad button{
+    font-size:22px; font-weight:800; font-family:inherit; padding:16px 0; border-radius:14px;
+    border:none; background:#eef5f9; color:var(--navy); cursor:pointer; box-shadow:0 4px 0 #d3e4ec;
+  }
+  .keypad button:active{ transform:translateY(3px); box-shadow:0 1px 0 #d3e4ec; }
+  .keypad button.wide{ font-size:15px; color:var(--muted); }
+  .pin-back{
+    display:block; text-align:center; width:100%; margin-top:16px; font-size:13px; color:var(--muted);
+    background:none; border:none; cursor:pointer; text-decoration:underline; font-family:inherit;
+  }
+
   /* ── Leaderboard ── */
   .lb-row{
     display:flex; align-items:center; gap:10px;
@@ -182,26 +205,28 @@
     <h1>🟡 Word Chomper</h1>
   </div>
 
-  <!-- Learner gate -->
-  <div class="panel" id="gate-code">
-    <div class="rule-box">
-      <div class="rule-label">Who's playing?</div>
-      <p>Type the 4-letter code from your game card.</p>
+  <!-- PIN gate — shown when a learner arrives via their card's QR code -->
+  <div class="panel" id="pin-gate" style="display:none;">
+    <div class="pin-hello">Hi <span id="pin-learner-name"></span>! Enter your spelling PIN.</div>
+    <div class="pin-dots" id="pin-dots">
+      <span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span>
     </div>
-    <input class="code-input" id="code-input" maxlength="4" autocapitalize="characters" autocomplete="off" inputmode="text" placeholder="AB12">
-    <div class="error-msg" id="code-error"></div>
-    <button class="btn" id="code-go">Let's go!</button>
-    <button class="btn ghost-btn" id="guest-go">Play without a card 👻</button>
+    <div class="keypad" id="keypad"></div>
+    <div class="pin-error" id="pin-error">&nbsp;</div>
+    <button class="pin-back" id="pin-back">Not you? Use a different way in</button>
   </div>
 
-  <div class="panel" id="gate-pin" style="display:none;">
+  <!-- Default entry: a personal card code + PIN, always required — no
+       guest mode, matching the other spelling games. -->
+  <div class="panel" id="manual-gate">
     <div class="rule-box">
-      <div class="rule-label">Hi <span id="pin-name"></span>!</div>
-      <p>Type your 4-number spelling PIN.</p>
+      <div class="rule-label">Who's playing?</div>
+      <p>Type the 4-letter code from your game card, then your PIN.</p>
     </div>
-    <input class="code-input" id="pin-input" maxlength="4" inputmode="numeric" autocomplete="off" placeholder="••••">
-    <div class="error-msg" id="pin-error"></div>
-    <button class="btn" id="pin-go">That's me!</button>
+    <input class="code-input" id="manual-code" maxlength="4" autocapitalize="characters" autocomplete="off" inputmode="text" placeholder="AB12">
+    <input class="code-input" id="manual-pin" maxlength="4" inputmode="numeric" autocomplete="off" placeholder="••••" style="margin-top:10px;">
+    <div class="error-msg" id="manual-error"></div>
+    <button class="btn" id="manual-submit">Let's go!</button>
   </div>
 
   <!-- Word list + start -->
@@ -241,7 +266,7 @@
 
   <h2>Top chompers</h2>
   <div class="panel" id="lb-setup"><div id="leaderboard-list"></div></div>
-  <div class="version">Word Chomper 28.08.26b · Wallscourt Farm Academy</div>
+  <div class="version">Word Chomper 28.08.26c · Wallscourt Farm Academy</div>
 </div>
 
 <!-- ══════════ GAME ══════════ -->
@@ -272,8 +297,9 @@
   <h2>Top chompers</h2>
   <div class="panel" id="lb-over"><div id="leaderboard-over"></div></div>
   <button class="btn green" id="again-btn">Play again 🟡</button>
-  <button class="btn ghost-btn" id="home-btn">Choose words / players</button>
-  <div class="version">Word Chomper 28.08.26b · Wallscourt Farm Academy</div>
+  <button class="btn ghost-btn" id="words-btn">Change word list</button>
+  <button class="btn ghost-btn" id="hub-btn">My Spelling Games 🏠</button>
+  <div class="version">Word Chomper 28.08.26c · Wallscourt Farm Academy</div>
 </div>
 
 <script src="../spelling-pool.js"></script>
@@ -398,14 +424,72 @@ const sndBuzz  = () => { beep(140, .22, "sawtooth", .1); };
 const sndCaught= () => { beep(300, .3, "sawtooth", .12); beep(150, .45, "sawtooth", .12, .18); };
 const sndWin   = () => { [523,659,784,1047,784,1047,1319].forEach((f,i) => beep(f, .18, "triangle", .12, i*.13)); };
 
+/* ── Saying the word aloud — same approach as spelling-bee: try a
+   pre-recorded mp3 (../audio/{slug}.mp3, Piper TTS) first, and fall back
+   to the browser's best British voice. Left to the browser default,
+   `lang: "en-GB"` alone often resolves to the lowest-quality compact
+   voice a device ships rather than a genuinely good one, so prefer
+   known-good named voices first. ── */
+const SPEECH_SUPPORTED = typeof window !== "undefined" && "speechSynthesis" in window;
+
+const PREFERRED_VOICE_NAMES = [
+  "daniel", "kate", "serena", "stephanie", "arthur", "martha",  // Apple UK voices (Settings → Accessibility → Spoken Content → Voices → English (UK) to install the enhanced/premium versions)
+  "google uk english female", "google uk english male",         // Chrome / Android
+  "microsoft libby", "microsoft ryan", "microsoft sonia"        // Edge / Windows
+];
+let cachedVoices = [];
+function refreshVoices() {
+  if (SPEECH_SUPPORTED) cachedVoices = window.speechSynthesis.getVoices();
+}
+if (SPEECH_SUPPORTED) {
+  refreshVoices();
+  window.speechSynthesis.onvoiceschanged = refreshVoices; // voices often load asynchronously
+}
+function pickBestVoice() {
+  if (!cachedVoices.length) refreshVoices();
+  for (const preferred of PREFERRED_VOICE_NAMES) {
+    const match = cachedVoices.find(v => v.name.toLowerCase().includes(preferred));
+    if (match) return match;
+  }
+  return cachedVoices.find(v => v.lang === "en-GB")
+    || cachedVoices.find(v => v.lang && v.lang.startsWith("en"))
+    || null;
+}
+
+function slugifyWord(word) {
+  return word.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+let currentAudio = null;
+
+function isMuted() { return localStorage.getItem(MUTE_KEY) === "1"; }
+
 function speakWord(word) {
-  if (localStorage.getItem(MUTE_KEY) === "1" || !("speechSynthesis" in window)) return;
+  if (isMuted()) return;
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  if (SPEECH_SUPPORTED) window.speechSynthesis.cancel(); // stop any utterance still playing
+
+  const audio = new Audio(`../audio/${slugifyWord(word)}.mp3`);
+  currentAudio = audio;
+  audio.addEventListener("error", () => {
+    if (currentAudio === audio) currentAudio = null;
+    speakWordWithBrowserVoice(word);
+  });
+  audio.play().catch(() => speakWordWithBrowserVoice(word));
+}
+
+function speakWordWithBrowserVoice(word) {
+  if (!SPEECH_SUPPORTED || isMuted()) return;
   try {
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(word);
-    u.lang = "en-GB"; u.rate = .8;
-    speechSynthesis.speak(u);
-  } catch (e) { /* speech is a nicety too */ }
+    window.speechSynthesis.cancel(); // stop any utterance still playing
+    const utter = new SpeechSynthesisUtterance(`Spell the word ${word}`);
+    const voice = pickBestVoice();
+    if (voice) { utter.voice = voice; utter.lang = voice.lang; }
+    else { utter.lang = "en-GB"; }
+    utter.rate = 0.85;
+    window.speechSynthesis.speak(utter);
+  } catch (e) {
+    console.warn("Speech synthesis failed:", e);
+  }
 }
 
 /* ══════════ Screens & learner gate ══════════ */
@@ -417,6 +501,8 @@ function showScreen(id) {
 }
 
 function findLearner(code) {
+  // Also recognises the teacher backdoor code (see spFindLearnerOrTeacher
+  // in spelling-pool.js) alongside a normal roster lookup.
   return spFindLearnerOrTeacher(typeof ROSTER !== "undefined" ? ROSTER : [], code);
 }
 
@@ -424,11 +510,10 @@ function beginAs(learner) {
   playerName = learner.name;
   playerId = learner.id;
   $("signout-btn").style.display = "block";
-  const y = learner.year || "";
-  defaultListFor(y);
+  defaultListFor(learner.year || "");
   $("setup-main").style.display = "block";
-  $("gate-code").style.display = "none";
-  $("gate-pin").style.display = "none";
+  $("pin-gate").style.display = "none";
+  $("manual-gate").style.display = "none";
   renderLeaderboard("leaderboard-list", playerId);
 }
 
@@ -443,54 +528,85 @@ function selectList(id) {
     o.classList.toggle("selected", o.dataset.list === id));
 }
 
-$("code-go").addEventListener("click", tryCode);
-$("code-input").addEventListener("keydown", e => { if (e.key === "Enter") tryCode(); });
-function tryCode() {
-  const code = $("code-input").value.trim().toUpperCase();
-  const learner = code ? findLearner(code) : null;
-  if (!learner) {
-    $("code-error").textContent = "Hmm, we can't find that code — check your card!";
-    return;
-  }
-  $("code-error").textContent = "";
+/* ── PIN gate — same access pattern as spelling-bee: QR (?u=CODE) shows
+   the named learner and a keypad for their PIN; a manually-typed code +
+   PIN is the fallback. ── */
+function showPinGate(learner) {
   pendingLearner = learner;
-  $("pin-name").textContent = learner.name;
-  $("gate-code").style.display = "none";
-  $("gate-pin").style.display = "block";
-  $("pin-input").value = "";
-  $("pin-input").focus();
+  $("pin-learner-name").textContent = learner.name;
+  $("manual-gate").style.display = "none";
+  $("pin-gate").style.display = "block";
+  pinBuffer = "";
+  renderPinDots();
 }
 
-$("pin-go").addEventListener("click", tryPin);
-$("pin-input").addEventListener("keydown", e => { if (e.key === "Enter") tryPin(); });
-function tryPin() {
-  if (!pendingLearner) return;
-  if ($("pin-input").value.trim() !== String(pendingLearner.pin)) {
-    $("pin-error").textContent = "Oops — that's not your PIN. Try again!";
-    $("pin-input").value = "";
-    return;
+let pinBuffer = "";
+function buildKeypad() {
+  const layout = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
+  const kp = $("keypad");
+  kp.innerHTML = "";
+  layout.forEach(k => {
+    const btn = document.createElement("button");
+    if (k === "") { btn.style.visibility = "hidden"; btn.disabled = true; }
+    else if (k === "⌫") { btn.textContent = k; btn.className = "wide"; btn.addEventListener("click", pressDelete); }
+    else { btn.textContent = k; btn.addEventListener("click", () => pressDigit(k)); }
+    kp.appendChild(btn);
+  });
+}
+function renderPinDots() {
+  document.querySelectorAll("#pin-dots .dot").forEach((d, i) => d.classList.toggle("filled", i < pinBuffer.length));
+}
+function pressDigit(d) {
+  if (!pendingLearner || pinBuffer.length >= 4) return;
+  pinBuffer += d;
+  renderPinDots();
+  $("pin-error").innerHTML = "&nbsp;";
+  if (pinBuffer.length === 4) checkPin();
+}
+function pressDelete() { pinBuffer = pinBuffer.slice(0, -1); renderPinDots(); }
+function checkPin() {
+  if (pinBuffer === pendingLearner.pin) {
+    spSetVerifiedLearner(pendingLearner.id);
+    beginAs(pendingLearner);
+  } else {
+    $("pin-gate").classList.add("shake");
+    $("pin-error").textContent = "That's not quite right — try again.";
+    setTimeout(() => { pinBuffer = ""; renderPinDots(); $("pin-gate").classList.remove("shake"); }, 420);
   }
-  $("pin-error").textContent = "";
-  spSetVerifiedLearner(pendingLearner.id);
-  beginAs(pendingLearner);
 }
+buildKeypad();
 
-$("guest-go").addEventListener("click", () => {
-  playerName = "Guest"; playerId = null;
-  $("signout-btn").style.display = "none";
-  selectList("y34");
-  $("setup-main").style.display = "block";
-  $("gate-code").style.display = "none";
-  $("gate-pin").style.display = "none";
-  renderLeaderboard("leaderboard-list", null);
+$("pin-back").addEventListener("click", () => {
+  $("pin-gate").style.display = "none";
+  $("manual-gate").style.display = "block";
 });
 
+$("manual-submit").addEventListener("click", () => {
+  const code = $("manual-code").value.trim().toUpperCase();
+  const pin = $("manual-pin").value.trim();
+  const learner = code ? findLearner(code) : null;
+  if (!learner || learner.pin !== pin) {
+    $("manual-error").textContent = "That code and PIN don't match — check with your teacher.";
+    return;
+  }
+  $("manual-error").textContent = "";
+  spSetVerifiedLearner(learner.id);
+  beginAs(learner);
+});
+[$("manual-code"), $("manual-pin")].forEach(inp =>
+  inp.addEventListener("keydown", e => { if (e.key === "Enter") $("manual-submit").click(); }));
+
 $("signout-btn").addEventListener("click", () => {
+  // Full sign-out: clears this tab's verified learner so the next child
+  // on the same iPad must enter their own code + PIN.
   spClearVerifiedLearner();
   playerId = null; playerName = "Guest";
   $("setup-main").style.display = "none";
-  $("gate-code").style.display = "block";
-  $("code-input").value = "";
+  $("pin-gate").style.display = "none";
+  $("manual-gate").style.display = "block";
+  $("manual-code").value = ""; $("manual-pin").value = "";
+  $("manual-error").textContent = "";
+  $("manual-code").focus();
 });
 
 document.querySelectorAll("#list-picker .list-opt").forEach(o =>
@@ -1014,7 +1130,10 @@ $("mute-btn").addEventListener("click", () => {
   const muted = localStorage.getItem(MUTE_KEY) === "1";
   localStorage.setItem(MUTE_KEY, muted ? "0" : "1");
   refreshMuteBtn();
-  if (!muted && "speechSynthesis" in window) speechSynthesis.cancel();
+  if (!muted) return;
+  // muting kills whatever is currently sounding
+  if (typeof currentAudio !== "undefined" && currentAudio) { currentAudio.pause(); currentAudio = null; }
+  if (SPEECH_SUPPORTED) window.speechSynthesis.cancel();
 });
 refreshMuteBtn();
 
@@ -1026,22 +1145,21 @@ document.addEventListener("visibilitychange", () => {
 
 /* ── Wire up buttons ── */
 $("start-btn").addEventListener("click", startGame);
-$("again-btn").addEventListener("click", () => {
+$("again-btn").addEventListener("click", () => startGame());   // same player, same list — straight back in
+$("words-btn").addEventListener("click", () => {
   showScreen("sc-setup");
   $("setup-main").style.display = "block";
-  $("gate-code").style.display = "none";
-  $("gate-pin").style.display = "none";
+  $("pin-gate").style.display = "none";
+  $("manual-gate").style.display = "none";
   renderLeaderboard("leaderboard-list", playerId);
 });
-$("home-btn").addEventListener("click", () => {
-  showScreen("sc-setup");
-  $("setup-main").style.display = "block";
-  $("gate-code").style.display = "none";
-  $("gate-pin").style.display = "none";
-  renderLeaderboard("leaderboard-list", playerId);
+$("hub-btn").addEventListener("click", () => {
+  // Back to the My Spelling Games hub without signing out — the hub won't
+  // ask for a PIN again if this learner picks another game.
+  location.href = "../play/index.html" + location.search;
 });
 
-/* ══════════ Boot — live roster, then the learner gate ══════════ */
+/* ══════════ Boot — live roster, then the access gate ══════════ */
 (async function boot() {
   try {
     const live = await spFetchLiveRoster(BACKEND_URL);
@@ -1049,25 +1167,20 @@ $("home-btn").addEventListener("click", () => {
   } catch (e) { /* fall back to the static roster in roster.js */ }
 
   const params = new URLSearchParams(location.search);
-  const code = params.get("u");
-  if (code) {
-    const learner = findLearner(code);
+  const qrCode = (params.get("u") || "").trim().toUpperCase();
+  if (qrCode) {
+    const learner = findLearner(qrCode);
     if (learner) {
-      pendingLearner = learner;
-      $("pin-name").textContent = learner.name;
-      $("gate-code").style.display = "none";
-      $("gate-pin").style.display = "block";
-      $("pin-input").focus();
+      // Already proved this learner's PIN once in this tab (e.g. via the
+      // "My Spelling Games" hub) — go straight in instead of asking again.
+      if (spGetVerifiedLearnerId() === learner.id.toUpperCase()) beginAs(learner);
+      else showPinGate(learner);
       return;
     }
+    $("manual-error").textContent = "That code isn't on the class list — check with your teacher.";
+    return;
   }
-  // already verified this learner once? skip the code/PIN dance
-  const savedId = spGetVerifiedLearnerId();
-  if (savedId) {
-    const learner = (typeof ROSTER !== "undefined" ? ROSTER : []).find(l => l.id === savedId);
-    if (learner) { beginAs(learner); return; }
-  }
-  $("code-input").focus();
+  $("manual-code").focus();
 })();
 </script>
 </body>
