@@ -103,15 +103,18 @@
     width:34px; height:44px; border-radius:10px; background:#eef5f9; color:var(--navy);
     font-size:24px; font-weight:800; font-family:inherit;
     display:flex; align-items:center; justify-content:center;
+    border:none; padding:0; cursor:pointer;
   }
+  .pf-letter:active{ transform:translateY(2px); }
+  .pf-letter.start{ background:#e2ecf1; cursor:default; }
   .pf-letter.chunk-a{ background:#eaf6fd; color:var(--blue-dark); }
   .pf-letter.chunk-b{ background:#fff3d6; color:#a3720b; }
   .pf-letter.chunk-c{ background:#eaf8f0; color:#17753f; }
   .pf-letter.chunk-d{ background:#f3e8fd; color:#6b3fa0; }
   .pf-letter.chunk-e{ background:#fdeaea; color:#a3231f; }
   .pf-gap{
-    width:26px; height:44px; margin:0 -1px; border:none; cursor:pointer; background:transparent;
-    display:flex; align-items:center; justify-content:center; font-size:15px; color:#c3d8e2;
+    width:30px; height:44px; margin:0 -1px; border:none; cursor:pointer; background:transparent;
+    display:flex; align-items:center; justify-content:center; font-size:17px; color:#9db9c6;
     font-family:inherit; padding:0;
   }
   .pf-gap.cut{ color:var(--red); font-weight:900; }
@@ -183,7 +186,7 @@
 
     <div class="panel">
       <p style="font-size:13.5px; color:var(--muted); margin:0 0 16px;">
-        How many sounds can you hear? Split each tricky word into its phoneme frames —
+        Say the word, count the sounds, then split it into its phoneme frames —
         one sound per box. Get it right and the word jumps into its frames!
       </p>
 
@@ -215,7 +218,7 @@
     <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
       <div id="leaderboard-list"></div>
     </div>
-    <div class="version">Phoneme Frame Builder 28.08.26a · Wallscourt Farm Academy</div>
+    <div class="version">Phoneme Frame Builder 28.08.26c · Wallscourt Farm Academy</div>
   </section>
 
   <!-- ══════════ LIST PICK SCREEN ══════════ -->
@@ -231,7 +234,7 @@
       <div class="list-opts" id="list-opts"></div>
       <button class="btn" id="start-btn">Start building! 🧩</button>
     </div>
-    <div class="version">Phoneme Frame Builder 28.08.26a · Wallscourt Farm Academy</div>
+    <div class="version">Phoneme Frame Builder 28.08.26c · Wallscourt Farm Academy</div>
   </section>
 
   <!-- ══════════ GAME SCREEN ══════════ -->
@@ -274,7 +277,7 @@
     <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
       <div id="leaderboard-list-end"></div>
     </div>
-    <div class="version">Phoneme Frame Builder 28.08.26a · Wallscourt Farm Academy</div>
+    <div class="version">Phoneme Frame Builder 28.08.26c · Wallscourt Farm Academy</div>
   </section>
 
 <script src="../spelling-pool.js"></script>
@@ -289,135 +292,106 @@ const LEADERBOARD_KEY = "wfa-phoneme-frames-lb";
 
 const $ = id => document.getElementById(id);
 
-/* ── Word lists with their phoneme-frame segmentations — one chunk
-   per sound, exactly as they'd be built on a classroom phoneme frame.
+/* ── Word lists with their phoneme-frame segmentations.
+   Only phonetically DECODABLE words belong in frames — one chunk per
+   sound, matching taught graphemes (fool → f·oo·l works; a common
+   exception word like full doesn't, because the u isn't sounding /u/).
    g = grapheme chunks; they must reassemble into the word.
-   one / once / everybody / eye are left out: their sound-to-letter
-   mapping can't be shown honestly in frames — teach those on the board. ── */
+   Split-digraph words (cake, kite, whale) are excluded: their two
+   letters for one sound aren't next to each other, so a tap between
+   letters can't show that mapping honestly. ── */
 const PHONEME_LISTS = {
-  y1: [
-    { w: "the",     g: ["th","e"] },
-    { w: "do",      g: ["d","o"] },
-    { w: "to",      g: ["t","o"] },
-    { w: "today",   g: ["t","o","d","ay"] },
-    { w: "of",      g: ["o","f"] },
-    { w: "said",    g: ["s","ai","d"] },
-    { w: "says",    g: ["s","ay","s"] },
-    { w: "are",     g: ["ar","e"] },
-    { w: "were",    g: ["w","er","e"] },
-    { w: "was",     g: ["w","a","s"] },
-    { w: "is",      g: ["i","s"] },
-    { w: "his",     g: ["h","i","s"] },
-    { w: "has",     g: ["h","a","s"] },
-    { w: "you",     g: ["y","ou"] },
-    { w: "your",    g: ["y","ou","r"] },
-    { w: "they",    g: ["th","ey"] },
-    { w: "be",      g: ["b","e"] },
-    { w: "he",      g: ["h","e"] },
-    { w: "she",     g: ["sh","e"] },
-    { w: "me",      g: ["m","e"] },
-    { w: "we",      g: ["w","e"] },
-    { w: "no",      g: ["n","o"] },
-    { w: "go",      g: ["g","o"] },
-    { w: "so",      g: ["s","o"] },
-    { w: "by",      g: ["b","y"] },
-    { w: "my",      g: ["m","y"] },
-    { w: "here",    g: ["h","ere"] },
-    { w: "there",   g: ["th","ere"] },
-    { w: "where",   g: ["wh","ere"] },
-    { w: "love",    g: ["l","o","ve"] },
-    { w: "come",    g: ["c","o","me"] },
-    { w: "some",    g: ["s","o","me"] },
-    { w: "ask",     g: ["a","s","k"] },
-    { w: "friend",  g: ["fr","ie","n","d"] },
-    { w: "school",  g: ["s","ch","oo","l"] },
-    { w: "put",     g: ["p","u","t"] },
-    { w: "push",    g: ["p","u","sh"] },
-    { w: "pull",    g: ["p","u","ll"] },
-    { w: "full",    g: ["f","u","ll"] },
-    { w: "house",   g: ["h","ou","se"] },
-    { w: "our",     g: ["ou","r"] }
+  p23: [
+    { w: "cat",   g: ["c","a","t"] },
+    { w: "dog",   g: ["d","o","g"] },
+    { w: "hen",   g: ["h","e","n"] },
+    { w: "map",   g: ["m","a","p"] },
+    { w: "sun",   g: ["s","u","n"] },
+    { w: "pig",   g: ["p","i","g"] },
+    { w: "bed",   g: ["b","e","d"] },
+    { w: "leg",   g: ["l","e","g"] },
+    { w: "jam",   g: ["j","a","m"] },
+    { w: "box",   g: ["b","o","x"] },
+    { w: "ship",  g: ["sh","i","p"] },
+    { w: "chip",  g: ["ch","i","p"] },
+    { w: "shed",  g: ["sh","e","d"] },
+    { w: "shop",  g: ["sh","o","p"] },
+    { w: "fish",  g: ["f","i","sh"] },
+    { w: "ring",  g: ["r","i","ng"] },
+    { w: "king",  g: ["k","i","ng"] },
+    { w: "sing",  g: ["s","i","ng"] },
+    { w: "thin",  g: ["th","i","n"] },
+    { w: "moon",  g: ["m","oo","n"] },
+    { w: "boot",  g: ["b","oo","t"] },
+    { w: "feet",  g: ["f","ee","t"] },
+    { w: "seed",  g: ["s","ee","d"] },
+    { w: "car",   g: ["c","ar"] },
+    { w: "farm",  g: ["f","ar","m"] },
+    { w: "star",  g: ["s","t","ar"] },
+    { w: "fork",  g: ["f","or","k"] },
+    { w: "horn",  g: ["h","or","n"] },
+    { w: "rain",  g: ["r","ai","n"] },
+    { w: "tail",  g: ["t","ai","l"] },
+    { w: "boat",  g: ["b","oa","t"] },
+    { w: "soap",  g: ["s","oa","p"] },
+    { w: "goat",  g: ["g","oa","t"] },
+    { w: "coat",  g: ["c","oa","t"] },
+    { w: "hair",  g: ["h","ai","r"] },
+    { w: "queen", g: ["q","ue","en"] }
   ],
-  y2: [
-    { w: "door",      g: ["d","oo","r"] },
-    { w: "floor",     g: ["fl","oo","r"] },
-    { w: "poor",      g: ["p","oo","r"] },
-    { w: "because",   g: ["b","e","c","au","se"] },
-    { w: "find",      g: ["f","i","n","d"] },
-    { w: "kind",      g: ["k","i","n","d"] },
-    { w: "mind",      g: ["m","i","n","d"] },
-    { w: "behind",    g: ["b","e","h","i","n","d"] },
-    { w: "child",     g: ["ch","i","l","d"] },
-    { w: "children",  g: ["ch","i","l","d","r","en"] },
-    { w: "wild",      g: ["w","i","l","d"] },
-    { w: "climb",     g: ["cl","i","m","b"] },
-    { w: "most",      g: ["m","o","s","t"] },
-    { w: "only",      g: ["o","n","l","y"] },
-    { w: "both",      g: ["b","o","th"] },
-    { w: "old",       g: ["o","l","d"] },
-    { w: "cold",      g: ["c","o","l","d"] },
-    { w: "gold",      g: ["g","o","l","d"] },
-    { w: "hold",      g: ["h","o","l","d"] },
-    { w: "told",      g: ["t","o","l","d"] },
-    { w: "every",     g: ["e","v","er","y"] },
-    { w: "even",      g: ["e","v","en"] },
-    { w: "great",     g: ["gr","ea","t"] },
-    { w: "break",     g: ["br","ea","k"] },
-    { w: "steak",     g: ["st","ea","k"] },
-    { w: "pretty",    g: ["pr","ett","y"] },
-    { w: "beautiful", g: ["b","eau","t","i","f","ul"] },
-    { w: "after",     g: ["af","t","er"] },
-    { w: "fast",      g: ["f","a","s","t"] },
-    { w: "last",      g: ["l","a","s","t"] },
-    { w: "past",      g: ["p","a","s","t"] },
-    { w: "father",    g: ["f","a","th","er"] },
-    { w: "class",     g: ["cl","a","ss"] },
-    { w: "grass",     g: ["gr","a","ss"] },
-    { w: "pass",      g: ["p","a","ss"] },
-    { w: "plant",     g: ["pl","a","n","t"] },
-    { w: "path",      g: ["p","a","th"] },
-    { w: "bath",      g: ["b","a","th"] },
-    { w: "hour",      g: ["h","ou","r"] },
-    { w: "move",      g: ["m","o","ve"] },
-    { w: "prove",     g: ["pr","o","ve"] },
-    { w: "improve",   g: ["im","pr","o","ve"] },
-    { w: "sure",      g: ["s","ure"] },
-    { w: "sugar",     g: ["s","u","g","ar"] },
-    { w: "could",     g: ["c","ou","l","d"] },
-    { w: "should",    g: ["sh","ou","l","d"] },
-    { w: "would",     g: ["w","ou","l","d"] },
-    { w: "who",       g: ["wh","o"] },
-    { w: "whole",     g: ["wh","o","le"] },
-    { w: "any",       g: ["a","n","y"] },
-    { w: "many",      g: ["m","a","n","y"] },
-    { w: "clothes",   g: ["cl","o","th","es"] },
-    { w: "busy",      g: ["b","us","y"] },
-    { w: "people",    g: ["p","eo","pl","e"] },
-    { w: "water",     g: ["w","a","t","er"] },
-    { w: "again",     g: ["ag","ai","n"] },
-    { w: "half",      g: ["h","a","lf"] },
-    { w: "money",     g: ["m","on","ey"] },
-    { w: "parents",   g: ["p","ar","en","ts"] },
-    { w: "Christmas", g: ["Ch","r","is","t","mas"] }
+  p45: [
+    { w: "frog",   g: ["f","r","o","g"] },
+    { w: "hand",   g: ["h","a","n","d"] },
+    { w: "tent",   g: ["t","e","n","t"] },
+    { w: "help",   g: ["h","e","l","p"] },
+    { w: "stop",   g: ["s","t","o","p"] },
+    { w: "plan",   g: ["p","l","a","n"] },
+    { w: "flag",   g: ["f","l","a","g"] },
+    { w: "drum",   g: ["d","r","u","m"] },
+    { w: "plum",   g: ["p","l","u","m"] },
+    { w: "crisp",  g: ["c","r","i","s","p"] },
+    { w: "play",   g: ["p","l","ay"] },
+    { w: "sleep",  g: ["s","l","ee","p"] },
+    { w: "green",  g: ["g","r","ee","n"] },
+    { w: "cream",  g: ["c","r","ea","m"] },
+    { w: "clean",  g: ["c","l","ea","n"] },
+    { w: "spoon",  g: ["s","p","oo","n"] },
+    { w: "tooth",  g: ["t","oo","th"] },
+    { w: "book",   g: ["b","oo","k"] },
+    { w: "cloud",  g: ["c","l","ou","d"] },
+    { w: "clown",  g: ["c","l","ow","n"] },
+    { w: "brown",  g: ["b","r","ow","n"] },
+    { w: "light",  g: ["l","igh","t"] },
+    { w: "night",  g: ["n","igh","t"] },
+    { w: "coach",  g: ["c","oa","ch"] },
+    { w: "toast",  g: ["t","oa","s","t"] },
+    { w: "teeth",  g: ["t","ee","th"] },
+    { w: "stick",  g: ["s","t","i","ck"] },
+    { w: "block",  g: ["b","l","o","ck"] },
+    { w: "black",  g: ["b","l","a","ck"] },
+    { w: "glass",  g: ["g","l","a","ss"] },
+    { w: "chest",  g: ["ch","e","s","t"] },
+    { w: "crust",  g: ["c","r","u","s","t"] },
+    { w: "spring", g: ["s","p","r","i","ng"] },
+    { w: "street", g: ["s","t","r","ee","t"] }
   ]
 };
 
 const LIST_META = {
-  y1: { icon: "🌱", label: "Year 1", sub: "Common exception words" },
-  y2: { icon: "🌿", label: "Year 2", sub: "Common exception words" }
+  p23: { icon: "🌱", label: "First sounds", sub: "CVC words + sh, ch, th, ng, oo, ar, or, ai, ee, oa" },
+  p45: { icon: "🌿", label: "Next sounds", sub: "Blends (st, cr, cl&hellip;) + ay, ea, ou, ow, igh" }
 };
 const WORDS_PER_ROUND = 8;
 
 let playerName = "";
 let playerId = null;
-let learnerYear = "Y2";
-let chosenList = "y1";
+let learnerYear = "Y1";
+let chosenList = "p23";
 let state = null;   // { score, clean, idx, order, cuts:Set, attempts, ending }
 
 function defaultListFor(year) {
-  if (year === "Y1") return "y1";
-  if (year === "Y2") return "y2";
-  return "y1";
+  if (year === "Y2" || year === "Y3") return "p45";
+  return "p23";
 }
 
 /* ── Leaderboard (localStorage stand-in for a real backend) ── */
@@ -476,7 +450,7 @@ function showPinGate(learner) {
 function beginAsLearner(learner) {
   playerName = learner.name;
   playerId = learner.id;
-  learnerYear = learner.year || "Y2";
+  learnerYear = learner.year || "Y1";
   chosenList = defaultListFor(learnerYear);
   showListScreen();
 }
@@ -687,11 +661,13 @@ function showWord() {
   $("pf-frames").classList.remove("show");
   $("pf-frames").innerHTML = "";
 
-  // Letter tiles with a tappable gap between each pair of letters.
-  let html = `<span class="pf-letter">${entry.w[0].toUpperCase()}</span>`;
+  // Letter tiles and a divider gap between each pair. TAPPING A LETTER
+  // cuts just before it (a big, obvious target); tapping the gap does the
+  // same. The first letter has nothing to cut, so it isn't a button.
+  let html = `<span class="pf-letter start" data-i="0">${entry.w[0].toUpperCase()}</span>`;
   for (let i = 1; i < letters.length; i++) {
     html += `<button class="pf-gap" data-i="${i}" aria-label="Split here">•</button>`;
-    html += `<span class="pf-letter">${entry.w[i].toUpperCase()}</span>`;
+    html += `<button class="pf-letter" data-i="${i}">${entry.w[i].toUpperCase()}</button>`;
   }
   $("pf-letters").innerHTML = html;
 
@@ -718,20 +694,44 @@ function targetCuts(entry) {
 
 $("pf-letters").addEventListener("click", e => {
   if (!state || state.ending) return;
+  // Either target marks the same cut: the gap itself, or the letter the
+  // cut sits in front of.
   const gap = e.target.closest(".pf-gap");
-  if (!gap) return;
-  const i = Number(gap.dataset.i);
+  const letter = e.target.closest("button.pf-letter");
+  if (!gap && !letter) {
+    // Tapped the untappable first letter — give a gentle hint rather
+    // than a dead tap.
+    const hint = e.target.closest(".pf-letter.start");
+    if (hint) {
+      $("pf-feedback").textContent = "Tap between the sounds, not on the first letter.";
+      $("pf-feedback").className = "pf-feedback bad";
+      setTimeout(() => {
+        $("pf-feedback").textContent = " ";
+        $("pf-feedback").className = "pf-feedback";
+      }, 1400);
+    }
+    return;
+  }
+  const i = Number((gap || letter).dataset.i);
   if (state.cuts.has(i)) {
     state.cuts.delete(i);
-    gap.classList.remove("cut");
-    gap.textContent = "•";
   } else {
     state.cuts.add(i);
-    gap.classList.add("cut");
-    gap.textContent = "✂";
   }
+  drawCuts();
   $("pf-check-btn").disabled = state.cuts.size === 0;
 });
+
+/* One place draws every gap from state.cuts, so letter-taps and gap-taps
+   can never disagree about what's marked. */
+function drawCuts() {
+  $("pf-letters").querySelectorAll(".pf-gap").forEach(g => {
+    const i = Number(g.dataset.i);
+    const cut = state.cuts.has(i);
+    g.classList.toggle("cut", cut);
+    g.textContent = cut ? "✂" : "•";
+  });
+}
 
 $("pf-check-btn").addEventListener("click", () => {
   if (!state || state.ending) return;
@@ -786,10 +786,7 @@ function colourChunks(entry) {
 
 function clearCuts() {
   state.cuts = new Set();
-  $("pf-letters").querySelectorAll(".pf-gap").forEach(g => {
-    g.classList.remove("cut");
-    g.textContent = "•";
-  });
+  drawCuts();
   $("pf-check-btn").disabled = true;
 }
 
