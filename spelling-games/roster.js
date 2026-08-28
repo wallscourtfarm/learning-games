@@ -69,5 +69,14 @@ const GAMES = [
   { id: "spot-the-mistake", label: "Spot the Mistake", icon: "🧐", path: "spot-the-mistake/index.html" },
   // Word Chomper practises the statutory CEW / NC word lists rather than
   // the week's pool, so like the games above it's always ready to play.
-  { id: "word-chomper", label: "Word Chomper", icon: "🟡", path: "word-chomper/index.html" }
+  { id: "word-chomper", label: "Word Chomper", icon: "🟡", path: "word-chomper/index.html" },
+  // These six also work from fixed word lists — statutory CEW words,
+  // contractions, homophone families — not the week's pool, so they're
+  // always ready to play too.
+  { id: "word-jumble", label: "Word Jumble", icon: "🔀", path: "word-jumble/index.html" },
+  { id: "contraction-clinic", label: "Contraction Clinic", icon: "💊", path: "contraction-clinic/index.html" },
+  { id: "dictionary-dash", label: "Dictionary Dash", icon: "📖", path: "dictionary-dash/index.html" },
+  { id: "memory-pairs", label: "Memory Pairs", icon: "🃏", path: "memory-pairs/index.html" },
+  { id: "syllable-split", label: "Syllable Split", icon: "✂️", path: "syllable-split/index.html" },
+  { id: "phoneme-frames", label: "Phoneme Frame Builder", icon: "🧩", path: "phoneme-frames/index.html" }
 ];
