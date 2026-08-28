@@ -147,6 +147,11 @@
     font-size:16px; padding:4px 10px; cursor:pointer; font-family:inherit;
   }
   .icon-btn:active{ transform:scale(.94); }
+  .hud-home-btn{
+    background:#fff; border:2px solid #d7e9f4; border-radius:10px; padding:4px 10px;
+    font-size:16px; cursor:pointer; line-height:1.4;
+  }
+  .hud-home-btn:active{ transform:translateY(1px); }
 
   .word-tiles{
     display:flex; justify-content:center; gap:5px; flex-wrap:wrap;
@@ -266,12 +271,13 @@
 
   <h2>Top chompers</h2>
   <div class="panel" id="lb-setup"><div id="leaderboard-list"></div></div>
-  <div class="version">Word Chomper 28.08.26c · Wallscourt Farm Academy</div>
+  <div class="version">Word Chomper 28.08.26d · Wallscourt Farm Academy</div>
 </div>
 
 <!-- ══════════ GAME ══════════ -->
 <div class="screen" id="sc-game">
   <div class="hud">
+    <button class="hud-home-btn" id="hud-home-btn" aria-label="Back to games menu" title="Back to games menu">🏠</button>
     <span class="lives" id="hud-lives">🟡🟡🟡</span>
     <span class="score" id="hud-score">0</span>
     <button class="icon-btn" id="mute-btn">🔊</button>
@@ -299,7 +305,7 @@
   <button class="btn green" id="again-btn">Play again 🟡</button>
   <button class="btn ghost-btn" id="words-btn">Change word list</button>
   <button class="btn ghost-btn" id="hub-btn">My Spelling Games 🏠</button>
-  <div class="version">Word Chomper 28.08.26c · Wallscourt Farm Academy</div>
+  <div class="version">Word Chomper 28.08.26d · Wallscourt Farm Academy</div>
 </div>
 
 <script src="../spelling-pool.js"></script>
@@ -1156,6 +1162,13 @@ $("words-btn").addEventListener("click", () => {
 $("hub-btn").addEventListener("click", () => {
   // Back to the My Spelling Games hub without signing out — the hub won't
   // ask for a PIN again if this learner picks another game.
+  location.href = "../play/index.html" + location.search;
+});
+$("hud-home-btn").addEventListener("click", () => {
+  // Same as the end-screen 🏠 — leave mid-round without signing out, so
+  // the hub won't ask for this learner's PIN again.
+  running = false;
+  cancelAnimationFrame(animId);
   location.href = "../play/index.html" + location.search;
 });
 
