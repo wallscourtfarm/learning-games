@@ -720,7 +720,7 @@ function sayWord(word) {
     if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
     sayWithSynthesis(word);
   });
-  clip.play().catch(() => {
+  Promise.resolve(clip.play()).catch(() => {
     sayWithSynthesis(word);
   });
   // If the clip never reports canplay/error (e.g. cached miss under a
