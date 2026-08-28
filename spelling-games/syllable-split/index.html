@@ -104,19 +104,21 @@
     width:34px; height:44px; border-radius:10px; background:#eef5f9; color:var(--navy);
     font-size:24px; font-weight:800; font-family:inherit;
     display:flex; align-items:center; justify-content:center;
+    border:none; padding:0; cursor:pointer;
   }
+  .ss-letter:active{ transform:translateY(2px); }
+  .ss-letter.start{ background:#e2ecf1; cursor:default; }
   .ss-letter.chunk-a{ background:#eaf6fd; color:var(--blue-dark); }
   .ss-letter.chunk-b{ background:#fff3d6; color:#a3720b; }
   .ss-letter.chunk-c{ background:#eaf8f0; color:#17753f; }
   .ss-letter.chunk-d{ background:#f3e8fd; color:#6b3fa0; }
   .ss-letter.chunk-e{ background:#fdeaea; color:#a3231f; }
   .ss-gap{
-    width:26px; height:44px; margin:0 -1px; border:none; cursor:pointer; background:transparent;
-    display:flex; align-items:center; justify-content:center; font-size:15px; color:#c3d8e2;
+    width:30px; height:44px; margin:0 -1px; border:none; cursor:pointer; background:transparent;
+    display:flex; align-items:center; justify-content:center; font-size:17px; color:#9db9c6;
     font-family:inherit; padding:0;
   }
   .ss-gap.cut{ color:var(--red); font-weight:900; }
-  .ss-gap.bounced{ color:var(--red); }
 
   .ss-feedback{ min-height:24px; margin-top:14px; font-size:16px; font-weight:800; }
   .ss-feedback.good{ color:var(--green); }
@@ -207,7 +209,7 @@
     <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
       <div id="leaderboard-list"></div>
     </div>
-    <div class="version">Syllable Split 28.08.26a · Wallscourt Farm Academy</div>
+    <div class="version">Syllable Split 28.08.26c · Wallscourt Farm Academy</div>
   </section>
 
   <!-- ══════════ LIST PICK SCREEN ══════════ -->
@@ -223,7 +225,7 @@
       <div class="list-opts" id="list-opts"></div>
       <button class="btn" id="start-btn">Start splitting! ✂️</button>
     </div>
-    <div class="version">Syllable Split 28.08.26a · Wallscourt Farm Academy</div>
+    <div class="version">Syllable Split 28.08.26c · Wallscourt Farm Academy</div>
   </section>
 
   <!-- ══════════ GAME SCREEN ══════════ -->
@@ -265,7 +267,7 @@
     <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
       <div id="leaderboard-list-end"></div>
     </div>
-    <div class="version">Syllable Split 28.08.26a · Wallscourt Farm Academy</div>
+    <div class="version">Syllable Split 28.08.26c · Wallscourt Farm Academy</div>
   </section>
 
 <script src="../spelling-pool.js"></script>
@@ -674,8 +676,11 @@ function goTo(which) {
   $("game-wrap").classList.toggle("active", which === "game");
 }
 
-/* ── Saying the words — browser voice; the shared recordings say
-   "Spell the word X", which isn't the prompt this game needs. ── */
+/* ── Saying the words — same voice as Spelling Bee. Piper recordings
+   (Jenny, en_GB) live in ../audio-syllables/ and say "Break the
+   following word into syllables. X." — generated batch, see the repo
+   history for the generator script. Falls back to the browser's
+   speechSynthesis voice when a word has no recording. ── */
 const SPEECH_SUPPORTED = typeof window !== "undefined" && "speechSynthesis" in window;
 
 const PREFERRED_VOICE_NAMES = [
@@ -702,7 +707,30 @@ function pickBestVoice() {
     || null;
 }
 
+function slugFor(word) {
+  return word.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/* mp3 first — real recordings, same voice everywhere — with a careful
+   fallback to the browser voice for any word without a recording. */
 function sayWord(word) {
+  const clip = new Audio(`../audio-syllables/${slugFor(word)}.mp3`);
+  let fallbackTimer = null;
+  clip.addEventListener("error", () => {
+    if (fallbackTimer) { clearTimeout(fallbackTimer); fallbackTimer = null; }
+    sayWithSynthesis(word);
+  });
+  clip.play().catch(() => {
+    sayWithSynthesis(word);
+  });
+  // If the clip never reports canplay/error (e.g. cached miss under a
+  // slow network), still rescue the prompt after a moment.
+  fallbackTimer = setTimeout(() => {
+    if (clip.readyState < 2) sayWithSynthesis(word);
+  }, 2500);
+}
+
+function sayWithSynthesis(word) {
   if (!SPEECH_SUPPORTED) return;
   try {
     window.speechSynthesis.cancel();
@@ -712,30 +740,6 @@ function sayWord(word) {
     else { utter.lang = "en-GB"; }
     utter.rate = 0.85;
     window.speechSynthesis.speak(utter);
-  } catch (e) {
-    console.warn("Speech synthesis failed:", e);
-  }
-}
-
-/* The reward chant — each chunk spoken with a beat between, then the
-   whole word, like clapping it out as a class. */
-function chantChunks(syllables) {
-  if (!SPEECH_SUPPORTED) return;
-  try {
-    window.speechSynthesis.cancel();
-    const voice = pickBestVoice();
-    syllables.forEach((syl, i) => {
-      const utter = new SpeechSynthesisUtterance(syl);
-      if (voice) { utter.voice = voice; utter.lang = voice.lang; }
-      else { utter.lang = "en-GB"; }
-      utter.rate = 0.75;
-      window.speechSynthesis.speak(utter);
-    });
-    const whole = new SpeechSynthesisUtterance(syllables.join("") + "!");
-    if (voice) { whole.voice = voice; whole.lang = voice.lang; }
-    else { whole.lang = "en-GB"; }
-    whole.rate = 0.85;
-    window.speechSynthesis.speak(whole);
   } catch (e) {
     console.warn("Speech synthesis failed:", e);
   }
@@ -777,11 +781,13 @@ function showWord() {
   const letters = entry.w.toLowerCase().split("");
   $("ss-claps").textContent = "👏".repeat(entry.s.length);
 
-  // Letter tiles with a tappable gap between each pair of letters.
-  let html = `<span class="ss-letter">${entry.w[0].toUpperCase()}</span>`;
+  // Letter tiles and a divider gap between each pair. TAPPING A LETTER
+  // cuts just before it (a big, obvious target); tapping the gap does the
+  // same. The first letter has nothing to cut, so it isn't a button.
+  let html = `<span class="ss-letter start" data-i="0">${entry.w[0].toUpperCase()}</span>`;
   for (let i = 1; i < letters.length; i++) {
     html += `<button class="ss-gap" data-i="${i}" aria-label="Cut here">•</button>`;
-    html += `<span class="ss-letter">${entry.w[i].toUpperCase()}</span>`;
+    html += `<button class="ss-letter" data-i="${i}">${entry.w[i].toUpperCase()}</button>`;
   }
   $("ss-letters").innerHTML = html;
 
@@ -808,20 +814,41 @@ function targetCuts(entry) {
 
 $("ss-letters").addEventListener("click", e => {
   if (!state || state.ending) return;
+  // Either target marks the same cut: the gap itself, or the letter the
+  // cut sits in front of.
   const gap = e.target.closest(".ss-gap");
-  if (!gap) return;
-  const i = Number(gap.dataset.i);
-  if (state.cuts.has(i)) {
-    state.cuts.delete(i);
-    gap.classList.remove("cut");
-    gap.textContent = "•";
-  } else {
-    state.cuts.add(i);
-    gap.classList.add("cut");
-    gap.textContent = "✂";
+  const letter = e.target.closest("button.ss-letter");
+  if (!gap && !letter) {
+    // Tapped the untappable first letter — gentle hint rather than a
+    // dead tap.
+    const hint = e.target.closest(".ss-letter.start");
+    if (hint) {
+      $("ss-feedback").textContent = "Tap between the syllables, not on the first letter.";
+      $("ss-feedback").className = "ss-feedback bad";
+      setTimeout(() => {
+        $("ss-feedback").textContent = " ";
+        $("ss-feedback").className = "ss-feedback";
+      }, 1400);
+    }
+    return;
   }
+  const i = Number((gap || letter).dataset.i);
+  if (state.cuts.has(i)) state.cuts.delete(i);
+  else state.cuts.add(i);
+  drawCuts();
   $("ss-check-btn").disabled = state.cuts.size === 0;
 });
+
+/* One place draws every gap from state.cuts, so letter-taps and gap-taps
+   can never disagree about what's marked. */
+function drawCuts() {
+  $("ss-letters").querySelectorAll(".ss-gap").forEach(g => {
+    const i = Number(g.dataset.i);
+    const cut = state.cuts.has(i);
+    g.classList.toggle("cut", cut);
+    g.textContent = cut ? "✂" : "•";
+  });
+}
 
 $("ss-check-btn").addEventListener("click", () => {
   if (!state || state.ending) return;
@@ -833,15 +860,16 @@ $("ss-check-btn").addEventListener("click", () => {
     state.score += clean ? 10 : 5;
     updateHud();
 
-    // Colour the chunks and bounce each syllable as the chant plays.
+    // Colour the chunks and bounce each syllable in turn — the visual
+    // chant. No spoken chant: a TTS voice would read each chunk as
+    // letter names ("y" as "why"), not as the sound in the word.
     colourChunks(entry);
     $("ss-feedback").textContent = clean
       ? `✅ ${entry.s.join(" · ")} — perfect chunks!`
       : `✅ ${entry.s.join(" · ")} — got there!`;
     $("ss-feedback").className = "ss-feedback good";
     $("ss-check-btn").disabled = true;
-    chantChunks(entry.s);
-    setTimeout(nextWord, 2600);
+    setTimeout(nextWord, 2400);
   } else {
     state.attempts++;
     $("ss-feedback").textContent = "Not those breaks — listen and look again.";
@@ -875,10 +903,7 @@ function colourChunks(entry) {
 
 function clearCuts() {
   state.cuts = new Set();
-  $("ss-letters").querySelectorAll(".ss-gap").forEach(g => {
-    g.classList.remove("cut");
-    g.textContent = "•";
-  });
+  drawCuts();
   $("ss-check-btn").disabled = true;
 }
 
