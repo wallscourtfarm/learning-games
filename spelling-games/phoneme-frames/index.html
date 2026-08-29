@@ -218,7 +218,7 @@
     <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
       <div id="leaderboard-list"></div>
     </div>
-    <div class="version">Phoneme Frame Builder 29.08.26a · Wallscourt Farm Academy</div>
+    <div class="version">Phoneme Frame Builder 29.08.26b · Wallscourt Farm Academy</div>
   </section>
 
   <!-- ══════════ LIST PICK SCREEN ══════════ -->
@@ -234,7 +234,7 @@
       <div class="list-opts" id="list-opts"></div>
       <button class="btn" id="start-btn">Start building! 🧩</button>
     </div>
-    <div class="version">Phoneme Frame Builder 29.08.26a · Wallscourt Farm Academy</div>
+    <div class="version">Phoneme Frame Builder 29.08.26b · Wallscourt Farm Academy</div>
   </section>
 
   <!-- ══════════ GAME SCREEN ══════════ -->
@@ -277,7 +277,7 @@
     <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
       <div id="leaderboard-list-end"></div>
     </div>
-    <div class="version">Phoneme Frame Builder 29.08.26a · Wallscourt Farm Academy</div>
+    <div class="version">Phoneme Frame Builder 29.08.26b · Wallscourt Farm Academy</div>
   </section>
 
 <script src="../spelling-pool.js"></script>
@@ -638,18 +638,9 @@ function sayWithSynthesis(word) {
   }
 }
 
-/* The reward — sound-talk each grapheme (pure sounds, like blending in
-   a phonics lesson), then say the whole word. */
-function blendChunks(graphemes) {
-  if (!SPEECH_SUPPORTED) return;
-  try {
-    window.speechSynthesis.cancel();
-    graphemes.forEach(g => window.speechSynthesis.speak(makeUtterance(g, 0.7)));
-    window.speechSynthesis.speak(makeUtterance(graphemes.join("") + "!", 0.85));
-  } catch (e) {
-    console.warn("Speech synthesis failed:", e);
-  }
-}
+/* The reward is visual only: the frames above fill in with each grapheme.
+   Any spoken version fails — a browser voice reads graphemes as letter
+   names ("B" as "bee"), never as the sounds a phoneme frame teaches. */
 
 /* ── Game logic ── */
 function shuffleArray(arr) {
@@ -774,7 +765,6 @@ $("pf-check-btn").addEventListener("click", () => {
       : `✅ ${entry.g.length} sounds — got there!`;
     $("pf-feedback").className = "pf-feedback good";
     $("pf-check-btn").disabled = true;
-    blendChunks(entry.g);
     setTimeout(nextWord, 2600);
   } else {
     state.attempts++;
