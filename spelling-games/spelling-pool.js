@@ -286,37 +286,73 @@ async function spFetchLiveRoster(backendUrl) {
    every other game/page in the same browser tab can trust that without
    asking again. sessionStorage clears when the tab closes, so handing an
    iPad to a different child (a fresh tab, or reopening the browser) still
-   requires the PIN — this only removes repeat prompts within one sitting. */
+   requires the PIN — this only removes repeat prompts within one sitting.
+
+   As of 2026-09-08 this stores the PIN-check TOKEN the backend returns,
+   not just a bare id — spSubmitScore/spFetchHistory send that token along,
+   since the backend now requires proof the PIN was actually checked rather
+   than trusting whichever pupilId a request claims to be. */
 const SP_VERIFIED_KEY = "wfa-spelling-verified-id";
-function spSetVerifiedLearner(id) {
-  try { sessionStorage.setItem(SP_VERIFIED_KEY, String(id).toUpperCase()); } catch (e) {}
+const SP_VERIFIED_TOKEN_KEY = "wfa-spelling-verified-token";
+function spSetVerifiedLearner(id, token) {
+  try {
+    sessionStorage.setItem(SP_VERIFIED_KEY, String(id).toUpperCase());
+    sessionStorage.setItem(SP_VERIFIED_TOKEN_KEY, String(token || ""));
+  } catch (e) {}
 }
 function spGetVerifiedLearnerId() {
   try { return sessionStorage.getItem(SP_VERIFIED_KEY) || ""; } catch (e) { return ""; }
 }
+function spGetVerifiedToken() {
+  try { return sessionStorage.getItem(SP_VERIFIED_TOKEN_KEY) || ""; } catch (e) { return ""; }
+}
 function spClearVerifiedLearner() {
-  try { sessionStorage.removeItem(SP_VERIFIED_KEY); } catch (e) {}
+  try {
+    sessionStorage.removeItem(SP_VERIFIED_KEY);
+    sessionStorage.removeItem(SP_VERIFIED_TOKEN_KEY);
+  } catch (e) {}
 }
 
-/* ── Teacher login — a fixed code that works on every game and the hub,
-   without needing any real learner's PIN. Handy for demoing a game to the
-   whole class on the board. Deliberately NOT a roster entry — a live
+/* ── Teacher login — a fixed code prefix that works on every game and the
+   hub, without needing any real learner's PIN. Handy for demoing a game to
+   the whole class on the board. Deliberately NOT a roster entry — a live
    Sheet fetch replaces ROSTER wholesale, which would silently kill a
    hardcoded entry there, and it also means this never appears on a
    printed learner card (cards.html only ever loops over ROSTER).
-   Code is "TEACH", optionally followed by a year digit 2-6 (e.g.
-   "TEACH5") to control which year's weeks the hub shows by default —
-   irrelevant for every other game, since they pick a year/week before
-   asking for identity at all. PIN is fixed below; change both if this
-   ever needs to be less guessable than a class handing round the answer. */
+   Code is "TEACH", optionally followed by a year digit 2-6 (e.g. "TEACH5")
+   to control which year's weeks the hub shows by default — irrelevant for
+   every other game, since they pick a year/week before asking for identity
+   at all. The actual PIN is checked server-side now (Script Property, not
+   a constant shipped here) — see spVerifyPin below. */
 const SP_TEACHER_CODE_PREFIX = "TEACH";
-const SP_TEACHER_PIN = "2013";
+
+// Looks up who a typed code *might* belong to, for UI purposes only (e.g.
+// "Hi Amelia!" before the PIN's even been asked for) — roster entries no
+// longer carry a PIN at all, so this can never be used to log in on its
+// own. The actual check is spVerifyPin, below, which hits the backend.
 function spFindLearnerOrTeacher(roster, code) {
   const upper = String(code).trim().toUpperCase();
   if (upper.startsWith(SP_TEACHER_CODE_PREFIX)) {
     const yearDigit = upper.slice(SP_TEACHER_CODE_PREFIX.length);
     const year = /^[2-6]$/.test(yearDigit) ? "Y" + yearDigit : "Y5";
-    return { id: upper, name: "Teacher", pin: SP_TEACHER_PIN, year, isTeacher: true };
+    return { id: upper, name: "Teacher", year, isTeacher: true };
   }
   return (roster || []).find(p => p.id.toUpperCase() === upper);
+}
+
+// The real login check — always goes to the backend, never compares
+// locally. Returns { ok, learner, token } on success or { ok:false,
+// lockedOut? } on failure/lockout. Every game calls this at the point
+// where it used to do `pinBuffer === pendingLearner.pin`.
+async function spVerifyPin(backendUrl, code, pin) {
+  if (!backendUrl) return { ok: false };
+  try {
+    const url = `${backendUrl}?action=verifyPin&code=${encodeURIComponent(code)}&pin=${encodeURIComponent(pin)}`;
+    const res = await fetch(url);
+    if (!res.ok) return { ok: false };
+    return await res.json();
+  } catch (e) {
+    console.warn("spVerifyPin failed:", e);
+    return { ok: false };
+  }
 }
