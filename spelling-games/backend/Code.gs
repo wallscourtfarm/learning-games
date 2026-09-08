@@ -11,15 +11,25 @@
 //        Best single score per learner, for this game (+ rule if given), highest first.
 //        Omit `rule` for an all-time leaderboard across every week's rule.
 //
-// GET  ?action=history&pupilId=AM72&game=spelling-pop
+// GET  ?action=history&pupilId=AM72&game=spelling-pop&token=…
 //        → { history: [ {timestamp, score, accuracy, ruleId}, ... ] }
-//        Every round that learner has played, most recent first.
+//        Every round that learner has played, most recent first. Requires a
+//        token from verifyPin for that same pupilId — no token, no history.
 //
 // GET  ?action=roster
-//        → { roster: [ {id, name, pin, year}, ... ], currentWeek: {term, week} }
-//        Read from the "Roster" and "Settings" tabs — see setupRosterSheet()
-//        below for how those tabs get created. This is the learner-setup tool:
-//        a teacher types names into the Sheet, no code or GitHub involved.
+//        → { roster: [ {id, name, year}, ... ], currentWeek: {term, week} }
+//        No PINs in this response (2026-09-08) — see verifyPin below for how
+//        a learner actually gets in. Read from the "Roster" and "Settings"
+//        tabs — see setupRosterSheet() below for how those tabs get created.
+//        This is the learner-setup tool: a teacher types names into the
+//        Sheet, no code or GitHub involved.
+//
+// GET  ?action=verifyPin&code=AM72&pin=1234
+//        → { ok: true, learner: {id, name, year}, token: "…" }  or  { ok: false }
+//        The actual login check, done server-side. `token` is only returned
+//        on success, proves this pupil's PIN was verified, and is required
+//        by ?action=history and the POST-a-score endpoint below. Locks a
+//        code out for 6 hours after 8 wrong PINs in a row.
 //
 // Weekly "most active learners" email digest — see setupWeeklyDigestTrigger()
 // below. Run it once from the Apps Script editor (or the "Spelling Games"
@@ -27,12 +37,10 @@
 // played the most rounds. Edit DIGEST_RECIPIENT_EMAILS first.
 //
 // POST body (Content-Type: text/plain, JSON-encoded) — one finished round:
-//        { pupilId, pupilName, game, ruleId, score, accuracy, bestStreak }
+//        { pupilId, pupilName, game, ruleId, score, accuracy, bestStreak, token }
 //        → { status: 'ok' }
-//
-// Note: like the other WFA staff-tools sync scripts, this trusts whatever the
-// client sends — there's no server-side check that pupilId is a real learner.
-// Fine for an internal classroom tool; don't point anything sensitive at it.
+//        `token` must be a verifyPin token for this exact pupilId — a score
+//        can no longer be submitted for a learner without their PIN.
 
 const SHEET_NAME = 'Scores';
 const HEADERS = ['Timestamp', 'PupilId', 'PupilName', 'Game', 'RuleId', 'Score', 'Accuracy', 'BestStreak'];
@@ -46,9 +54,10 @@ function doGet(e) {
   try {
     const params = (e && e.parameter) || {};
     if (params.action === 'leaderboard') return json({ leaderboard: getLeaderboard(params) });
-    if (params.action === 'history') return json({ history: getHistory(params) });
-    if (params.action === 'roster') return json(getRosterAndSettings());
-    return json({ error: 'unknown action — use ?action=leaderboard, ?action=history or ?action=roster' });
+    if (params.action === 'history') return json(getHistoryChecked(params));
+    if (params.action === 'roster') return json(getPublicRosterAndSettings());
+    if (params.action === 'verifyPin') return json(verifyPin(params));
+    return json({ error: 'unknown action — use ?action=leaderboard, ?action=history, ?action=roster or ?action=verifyPin' });
   } catch (err) {
     return json({ error: err.message });
   }
@@ -60,11 +69,115 @@ function doPost(e) {
     if (!body.pupilId || !body.game || typeof body.score !== 'number') {
       return json({ status: 'error', message: 'missing pupilId, game or score' });
     }
+    if (!verifyToken_(body.token, String(body.pupilId).toUpperCase())) {
+      return json({ status: 'error', message: 'unauthorised — pin not verified or session expired' });
+    }
     appendScore(body);
     return json({ status: 'ok' });
   } catch (err) {
     return json({ status: 'error', message: err.message });
   }
+}
+
+/* ── PIN verification + session tokens ──────────────────────────────────
+   A token proves "this browser already got this pupil's PIN right, at
+   this time" — cheap to check (an HMAC recompute, no state to store) and
+   short-lived, so a leaked token stops mattering on its own. The roster
+   endpoint below no longer includes PINs at all, so there's nothing to
+   read off the wire that lets you skip this step. */
+
+const TOKEN_TTL_MS = 5 * 60 * 60 * 1000; // 5 hours — a school day, with margin
+const MAX_PIN_ATTEMPTS = 8;
+const LOCKOUT_WINDOW_SECONDS = 6 * 60 * 60; // 6 hours
+
+function getTokenSecret_() {
+  const s = PropertiesService.getScriptProperties().getProperty('TOKEN_SECRET');
+  if (!s) throw new Error('TOKEN_SECRET script property not set');
+  return s;
+}
+
+function hmac_(payload) {
+  return Utilities.computeHmacSha256Signature(payload, getTokenSecret_())
+    .map(function (b) { return (b < 0 ? b + 256 : b).toString(16).padStart(2, '0'); })
+    .join('');
+}
+
+function makeToken_(pupilId) {
+  const payload = pupilId + '.' + Date.now();
+  return Utilities.base64EncodeWebSafe(payload + '.' + hmac_(payload));
+}
+
+function verifyToken_(token, expectedPupilId) {
+  try {
+    if (!token) return false;
+    const decoded = Utilities.newBlob(Utilities.base64DecodeWebSafe(token)).getDataAsString();
+    const parts = decoded.split('.');
+    if (parts.length !== 3) return false;
+    const pupilId = parts[0], ts = Number(parts[1]), sig = parts[2];
+    if (pupilId !== expectedPupilId) return false;
+    if (isNaN(ts) || Date.now() - ts > TOKEN_TTL_MS) return false;
+    return sig === hmac_(pupilId + '.' + ts);
+  } catch (err) {
+    return false;
+  }
+}
+
+// Light brute-force guard: N wrong PINs for one code within the window
+// locks that code out, independent of which device is trying. Cache-based
+// (not a sheet write) so it costs nothing and self-clears.
+function pinAttemptsKey_(code) { return 'pinfail_' + code; }
+
+function tooManyFailedAttempts_(code) {
+  const cache = CacheService.getScriptCache();
+  const n = Number(cache.get(pinAttemptsKey_(code)) || 0);
+  return n >= MAX_PIN_ATTEMPTS;
+}
+
+function recordFailedAttempt_(code) {
+  const cache = CacheService.getScriptCache();
+  const key = pinAttemptsKey_(code);
+  const n = Number(cache.get(key) || 0) + 1;
+  cache.put(key, String(n), LOCKOUT_WINDOW_SECONDS);
+}
+
+function clearFailedAttempts_(code) {
+  CacheService.getScriptCache().remove(pinAttemptsKey_(code));
+}
+
+function verifyPin(params) {
+  const code = String(params.code || '').trim().toUpperCase();
+  const pin = String(params.pin || '');
+  if (!code || !pin) return { ok: false };
+
+  if (tooManyFailedAttempts_(code)) return { ok: false, lockedOut: true };
+
+  // Teacher backdoor — same code shape as before (TEACH, optionally + a
+  // year digit), but the PIN now lives only in a Script Property, not a
+  // constant shipped in every game's public JS.
+  if (code.indexOf('TEACH') === 0) {
+    const teacherPin = PropertiesService.getScriptProperties().getProperty('TEACHER_PIN');
+    if (teacherPin && pin === teacherPin) {
+      clearFailedAttempts_(code);
+      const yearDigit = code.slice(5);
+      const year = /^[2-6]$/.test(yearDigit) ? 'Y' + yearDigit : 'Y5';
+      return { ok: true, learner: { id: code, name: 'Teacher', year: year, isTeacher: true }, token: makeToken_(code) };
+    }
+    recordFailedAttempt_(code);
+    return { ok: false };
+  }
+
+  const roster = getRosterAndSettings().roster;
+  const learner = roster.find(function (p) { return p.id === code; });
+  if (!learner || pin !== learner.pin) {
+    recordFailedAttempt_(code);
+    return { ok: false };
+  }
+  clearFailedAttempts_(code);
+  return {
+    ok: true,
+    learner: { id: learner.id, name: learner.name, year: learner.year },
+    token: makeToken_(learner.id)
+  };
 }
 
 function getSheet() {
@@ -133,6 +246,16 @@ function getHistory(params) {
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 }
 
+// A pupil's history is only theirs to see with a token proving they got
+// their own PIN right first — otherwise this was "hand over anyone's
+// scores for the asking", same shape as the roster leak.
+function getHistoryChecked(params) {
+  const pupilId = String(params.pupilId || '').toUpperCase();
+  if (!pupilId) return { history: [] };
+  if (!verifyToken_(params.token, pupilId)) return { error: 'unauthorised — pin not verified or session expired' };
+  return { history: getHistory(Object.assign({}, params, { pupilId: pupilId })) };
+}
+
 function json(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
@@ -172,6 +295,17 @@ function getRosterAndSettings() {
   }
 
   return { roster: roster, currentWeek: currentWeek };
+}
+
+// What ?action=roster actually returns — same shape minus PINs. Enough for
+// every game to show "who's in this class" and greet a learner by name
+// once they're through verifyPin, but nothing here lets you get in.
+function getPublicRosterAndSettings() {
+  const full = getRosterAndSettings();
+  return {
+    roster: full.roster.map(function (p) { return { id: p.id, name: p.name, year: p.year }; }),
+    currentWeek: full.currentWeek
+  };
 }
 
 /* Run this ONCE, from the Apps Script editor's Run button (pick

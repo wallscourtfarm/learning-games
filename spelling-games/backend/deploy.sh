@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
 # Re-deploy the Spelling Games backend after editing Code.gs.
-# Run setup.sh once first — it creates the project and prints the
-# DEPLOYMENT_ID to paste in below.
-#
 # Usage: ./deploy.sh "optional description"
+#
+# appsscript.json MUST say "access": "ANYONE_ANONYMOUS" (not "ANYONE") — every
+# `clasp deploy` re-derives the deployment's actual access tier from this file,
+# and "ANYONE" silently requires a Google sign-in for every caller, which would
+# lock every pupil out instantly. See feedback_apps_script_deploy_anyone_anonymous
+# in Claude's memory for how this was diagnosed (2026-09-08).
+
 set -e
 cd "$(dirname "$0")"
 
-DEPLOYMENT_ID="PASTE_DEPLOYMENT_ID_HERE"   # from setup.sh's first run
+DEPLOYMENT_ID="AKfycbwP3s1LdhCV3FZCYwY8QPtGZ2xeJgY8ZlEzRY44Igw2Bvr_nGUJtx7uB7JOEIXwXsPb"
 DESC="${1:-Deploy $(date '+%d %b %Y %H:%M')}"
+BASE_URL="https://script.google.com/macros/s/${DEPLOYMENT_ID}/exec"
 
-if [ "$DEPLOYMENT_ID" = "PASTE_DEPLOYMENT_ID_HERE" ]; then
-  echo "Edit deploy.sh and set DEPLOYMENT_ID first — see setup.sh's output, or" >&2
-  echo "run 'clasp deployments' to list it." >&2
+grep -q '"access": "ANYONE_ANONYMOUS"' appsscript.json || {
+  echo "✗ appsscript.json does not say ANYONE_ANONYMOUS — refusing to deploy (would lock out every pupil). Fix it first."
   exit 1
-fi
+}
 
 echo "→ Pushing to HEAD..."
 clasp push --force
@@ -27,4 +31,17 @@ echo "→ Updating live deployment to version $VERSION..."
 clasp deploy -V "$VERSION" -d "$DESC" -i "$DEPLOYMENT_ID"
 
 echo "✓ Done. Live deployment is now at version $VERSION."
-echo "  Web app URL: https://script.google.com/macros/s/${DEPLOYMENT_ID}/exec"
+echo "  Web app URL: $BASE_URL"
+
+echo ""
+echo "→ Verifying deployment is publicly reachable (no sign-in wall)..."
+sleep 3
+RESPONSE=$(curl -sL "${BASE_URL}?action=roster&v=verify$RANDOM" 2>/dev/null)
+if echo "$RESPONSE" | grep -q "accounts.google.com"; then
+  echo "  ⚠️  BROKEN — redirecting to Google sign-in, not serving JSON. Every pupil is locked out right now."
+  echo "      Fix: confirm appsscript.json says ANYONE_ANONYMOUS, then re-run this script."
+elif echo "$RESPONSE" | grep -q '"roster"'; then
+  echo "  ✓ Live and serving JSON correctly."
+else
+  echo "  ⚠️  Unexpected response — check manually: ${BASE_URL}?action=roster"
+fi
