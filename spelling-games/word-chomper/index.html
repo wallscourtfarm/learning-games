@@ -570,13 +570,17 @@ function pressDigit(d) {
   if (pinBuffer.length === 4) checkPin();
 }
 function pressDelete() { pinBuffer = pinBuffer.slice(0, -1); renderPinDots(); }
-function checkPin() {
-  if (pinBuffer === pendingLearner.pin) {
-    spSetVerifiedLearner(pendingLearner.id);
-    beginAs(pendingLearner);
+async function checkPin() {
+  const submitted = pinBuffer;
+  const result = await spVerifyPin(BACKEND_URL, pendingLearner.id, submitted);
+  if (result.ok) {
+    spSetVerifiedLearner(result.learner.id, result.token);
+    beginAs(result.learner);
   } else {
     $("pin-gate").classList.add("shake");
-    $("pin-error").textContent = "That's not quite right — try again.";
+    $("pin-error").textContent = result.lockedOut
+      ? "Too many tries — ask your teacher for help."
+      : "That's not quite right — try again.";
     setTimeout(() => { pinBuffer = ""; renderPinDots(); $("pin-gate").classList.remove("shake"); }, 420);
   }
 }
@@ -587,17 +591,23 @@ $("pin-back").addEventListener("click", () => {
   $("manual-gate").style.display = "block";
 });
 
-$("manual-submit").addEventListener("click", () => {
+$("manual-submit").addEventListener("click", async () => {
   const code = $("manual-code").value.trim().toUpperCase();
   const pin = $("manual-pin").value.trim();
-  const learner = code ? findLearner(code) : null;
-  if (!learner || learner.pin !== pin) {
+  if (!code || !pin) {
     $("manual-error").textContent = "That code and PIN don't match — check with your teacher.";
     return;
   }
+  const result = await spVerifyPin(BACKEND_URL, code, pin);
+  if (!result.ok) {
+    $("manual-error").textContent = result.lockedOut
+      ? "Too many tries — ask your teacher for help."
+      : "That code and PIN don't match — check with your teacher.";
+    return;
+  }
   $("manual-error").textContent = "";
-  spSetVerifiedLearner(learner.id);
-  beginAs(learner);
+  spSetVerifiedLearner(result.learner.id, result.token);
+  beginAs(result.learner);
 });
 [$("manual-code"), $("manual-pin")].forEach(inp =>
   inp.addEventListener("keydown", e => { if (e.key === "Enter") $("manual-submit").click(); }));

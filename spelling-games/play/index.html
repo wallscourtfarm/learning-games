@@ -200,31 +200,41 @@ function pressDigit(d) {
   if (pinBuffer.length === 4) checkPin();
 }
 function pressDelete() { pinBuffer = pinBuffer.slice(0, -1); renderPinDots(); }
-function checkPin() {
-  if (pinBuffer === pendingLearner.pin) {
-    identifyAs(pendingLearner);
+async function checkPin() {
+  const submitted = pinBuffer;
+  const result = await spVerifyPin(BACKEND_URL, pendingLearner.id, submitted);
+  if (result.ok) {
+    identifyAs(result.learner, result.token);
   } else {
     $("pin-gate").classList.add("shake");
-    $("pin-error").textContent = "That's not quite right — try again.";
+    $("pin-error").textContent = result.lockedOut
+      ? "Too many tries — ask your teacher for help."
+      : "That's not quite right — try again.";
     setTimeout(() => { pinBuffer = ""; renderPinDots(); $("pin-gate").classList.remove("shake"); }, 420);
   }
 }
 buildKeypad();
 
-$("manual-submit").addEventListener("click", () => {
+$("manual-submit").addEventListener("click", async () => {
   const code = $("manual-code").value.trim().toUpperCase();
   const pin = $("manual-pin").value.trim();
-  const learner = code ? findLearner(code) : null;
-  if (!learner || learner.pin !== pin) {
+  if (!code || !pin) {
     $("manual-error").textContent = "That code and PIN don't match — check with your teacher.";
     return;
   }
-  identifyAs(learner);
+  const result = await spVerifyPin(BACKEND_URL, code, pin);
+  if (!result.ok) {
+    $("manual-error").textContent = result.lockedOut
+      ? "Too many tries — ask your teacher for help."
+      : "That code and PIN don't match — check with your teacher.";
+    return;
+  }
+  identifyAs(result.learner, result.token);
 });
 
-function identifyAs(learner) {
+function identifyAs(learner, token) {
   identifiedLearner = learner;
-  spSetVerifiedLearner(learner.id);
+  spSetVerifiedLearner(learner.id, token);
   enterMain();
 }
 

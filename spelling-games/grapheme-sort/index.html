@@ -605,13 +605,17 @@ function pressDigit(d) {
   if (pinBuffer.length === 4) checkPin();
 }
 function pressDelete() { pinBuffer = pinBuffer.slice(0, -1); renderPinDots(); }
-function checkPin() {
-  if (pinBuffer === pendingLearner.pin) {
-    spSetVerifiedLearner(pendingLearner.id);
-    beginAsLearner(pendingLearner);
+async function checkPin() {
+  const submitted = pinBuffer;
+  const result = await spVerifyPin(BACKEND_URL, pendingLearner.id, submitted);
+  if (result.ok) {
+    spSetVerifiedLearner(result.learner.id, result.token);
+    beginAsLearner(result.learner);
   } else {
     $("pin-gate").classList.add("shake");
-    $("pin-error").textContent = "That's not quite right — try again.";
+    $("pin-error").textContent = result.lockedOut
+      ? "Too many tries — ask your teacher for help."
+      : "That's not quite right — try again.";
     setTimeout(() => { pinBuffer = ""; renderPinDots(); $("pin-gate").classList.remove("shake"); }, 420);
   }
 }
@@ -622,16 +626,22 @@ $("pin-back").addEventListener("click", () => {
   $("guest-gate").style.display = "block";
 });
 
-$("manual-submit").addEventListener("click", () => {
+$("manual-submit").addEventListener("click", async () => {
   const code = $("manual-code").value.trim().toUpperCase();
   const pin = $("manual-pin").value.trim();
-  const learner = code ? findLearner(code) : null;
-  if (!learner || learner.pin !== pin) {
+  if (!code || !pin) {
     $("manual-error").textContent = "That code and PIN don't match — check with your teacher.";
     return;
   }
-  spSetVerifiedLearner(learner.id);
-  beginAsLearner(learner);
+  const result = await spVerifyPin(BACKEND_URL, code, pin);
+  if (!result.ok) {
+    $("manual-error").textContent = result.lockedOut
+      ? "Too many tries — ask your teacher for help."
+      : "That code and PIN don't match — check with your teacher.";
+    return;
+  }
+  spSetVerifiedLearner(result.learner.id, result.token);
+  beginAsLearner(result.learner);
 });
 
 /* Runs once a pool is active and the start (identify-yourself) screen is showing. */
@@ -852,7 +862,8 @@ function syncSaveScore(entry) {
     method: "POST",
     body: JSON.stringify({
       pupilId: entry.id, pupilName: entry.name, game: GAME_ID, ruleId: POOL_ID,
-      score: entry.score, accuracy: entry.accuracy, bestStreak: entry.bestStreak
+      score: entry.score, accuracy: entry.accuracy, bestStreak: entry.bestStreak,
+      token: spGetVerifiedToken()
     }),
     headers: { "Content-Type": "text/plain" }
   }).catch(e => console.warn("Score sync failed, kept locally only:", e));
