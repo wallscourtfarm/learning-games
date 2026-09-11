@@ -149,7 +149,8 @@
     display:block; text-align:center; width:100%; margin-top:16px; font-size:13px; color:var(--muted);
     background:none; border:none; cursor:pointer; text-decoration:underline; font-family:inherit;
   }
-  .version{ text-align:center; font-size:11px; color:var(--muted); opacity:.8; padding:0 20px 20px; }
+
+  .footer{ text-align:center; padding:14px 12px 10px; color:#8aa2ae; font-size:11px; }
 </style>
 </head>
 <body>
@@ -202,7 +203,6 @@
     <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
       <div id="leaderboard-list"></div>
     </div>
-    <div class="version">Memory Pairs 28.08.26a · Wallscourt Farm Academy</div>
   </section>
 
   <!-- ══════════ TIER PICK SCREEN ══════════ -->
@@ -218,7 +218,6 @@
       <div class="list-opts" id="tier-opts"></div>
       <button class="btn" id="start-btn">Start matching! 🃏</button>
     </div>
-    <div class="version">Memory Pairs 28.08.26a · Wallscourt Farm Academy</div>
   </section>
 
   <!-- ══════════ GAME SCREEN ══════════ -->
@@ -254,7 +253,6 @@
     <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
       <div id="leaderboard-list-end"></div>
     </div>
-    <div class="version">Memory Pairs 28.08.26a · Wallscourt Farm Academy</div>
   </section>
 
 <script src="../homophones-data.js"></script>
@@ -677,5 +675,6 @@ async function fetchRemoteLeaderboard() {
   initAccessScreen();
 })();
 </script>
+<div class="footer">Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; v11.09.26a</div>
 </body>
 </html>

@@ -173,7 +173,6 @@
   footer.note{
     max-width:640px; margin:18px auto 0; padding:0 20px 8px; font-size:11.5px; color:var(--muted); text-align:center; line-height:1.5;
   }
-  .version{ text-align:center; font-size:11px; color:var(--muted); opacity:.8; padding:0 20px 20px; }
 
   /* ── QR / PIN access gate ── */
   .banner-error{
@@ -219,6 +218,8 @@
     font-family:inherit; font-size:14px; font-weight:700; padding:9px 16px; border-radius:999px;
     border:2px solid #cfe2ec; background:#fff; color:var(--navy);
   }
+
+  .footer{ text-align:center; padding:14px 12px 10px; color:#8aa2ae; font-size:11px; }
 </style>
 </head>
 <body>
@@ -339,10 +340,8 @@
     <div class="panel" style="margin-top:0; padding-top:10px; padding-bottom:10px;">
       <div id="leaderboard-list-end"></div>
     </div>
-    <div class="version">Word Jumble 28.08.26a · Wallscourt Farm Academy</div>
   </section>
 
-  <div class="version" id="game-footer-version" style="display:none;">Word Jumble 28.08.26a · Wallscourt Farm Academy</div>
 
 <script src="../lessons-data.js"></script>
 <script src="../spelling-pool.js"></script>
@@ -510,7 +509,6 @@ function beginAsLearner(learner) {
   playerId = learner.id;
   localStorage.setItem(LAST_ID_KEY, learner.id);
   goTo("game");
-  $("game-footer-version").style.display = "block";
   startRound();
 }
 
@@ -624,7 +622,6 @@ function goTo(which) {
   $("screen-end").classList.toggle("active", which === "end");
   $("game-wrap").classList.toggle("active", which === "game");
   document.body.classList.toggle("playing", which === "game");
-  if (which !== "game") $("game-footer-version").style.display = "none";
 }
 
 /* ── Text-to-speech — same mp3-first pattern as Spelling Bee. The shared
@@ -927,5 +924,6 @@ async function fetchRemoteLeaderboard() {
   }
 })();
 </script>
+<div class="footer">Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; v11.09.26a</div>
 </body>
 </html>

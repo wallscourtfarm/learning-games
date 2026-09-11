@@ -196,9 +196,8 @@
     background:#eaf6fd; color:var(--blue-dark); border-radius:999px;
     padding:6px 14px; font-weight:700; font-size:15px;
   }
-  .version{
-    text-align:center; color:var(--muted); font-size:11.5px; margin-top:22px; opacity:.7;
-  }
+
+  .footer{ text-align:center; padding:14px 12px 10px; color:#8aa2ae; font-size:11px; }
 </style>
 </head>
 <body>
@@ -271,7 +270,6 @@
 
   <h2>Top chompers</h2>
   <div class="panel" id="lb-setup"><div id="leaderboard-list"></div></div>
-  <div class="version">Word Chomper 28.08.26d · Wallscourt Farm Academy</div>
 </div>
 
 <!-- ══════════ GAME ══════════ -->
@@ -305,7 +303,6 @@
   <button class="btn green" id="again-btn">Play again 🟡</button>
   <button class="btn ghost-btn" id="words-btn">Change word list</button>
   <button class="btn ghost-btn" id="hub-btn">My Spelling Games 🏠</button>
-  <div class="version">Word Chomper 28.08.26d · Wallscourt Farm Academy</div>
 </div>
 
 <script src="../spelling-pool.js"></script>
@@ -1210,5 +1207,6 @@ $("hud-home-btn").addEventListener("click", () => {
   $("manual-code").focus();
 })();
 </script>
+<div class="footer">Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; v11.09.26a</div>
 </body>
 </html>
