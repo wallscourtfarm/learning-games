@@ -267,17 +267,26 @@ function spAffixBuckets(words, affixes, isPrefix) {
    call this once at load, before falling back to the static ROSTER /
    CURRENT_WEEK in roster.js if the backend isn't set or the fetch fails —
    so everything still works offline or before the Sheet is set up. */
+const SP_FETCH_TIMEOUT_MS = 6000;
+
 async function spFetchLiveRoster(backendUrl) {
   if (!backendUrl) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SP_FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(`${backendUrl}?action=roster`);
+    const res = await fetch(`${backendUrl}?action=roster`, { signal: controller.signal });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
     if (!data.roster || !data.roster.length) return null;
     return data;
   } catch (e) {
-    console.warn("Live roster fetch failed, using the roster.js fallback:", e);
+    // Covers a real network failure and a timed-out abort alike — either
+    // way the game must not be left staring at "Loading…" forever, so it
+    // falls back to the static ROSTER/CURRENT_WEEK in roster.js.
+    console.warn("Live roster fetch failed or timed out, using the roster.js fallback:", e);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -346,13 +355,17 @@ function spFindLearnerOrTeacher(roster, code) {
 // where it used to do `pinBuffer === pendingLearner.pin`.
 async function spVerifyPin(backendUrl, code, pin) {
   if (!backendUrl) return { ok: false };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SP_FETCH_TIMEOUT_MS);
   try {
     const url = `${backendUrl}?action=verifyPin&code=${encodeURIComponent(code)}&pin=${encodeURIComponent(pin)}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) return { ok: false };
     return await res.json();
   } catch (e) {
-    console.warn("spVerifyPin failed:", e);
+    console.warn("spVerifyPin failed or timed out:", e);
     return { ok: false };
+  } finally {
+    clearTimeout(timer);
   }
 }
