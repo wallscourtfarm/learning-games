@@ -266,14 +266,35 @@ function spAffixBuckets(words, affixes, isPrefix) {
    in Code.gs), not in a hand-edited JS file. Every game and cards.html
    call this once at load, before falling back to the static ROSTER /
    CURRENT_WEEK in roster.js if the backend isn't set or the fetch fails —
-   so everything still works offline or before the Sheet is set up. */
+   so everything still works offline or before the Sheet is set up.
+
+   Cached in sessionStorage for SP_ROSTER_CACHE_TTL_MS: a learner going
+   hub → game (or game → game) re-triggers this on every page load, and
+   without a cache that was a full Apps Script round-trip every single
+   time — the dominant reason games felt slow to open (2026-09-11). A
+   hard timeout on the fetch itself means a stuck/overloaded backend falls
+   back to the static roster.js copy in a few seconds rather than leaving
+   the caller waiting indefinitely. */
+const SP_ROSTER_CACHE_KEY = "wfa-spelling-roster-cache";
+const SP_ROSTER_CACHE_TTL_MS = 90 * 1000;
+const SP_FETCH_TIMEOUT_MS = 8000;
+
 async function spFetchLiveRoster(backendUrl) {
   if (!backendUrl) return null;
   try {
-    const res = await fetch(`${backendUrl}?action=roster`);
+    const cachedRaw = sessionStorage.getItem(SP_ROSTER_CACHE_KEY);
+    if (cachedRaw) {
+      const cached = JSON.parse(cachedRaw);
+      if (cached && Date.now() - cached.at < SP_ROSTER_CACHE_TTL_MS) return cached.data;
+    }
+  } catch (e) {}
+
+  try {
+    const res = await fetch(`${backendUrl}?action=roster`, { signal: AbortSignal.timeout(SP_FETCH_TIMEOUT_MS) });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
     if (!data.roster || !data.roster.length) return null;
+    try { sessionStorage.setItem(SP_ROSTER_CACHE_KEY, JSON.stringify({ at: Date.now(), data: data })); } catch (e) {}
     return data;
   } catch (e) {
     console.warn("Live roster fetch failed, using the roster.js fallback:", e);
@@ -348,11 +369,17 @@ async function spVerifyPin(backendUrl, code, pin) {
   if (!backendUrl) return { ok: false };
   try {
     const url = `${backendUrl}?action=verifyPin&code=${encodeURIComponent(code)}&pin=${encodeURIComponent(pin)}`;
-    const res = await fetch(url);
-    if (!res.ok) return { ok: false };
-    return await res.json();
+    const res = await fetch(url, { signal: AbortSignal.timeout(SP_FETCH_TIMEOUT_MS) });
+    if (!res.ok) return { ok: false, networkError: true };
+    const data = await res.json();
+    // A backend hiccup (e.g. Apps Script overloaded) returns { error }
+    // rather than the usual { ok }, which would otherwise read as "wrong
+    // PIN" to a caller checking `result.ok` — flag it so callers can tell
+    // the two apart instead of shaking the PIN pad at a correct guess.
+    if (typeof data.ok === "undefined") return { ok: false, networkError: true };
+    return data;
   } catch (e) {
     console.warn("spVerifyPin failed:", e);
-    return { ok: false };
+    return { ok: false, networkError: true };
   }
 }

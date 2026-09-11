@@ -266,7 +266,22 @@ function json(obj) {
    once setupRosterSheet() below has been run once.
    ════════════════════════════════════════════════════════════════ */
 
+// Every game does a full roster fetch on load, plus verifyPin reads the
+// same data again to check a PIN — under real classroom concurrency
+// (a whole class opening games at once) that meant dozens of simultaneous
+// full-sheet reads, and Apps Script serializes those against the shared
+// execution quota: a 10-request burst was clocked queueing up to 18s deep
+// before this cache was added (2026-09-11). A short cache turns almost all
+// of that into an in-memory hit — a teacher edit to the Roster/Settings
+// tabs can take up to ROSTER_CACHE_TTL_SECONDS to show up everywhere.
+const ROSTER_CACHE_KEY = 'rosterAndSettings_v1';
+const ROSTER_CACHE_TTL_SECONDS = 120;
+
 function getRosterAndSettings() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(ROSTER_CACHE_KEY);
+  if (cached) return JSON.parse(cached);
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const rosterSheet = ss.getSheetByName(ROSTER_SHEET_NAME);
   const settingsSheet = ss.getSheetByName(SETTINGS_SHEET_NAME);
@@ -294,7 +309,14 @@ function getRosterAndSettings() {
     if (term && week) currentWeek = { term: String(term).trim(), week: String(week).trim() };
   }
 
-  return { roster: roster, currentWeek: currentWeek };
+  const result = { roster: roster, currentWeek: currentWeek };
+  try {
+    cache.put(ROSTER_CACHE_KEY, JSON.stringify(result), ROSTER_CACHE_TTL_SECONDS);
+  } catch (e) {
+    // Roster too large for one cache entry (100KB cap) — fine, just means
+    // every request re-reads the sheet as before.
+  }
+  return result;
 }
 
 // What ?action=roster actually returns — same shape minus PINs. Enough for

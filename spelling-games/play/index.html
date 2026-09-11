@@ -156,7 +156,7 @@
 </main>
 
 <div class="footer">
-  Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; v25.08.26b
+  Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; v11.09.26a
 </div>
 
 <script src="../lessons-data.js"></script>
@@ -207,7 +207,9 @@ async function checkPin() {
     identifyAs(result.learner, result.token);
   } else {
     $("pin-gate").classList.add("shake");
-    $("pin-error").textContent = result.lockedOut
+    $("pin-error").textContent = result.networkError
+      ? "Couldn't reach the server — check your connection and try again."
+      : result.lockedOut
       ? "Too many tries — ask your teacher for help."
       : "That's not quite right — try again.";
     setTimeout(() => { pinBuffer = ""; renderPinDots(); $("pin-gate").classList.remove("shake"); }, 420);
@@ -224,7 +226,9 @@ $("manual-submit").addEventListener("click", async () => {
   }
   const result = await spVerifyPin(BACKEND_URL, code, pin);
   if (!result.ok) {
-    $("manual-error").textContent = result.lockedOut
+    $("manual-error").textContent = result.networkError
+      ? "Couldn't reach the server — check your connection and try again."
+      : result.lockedOut
       ? "Too many tries — ask your teacher for help."
       : "That code and PIN don't match — check with your teacher.";
     return;
