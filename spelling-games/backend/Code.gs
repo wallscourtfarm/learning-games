@@ -277,6 +277,41 @@ function json(obj) {
 const ROSTER_CACHE_KEY = 'rosterAndSettings_v1';
 const ROSTER_CACHE_TTL_SECONDS = 120;
 
+// The same "WFA Planning Data" hub sheet that wfa-app/wfa-data read for
+// term dates elsewhere in the school's tools (see TermDates tab) — Term |
+// Week | Label | StartDate (the Monday each school week begins). Reading
+// this means the current week advances on its own every Monday; nobody
+// has to remember to bump a cell (2026-09-21, after weeks silently stayed
+// on T1W1 because that manual step got missed).
+const TERM_DATES_SHEET_ID = '1XsP5yEGnf8sJyXk8iEXqHEtw-NtCsMUFZLaHW4TWNhw';
+const TERM_DATES_TAB_NAME = 'TermDates';
+
+// Picks the latest TermDates row whose StartDate has already passed —
+// i.e. the school week we're currently in. Returns null (never throws) if
+// the calendar sheet can't be read, so a sharing hiccup there falls back
+// to the manual Settings tab below rather than locking games out entirely.
+function computeCurrentWeekFromCalendar_() {
+  try {
+    const sheet = SpreadsheetApp.openById(TERM_DATES_SHEET_ID).getSheetByName(TERM_DATES_TAB_NAME);
+    if (!sheet) return null;
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return null;
+    const values = sheet.getRange(2, 1, lastRow - 1, 4).getValues(); // Term | Week | Label | StartDate
+    const today = new Date();
+    let best = null;
+    values.forEach(function (r) {
+      const term = r[0], week = r[1], startDate = r[3];
+      if (!term || !week || !(startDate instanceof Date) || startDate > today) return;
+      if (!best || startDate > best.startDate) {
+        best = { term: 'T' + term, week: 'W' + week, startDate: startDate };
+      }
+    });
+    return best ? { term: best.term, week: best.week } : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function getRosterAndSettings() {
   const cache = CacheService.getScriptCache();
   const cached = cache.get(ROSTER_CACHE_KEY);
@@ -302,8 +337,8 @@ function getRosterAndSettings() {
     }
   }
 
-  let currentWeek = null;
-  if (settingsSheet) {
+  let currentWeek = computeCurrentWeekFromCalendar_();
+  if (!currentWeek && settingsSheet) {
     const term = settingsSheet.getRange('A2').getValue();
     const week = settingsSheet.getRange('B2').getValue();
     if (term && week) currentWeek = { term: String(term).trim(), week: String(week).trim() };
@@ -404,10 +439,45 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Spelling Games')
     .addItem('Set up Roster tab', 'setupRosterSheet')
+    .addItem('Override current week…', 'promptAdvanceCurrentWeek')
     .addSeparator()
     .addItem('Send weekly digest now', 'sendWeeklyDigest')
     .addItem('Schedule weekly digest…', 'setupWeeklyDigestTrigger')
     .addToUi();
+}
+
+/* The current week now advances on its own every Monday, read from the
+   school's shared TermDates calendar (see computeCurrentWeekFromCalendar_
+   above) — this is only a manual override for the rare case the calendar
+   sheet is wrong or unreachable. It writes Settings!A2:B2, which is used
+   only when the calendar lookup fails. Cache-busts itself immediately. */
+function setCurrentWeek(term, week) {
+  const settings = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SETTINGS_SHEET_NAME);
+  if (!settings) throw new Error('Settings tab not found — run "Set up Roster tab" first.');
+  settings.getRange('A2:B2').setValues([[term, week]]);
+  CacheService.getScriptCache().remove(ROSTER_CACHE_KEY);
+  return { term: term, week: week };
+}
+
+function promptAdvanceCurrentWeek() {
+  const ui = SpreadsheetApp.getUi();
+  const settings = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SETTINGS_SHEET_NAME);
+  const currentTerm = settings ? settings.getRange('A2').getValue() : '';
+  const currentWeek = settings ? settings.getRange('B2').getValue() : '';
+
+  const termResp = ui.prompt('Advance current week', 'Currently ' + currentTerm + ' ' + currentWeek + '. New term (e.g. T1):', ui.ButtonSet.OK_CANCEL);
+  if (termResp.getSelectedButton() !== ui.Button.OK) return;
+  const weekResp = ui.prompt('Advance current week', 'New week (e.g. W2):', ui.ButtonSet.OK_CANCEL);
+  if (weekResp.getSelectedButton() !== ui.Button.OK) return;
+
+  const term = termResp.getResponseText().trim().toUpperCase();
+  const week = weekResp.getResponseText().trim().toUpperCase();
+  if (!/^T[1-6]$/.test(term) || !/^W[1-6]$/.test(week)) {
+    ui.alert('Term must be T1–T6 and week must be W1–W6 — nothing changed.');
+    return;
+  }
+  setCurrentWeek(term, week);
+  ui.alert('Done — current week is now ' + term + ' ' + week + '. Games update within 2 minutes.');
 }
 
 /* ════════════════════════════════════════════════════════════════
