@@ -289,6 +289,11 @@
         We didn't recognise that spelling code. Ask your teacher for a new card, or use the options below.
       </div>
 
+      <div id="no-words-banner" class="banner-error" style="display:none;">
+        No spelling words are set up for this year/week yet — ask your teacher to check the word list.
+        <button type="button" class="setup-link" id="no-words-change-week-link">Change year/week</button>
+      </div>
+
       <!-- Shown once a learner is identified, via QR scan or manual code -->
       <div id="pin-gate" style="display:none;">
         <div class="pin-hello">Hi <span id="pin-learner-name"></span>! Enter your spelling PIN.</div>
@@ -486,6 +491,10 @@ $("change-week-link").addEventListener("click", () => {
   $("guest-gate").style.display = "block";
   goTo("setup");
 });
+$("no-words-change-week-link").addEventListener("click", () => {
+  $("guest-gate").style.display = "block";
+  goTo("setup");
+});
 
 /* ── Leaderboard (localStorage stand-in for a real backend) ── */
 function loadLeaderboard() {
@@ -620,6 +629,20 @@ $("manual-submit").addEventListener("click", async () => {
 /* Runs once a word pool is active and the start (identify-yourself) screen is showing. */
 function initAccessScreen() {
   $("bad-code-banner").style.display = "none";
+  $("no-words-banner").style.display = "none";
+
+  if (!WORDS.length) {
+    // No lesson data for this year/term/week (e.g. a stale QR/link pointing
+    // at a week that hasn't been added yet) — don't let anyone start a
+    // round with an empty word pool, since spawnBubble has nothing to pick
+    // from and would crash on the first bubble.
+    $("no-words-banner").style.display = "block";
+    $("pin-gate").style.display = "none";
+    $("guest-gate").style.display = "none";
+    renderLeaderboard("leaderboard-list", localStorage.getItem(LAST_ID_KEY));
+    return;
+  }
+
   if (qrCode) {
     pendingLearner = findLearner(qrCode);
     if (pendingLearner) {
@@ -716,6 +739,7 @@ function updateHud() {
 }
 
 function spawnBubble() {
+  if (!WORDS.length) return;
   const area = $("game-area");
   const pair = WORDS[Math.floor(Math.random() * WORDS.length)];
   const isCorrect = Math.random() < 0.55;
@@ -897,6 +921,6 @@ async function fetchRemoteLeaderboard() {
   }
 })();
 </script>
-<div class="footer">Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; v22.09.26a</div>
+<div class="footer">Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; v22.09.26b</div>
 </body>
 </html>
