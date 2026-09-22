@@ -279,6 +279,56 @@ const SP_ROSTER_CACHE_KEY = "wfa-spelling-roster-cache";
 const SP_ROSTER_CACHE_TTL_MS = 90 * 1000;
 const SP_FETCH_TIMEOUT_MS = 8000;
 
+/* Staff-only roster read that includes PINs — used by cards.html to print
+   learner login cards and by admin/index.html's usage dashboard. Client-
+   embedded token, same trust model as every other admin token in this
+   codebase (menu-admin, lunch-overrides) — a deterrent against casual
+   discovery, not real access control. Never call this from a pupil-facing
+   game; spFetchLiveRoster's plain ?action=roster (no PINs) is what those use. */
+const SG_ADMIN_TOKEN = "sg-admin-f3a9c17b2e";
+
+async function spFetchAdminRoster(backendUrl) {
+  if (!backendUrl) return null;
+  try {
+    const res = await fetch(`${backendUrl}?action=adminRoster&adminToken=${SG_ADMIN_TOKEN}`, { signal: AbortSignal.timeout(SP_FETCH_TIMEOUT_MS) });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    return data.roster || null;
+  } catch (e) {
+    console.warn("Admin roster fetch failed:", e);
+    return null;
+  }
+}
+
+async function spFetchAdminStats(backendUrl) {
+  if (!backendUrl) return null;
+  try {
+    const res = await fetch(`${backendUrl}?action=adminStats&adminToken=${SG_ADMIN_TOKEN}`, { signal: AbortSignal.timeout(SP_FETCH_TIMEOUT_MS) });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    return data.stats || null;
+  } catch (e) {
+    console.warn("Admin stats fetch failed:", e);
+    return null;
+  }
+}
+
+async function spSyncRoster(backendUrl, dryRun) {
+  if (!backendUrl) return { error: "no backend" };
+  try {
+    const res = await fetch(backendUrl, {
+      method: "POST",
+      body: JSON.stringify({ action: "syncRoster", dryRun: !!dryRun, adminToken: SG_ADMIN_TOKEN }),
+      headers: { "Content-Type": "text/plain" },
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return await res.json();
+  } catch (e) {
+    return { error: String(e) };
+  }
+}
+
 async function spFetchLiveRoster(backendUrl) {
   if (!backendUrl) return null;
   try {

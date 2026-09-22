@@ -1,12 +1,13 @@
 /* ════════════════════════════════════════════════════════════════
    Wallscourt Farm Academy — Spelling Games shared roster
 
-   The real source of learner setup is the Google Sheet behind BACKEND_URL
-   below — see "Set up Roster tab" in that Sheet's menu. Every game and
-   cards.html fetch the live roster + current week from there first
-   (spFetchLiveRoster in spelling-pool.js) and only fall back to the
-   five made-up learners below if BACKEND_URL is empty or unreachable —
-   so this file still works standalone for local testing or a demo.
+   The real roster (22.09.26 onward) syncs automatically from the
+   school's Bromcom feed — see admin/index.html's "Sync roster" button.
+   Every game and cards.html fetch the live roster + current week from
+   BACKEND_URL first (spFetchLiveRoster in spelling-pool.js) and only
+   fall back to the five made-up learners below if BACKEND_URL is empty
+   or unreachable — so this file still works standalone for local
+   testing or a demo.
 
    ROSTER / CURRENT_WEEK are declared with `let`, not `const`, because
    a successful live fetch replaces them in place.
@@ -24,10 +25,18 @@ let ROSTER = [
    group above. */
 let CURRENT_WEEK = { term: "T1", week: "W1" };
 
-/* Same deployed Apps Script backend for every spelling game — scores,
-   leaderboards and the learner roster all live behind this one URL.
-   Empty = local-only (localStorage scores, the static ROSTER above). */
-const BACKEND_URL = "https://script.google.com/macros/s/AKfycbwP3s1LdhCV3FZCYwY8QPtGZ2xeJgY8ZlEzRY44Igw2Bvr_nGUJtx7uB7JOEIXwXsPb/exec";
+/* Same backend for every spelling game — scores, leaderboards and the
+   learner roster all live behind this one URL. Empty = local-only
+   (localStorage scores, the static ROSTER above).
+
+   CUT OVER 22.09.26 to the Postgres-backed store (wfa-data) — real live
+   data (282 roster rows with real PINs, 149 score rows) backfilled and
+   verified first, then a real roster sync run against the Bromcom hub
+   (the old Sheet-typed roster was missing 30 real pupils never added by
+   hand). Old Apps Script backend deliberately left running, untouched,
+   as an instant one-line rollback if ever needed:
+     "https://script.google.com/macros/s/AKfycbwP3s1LdhCV3FZCYwY8QPtGZ2xeJgY8ZlEzRY44Igw2Bvr_nGUJtx7uB7JOEIXwXsPb/exec" */
+const BACKEND_URL = "https://api.wallscourt-farm-academy.co.uk/planning/spellinggames-db";
 
 /* Every game cards.html should generate a QR code for, one row per
    learner. Add a new entry here when a new game is built — nothing else
