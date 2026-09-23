@@ -69,6 +69,10 @@ const GAMES = [
     isAvailable: (year, term, week) => spGetWeekPool(year, term, week).words.length > 0
   },
   {
+    id: "volcano-escape", label: "Volcano Escape", icon: "🌋", path: "volcano-escape/index.html",
+    isAvailable: (year, term, week) => spGetWeekPool(year, term, week).words.length > 0
+  },
+  {
     id: "word-maze", label: "Word Maze", icon: "🏛️", path: "word-maze/index.html",
     isAvailable: (year, term, week) => spGetWeekPool(year, term, week).words.length > 0
   },
