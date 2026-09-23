@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Volcano Escape — Wallscourt Farm Academy</title>
+<title>Enoch's Lava Letters — Wallscourt Farm Academy</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌋</text></svg>">
 <style>
   :root{
@@ -197,6 +197,25 @@
     text-align:center; will-change:transform;
     transform:translateX(-50%);
   }
+  .slab{ --heat:0; }
+  .slab::after{ /* scorch glow that builds as the slab nears the lava */
+    content:""; position:absolute; inset:0; border-radius:16px; pointer-events:none;
+    background:linear-gradient(180deg,rgba(255,90,10,calc(var(--heat) * .55)),rgba(255,200,60,calc(var(--heat) * .35)));
+    box-shadow:0 0 calc(var(--heat) * 34px) calc(var(--heat) * 8px) rgba(255,120,20,calc(var(--heat) * .9));
+  }
+  .flames{ position:absolute; left:4px; right:4px; top:-4px; height:0; pointer-events:none; }
+  .flame{
+    position:absolute; bottom:0; width:22px; height:34px; margin-left:-11px;
+    background:radial-gradient(ellipse at 50% 85%,#fff6b8 0%,#ffb21f 35%,#ff5a0a 65%,rgba(224,58,5,0) 72%);
+    border-radius:50% 50% 45% 45% / 70% 70% 30% 30%;
+    transform-origin:50% 100%;
+    transform:scale(calc(var(--heat) * var(--sz))) ;
+    opacity:calc(var(--heat) * 1.6 - var(--th));
+    animation:flicker .38s ease-in-out infinite alternate;
+    filter:drop-shadow(0 0 5px rgba(255,120,20,.9));
+  }
+  @keyframes flicker{ from{ transform:scale(calc(var(--heat) * var(--sz) * .85), calc(var(--heat) * var(--sz) * 1.1)) rotate(-4deg);} to{ transform:scale(calc(var(--heat) * var(--sz) * 1.05), calc(var(--heat) * var(--sz) * .8)) rotate(4deg);} }
+  .slab.saved::after, .slab.saved .flames{ display:none; }
   .slab.shake{ animation:slabShake .34s ease; }
   @keyframes slabShake{ 20%{transform:translateX(calc(-50% - 10px)) rotate(-2deg);} 50%{transform:translateX(calc(-50% + 10px)) rotate(2deg);} 80%{transform:translateX(calc(-50% - 5px));} 100%{transform:translateX(-50%);} }
   .slab.saved{ background:linear-gradient(180deg,#7fd89a,#3aa262); box-shadow:0 8px 0 #24743f, 0 0 26px rgba(120,255,160,.8); }
@@ -334,7 +353,7 @@
   <section id="screen-loading" class="screen active">
     <div class="brand">
       <div class="kicker">Wallscourt Farm Academy · Spelling Games</div>
-      <h1><span class="pop-emoji">🌋</span> Volcano Escape</h1>
+      <h1><span class="pop-emoji">🌋</span> Enoch's Lava Letters</h1>
     </div>
   </section>
 
@@ -342,7 +361,7 @@
   <section id="screen-setup" class="screen">
     <div class="brand">
       <div class="kicker">Wallscourt Farm Academy · Spelling Games</div>
-      <h1><span class="pop-emoji">🌋</span> Volcano Escape</h1>
+      <h1><span class="pop-emoji">🌋</span> Enoch's Lava Letters</h1>
     </div>
     <div class="panel">
       <p style="font-size:13.5px; color:var(--muted); margin:0 0 16px;">
@@ -367,7 +386,7 @@
   <section id="screen-start" class="screen">
     <div class="brand">
       <div class="kicker">Wallscourt Farm Academy · Spelling Games</div>
-      <h1><span class="pop-emoji">🌋</span> Volcano Escape</h1>
+      <h1><span class="pop-emoji">🌋</span> Enoch's Lava Letters</h1>
     </div>
 
     <div class="panel">
@@ -452,6 +471,7 @@
       <button class="scene-btn" id="speak-btn" aria-label="Hear the word again">🔊</button>
       <button class="scene-btn" id="hint-btn" aria-label="Reveal the next letter (costs 5 points)">💡 −5</button>
       <div class="slab" id="slab">
+        <div class="flames" id="flames"></div>
         <div class="slab-hint" id="slab-hint">Listen, then spell the word!</div>
         <div class="letters" id="letters"></div>
       </div>
@@ -1076,6 +1096,8 @@ function positionSlab() {
   const frac = state.timeTotal ? 1 - Math.max(0, state.timeLeft) / state.timeTotal : 0;
   const y = startY + Math.max(0, endY - startY) * frac;
   slab.style.top = y + "px";
+  // Fire: nothing for the first ~third of the fall, then building to a blaze.
+  slab.style.setProperty("--heat", Math.max(0, Math.min(1, (frac - 0.3) / 0.7)).toFixed(3));
 }
 
 function updateHud() {
@@ -1151,6 +1173,23 @@ function endRound() {
 
   setTimeout(() => goTo("end"), 260);
 }
+
+/* Flames along the top edge of the slab; --heat (set as the slab falls)
+   scales them up and fades them in. Later flames (higher --th) only
+   appear once it's hotter, so the fire spreads as it gets closer. */
+(function buildFlames() {
+  const box = $("flames");
+  const n = 9;
+  for (let i = 0; i < n; i++) {
+    const f = document.createElement("div");
+    f.className = "flame";
+    f.style.left = ((i + 0.5) / n * 100) + "%";
+    f.style.setProperty("--sz", (0.9 + Math.random() * 0.8).toFixed(2));
+    f.style.setProperty("--th", (Math.random() * 0.6).toFixed(2));
+    f.style.animationDelay = (-Math.random() * 0.4) + "s";
+    box.appendChild(f);
+  }
+})();
 
 /* Little drifting ash + lava bubbles so the scene feels alive. */
 (function decorate() {
@@ -1234,6 +1273,6 @@ async function fetchRemoteLeaderboard() {
   }
 })();
 </script>
-<div class="footer">Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; v23.09.26b</div>
+<div class="footer">Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; v23.09.26c</div>
 </body>
 </html>

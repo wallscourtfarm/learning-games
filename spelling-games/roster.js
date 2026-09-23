@@ -69,7 +69,7 @@ const GAMES = [
     isAvailable: (year, term, week) => spGetWeekPool(year, term, week).words.length > 0
   },
   {
-    id: "volcano-escape", label: "Volcano Escape", icon: "🌋", path: "volcano-escape/index.html",
+    id: "volcano-escape", label: "Enoch's Lava Letters", icon: "🌋", path: "volcano-escape/index.html",
     isAvailable: (year, term, week) => spGetWeekPool(year, term, week).words.length > 0
   },
   {
