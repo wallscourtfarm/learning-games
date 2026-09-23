@@ -173,6 +173,18 @@
     background:#5a6b57; color:#e7f5e4; font-size:12px; font-weight:800; letter-spacing:.3px;
     box-shadow:0 4px 0 #3d4b3b;
   }
+  .edge-lava{
+    position:absolute; top:0; bottom:20%; width:20px; z-index:2; pointer-events:none;
+    background:repeating-linear-gradient(180deg,#e8430a 0,#ff8a1f 22px,#ffd166 40px,#ff8a1f 58px,#e8430a 80px);
+    background-size:100% 80px; animation:edgeFlow 1.6s linear infinite;
+    box-shadow:0 0 22px 8px rgba(255,100,10,.75);
+    filter:blur(1.5px);
+    -webkit-mask-image:linear-gradient(90deg,#000 55%,transparent);
+    mask-image:linear-gradient(90deg,#000 55%,transparent);
+  }
+  .edge-lava.l{ left:0; border-radius:0 12px 12px 0; }
+  .edge-lava.r{ right:0; border-radius:12px 0 0 12px; -webkit-mask-image:linear-gradient(270deg,#000 55%,transparent); mask-image:linear-gradient(270deg,#000 55%,transparent); }
+  @keyframes edgeFlow{ to{ background-position:0 80px; } }
   .lava-pool{
     position:absolute; left:0; right:0; bottom:0; height:22%;
     background:linear-gradient(180deg,#ff8a1f 0%,#ff5a0a 40%,#c72d05 100%);
@@ -468,6 +480,14 @@
             <path class="lava-flow" d="M124 36 C138 66 128 96 152 128 S168 150 176 160" stroke="url(#lavaG)" stroke-width="4"/>
             <path d="M84 30 C80 44 86 52 78 66" stroke="#ff6a10" stroke-width="5" filter="url(#glow)" opacity=".7"/>
             <path d="M116 30 C120 44 114 52 122 66" stroke="#ff6a10" stroke-width="5" filter="url(#glow)" opacity=".7"/>
+            <path d="M68 42 C48 74 56 104 30 134 S14 152 6 160" stroke="#ff6a10" stroke-width="10" filter="url(#glow)" opacity=".75"/>
+            <path class="lava-flow" d="M68 42 C48 74 56 104 30 134 S14 152 6 160" stroke="url(#lavaG)" stroke-width="4.5"/>
+            <path d="M60 62 C44 92 34 122 16 160" stroke="#ff6a10" stroke-width="8" filter="url(#glow)" opacity=".75"/>
+            <path class="lava-flow" d="M60 62 C44 92 34 122 16 160" stroke="url(#lavaG)" stroke-width="2.5"/>
+            <path d="M132 42 C152 74 144 104 170 134 S186 152 194 160" stroke="#ff6a10" stroke-width="10" filter="url(#glow)" opacity=".75"/>
+            <path class="lava-flow" d="M132 42 C152 74 144 104 170 134 S186 152 194 160" stroke="url(#lavaG)" stroke-width="4.5"/>
+            <path d="M140 62 C156 92 166 122 184 160" stroke="#ff6a10" stroke-width="8" filter="url(#glow)" opacity=".75"/>
+            <path class="lava-flow" d="M140 62 C156 92 166 122 184 160" stroke="url(#lavaG)" stroke-width="2.5"/>
             <path class="crack" d="M60 120 l10 -8 l-3 -10 l9 -9" stroke="#ff9a2b" stroke-width="1.6"/>
             <path class="crack" d="M150 118 l-9 -9 l4 -10 l-8 -8" stroke="#ff9a2b" stroke-width="1.6"/>
             <path class="crack" d="M118 136 l6 -9 l-3 -8" stroke="#ff9a2b" stroke-width="1.4"/>
@@ -475,6 +495,7 @@
         </svg>
       </div>
       <div class="crater-glow"></div>
+      <div class="edge-lava l"></div><div class="edge-lava r"></div>
       <div class="safe-ledge">🏕️ Safe ground</div>
       <div class="word-counter" id="word-counter" style="top:52px;"></div>
       <button class="scene-btn" id="speak-btn" aria-label="Hear the word again">🔊</button>
@@ -1284,6 +1305,6 @@ async function fetchRemoteLeaderboard() {
   }
 })();
 </script>
-<div class="footer">Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; v23.09.26d</div>
+<div class="footer">Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; v23.09.26e</div>
 </body>
 </html>
