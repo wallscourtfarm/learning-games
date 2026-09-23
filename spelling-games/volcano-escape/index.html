@@ -197,24 +197,27 @@
     text-align:center; will-change:transform;
     transform:translateX(-50%);
   }
-  .slab{ --heat:0; }
+  .slab{ --heat:0; --k:0; }
   .slab::after{ /* scorch glow that builds as the slab nears the lava */
     content:""; position:absolute; inset:0; border-radius:16px; pointer-events:none;
-    background:linear-gradient(180deg,rgba(255,90,10,calc(var(--heat) * .55)),rgba(255,200,60,calc(var(--heat) * .35)));
-    box-shadow:0 0 calc(var(--heat) * 34px) calc(var(--heat) * 8px) rgba(255,120,20,calc(var(--heat) * .9));
+    background:linear-gradient(180deg,rgba(255,90,10,calc(var(--heat) * .38)),rgba(255,200,60,calc(var(--heat) * .22)));
+    box-shadow:0 0 calc(var(--heat) * 50px) calc(var(--heat) * 14px) rgba(255,120,20,calc(var(--heat) * .95));
   }
-  .flames{ position:absolute; left:4px; right:4px; top:-4px; height:0; pointer-events:none; }
+  .flames{ position:absolute; left:0; right:0; top:2px; height:0; pointer-events:none; --big:0; }
   .flame{
-    position:absolute; bottom:0; width:22px; height:34px; margin-left:-11px;
-    background:radial-gradient(ellipse at 50% 85%,#fff6b8 0%,#ffb21f 35%,#ff5a0a 65%,rgba(224,58,5,0) 72%);
-    border-radius:50% 50% 45% 45% / 70% 70% 30% 30%;
+    position:absolute; bottom:0; width:30px; height:58px; margin-left:-15px;
+    background:radial-gradient(ellipse at 50% 88%,#fffbd0 0%,#ffd23f 22%,#ff8a1f 45%,#ff3d00 68%,rgba(200,30,0,0) 76%);
+    border-radius:50% 50% 45% 45% / 75% 75% 25% 25%;
     transform-origin:50% 100%;
-    transform:scale(calc(var(--heat) * var(--sz))) ;
-    opacity:calc(var(--heat) * 1.6 - var(--th));
-    animation:flicker .38s ease-in-out infinite alternate;
-    filter:drop-shadow(0 0 5px rgba(255,120,20,.9));
+    opacity:calc(var(--heat) * 2 - var(--th));
+    animation:flicker .3s ease-in-out infinite alternate;
+    filter:drop-shadow(0 0 7px rgba(255,110,10,.95));
   }
-  @keyframes flicker{ from{ transform:scale(calc(var(--heat) * var(--sz) * .85), calc(var(--heat) * var(--sz) * 1.1)) rotate(-4deg);} to{ transform:scale(calc(var(--heat) * var(--sz) * 1.05), calc(var(--heat) * var(--sz) * .8)) rotate(4deg);} }
+  /* --k grows faster than heat itself, so the blaze really kicks in near the end */
+  @keyframes flicker{
+    from{ transform:scale(calc(var(--k) * var(--sz) * .8), calc(var(--k) * var(--sz) * 1.15)) rotate(-6deg); }
+    to  { transform:scale(calc(var(--k) * var(--sz) * 1.1), calc(var(--k) * var(--sz) * .85)) rotate(6deg); }
+  }
   .slab.saved::after, .slab.saved .flames{ display:none; }
   .slab.shake{ animation:slabShake .34s ease; }
   @keyframes slabShake{ 20%{transform:translateX(calc(-50% - 10px)) rotate(-2deg);} 50%{transform:translateX(calc(-50% + 10px)) rotate(2deg);} 80%{transform:translateX(calc(-50% - 5px));} 100%{transform:translateX(-50%);} }
@@ -459,6 +462,12 @@
             <path class="lava-flow" d="M93 24 C88 50 98 70 82 100 S72 140 66 160" stroke="url(#lavaG)" stroke-width="4.5"/>
             <path class="lava-flow" d="M107 24 C113 48 103 74 121 104 S134 140 142 160" stroke="url(#lavaG)" stroke-width="4.5"/>
             <path class="lava-flow" d="M100 24 C97 60 106 96 98 160" stroke="url(#lavaG)" stroke-width="3"/>
+            <path d="M76 36 C62 66 72 96 48 128 S32 150 24 160" stroke="#ff6a10" stroke-width="8" filter="url(#glow)" opacity=".8"/>
+            <path d="M124 36 C138 66 128 96 152 128 S168 150 176 160" stroke="#ff6a10" stroke-width="8" filter="url(#glow)" opacity=".8"/>
+            <path class="lava-flow" d="M76 36 C62 66 72 96 48 128 S32 150 24 160" stroke="url(#lavaG)" stroke-width="4"/>
+            <path class="lava-flow" d="M124 36 C138 66 128 96 152 128 S168 150 176 160" stroke="url(#lavaG)" stroke-width="4"/>
+            <path d="M84 30 C80 44 86 52 78 66" stroke="#ff6a10" stroke-width="5" filter="url(#glow)" opacity=".7"/>
+            <path d="M116 30 C120 44 114 52 122 66" stroke="#ff6a10" stroke-width="5" filter="url(#glow)" opacity=".7"/>
             <path class="crack" d="M60 120 l10 -8 l-3 -10 l9 -9" stroke="#ff9a2b" stroke-width="1.6"/>
             <path class="crack" d="M150 118 l-9 -9 l4 -10 l-8 -8" stroke="#ff9a2b" stroke-width="1.6"/>
             <path class="crack" d="M118 136 l6 -9 l-3 -8" stroke="#ff9a2b" stroke-width="1.4"/>
@@ -1097,7 +1106,9 @@ function positionSlab() {
   const y = startY + Math.max(0, endY - startY) * frac;
   slab.style.top = y + "px";
   // Fire: nothing for the first ~third of the fall, then building to a blaze.
-  slab.style.setProperty("--heat", Math.max(0, Math.min(1, (frac - 0.3) / 0.7)).toFixed(3));
+  const heat = Math.max(0, Math.min(1, (frac - 0.3) / 0.7));
+  slab.style.setProperty("--heat", heat.toFixed(3));
+  slab.style.setProperty("--k", (heat * heat * 1.5 + heat * 0.3).toFixed(3));
 }
 
 function updateHud() {
@@ -1179,12 +1190,12 @@ function endRound() {
    appear once it's hotter, so the fire spreads as it gets closer. */
 (function buildFlames() {
   const box = $("flames");
-  const n = 9;
+  const n = 13;
   for (let i = 0; i < n; i++) {
     const f = document.createElement("div");
     f.className = "flame";
     f.style.left = ((i + 0.5) / n * 100) + "%";
-    f.style.setProperty("--sz", (0.9 + Math.random() * 0.8).toFixed(2));
+    f.style.setProperty("--sz", (0.9 + Math.random() * 1.0).toFixed(2));
     f.style.setProperty("--th", (Math.random() * 0.6).toFixed(2));
     f.style.animationDelay = (-Math.random() * 0.4) + "s";
     box.appendChild(f);
@@ -1273,6 +1284,6 @@ async function fetchRemoteLeaderboard() {
   }
 })();
 </script>
-<div class="footer">Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; v23.09.26c</div>
+<div class="footer">Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; v23.09.26d</div>
 </body>
 </html>
