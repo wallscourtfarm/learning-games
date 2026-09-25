@@ -343,7 +343,9 @@ const PLAYER_NAME = 'Callum';
 
 // ─── GOOGLE SHEETS BANK API ───────────────────────────────────
 // Replace the URL below after setting up Callum's Google Sheet
-const BANK_API = 'https://script.google.com/macros/s/AKfycbzlo33bRQFho4xO8l74M5Ao9T205nxd_h5LRck0BgjSp9fdrwIpwOlLMgxq_485MoamQg/exec';
+// 25.09.26: was a Google Apps Script; the bank now lives in the WFA database (same replies).
+// Old URL, for reference only: https://script.google.com/macros/s/AKfycbzlo33bRQFho4xO8l74M5Ao9T205nxd_h5LRck0BgjSp9fdrwIpwOlLMgxq_485MoamQg/exec
+const BANK_API = 'https://api.wallscourt-farm-academy.co.uk/planning/gamebank/callum';
 
 // ═══════════════════════════════════════════════════════════════
 //  SPRITE DATA  (10 × 13 pixel grid)
@@ -921,5 +923,6 @@ window.addEventListener('DOMContentLoaded', () => {
   updateBankDisplay();
 });
 </script>
+<div style="position:fixed;right:6px;bottom:4px;font:10px sans-serif;color:#888;opacity:.6;pointer-events:none;z-index:9999">WFA-25.09.26a</div>
 </body>
 </html>

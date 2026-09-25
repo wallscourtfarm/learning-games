@@ -432,7 +432,9 @@ function drawSprite(ctx, x, y, sc, pal, flip, action, char) {
 //  Ask me (Claude) to add more questions to that file!
 // ═══════════════════════════════════════════════════════════════
 // ─── RING BANK (persistent via Google Sheets, localStorage fallback) ──
-const BANK_API = 'https://script.google.com/macros/s/AKfycby8roQ5f6_RnEXfpyKQCPJsZGS6bbVfIacKx-pXIHK8TKNzSwOQSXhekU6f4s8_NAX4RA/exec';
+// 25.09.26: was a Google Apps Script; the bank now lives in the WFA database (same replies).
+// Old URL, for reference only: https://script.google.com/macros/s/AKfycby8roQ5f6_RnEXfpyKQCPJsZGS6bbVfIacKx-pXIHK8TKNzSwOQSXhekU6f4s8_NAX4RA/exec
+const BANK_API = 'https://api.wallscourt-farm-academy.co.uk/planning/gamebank/karate';
 
 async function callBank(params) {
   try {
@@ -884,5 +886,6 @@ window.addEventListener('DOMContentLoaded', () => {
   updateBankDisplay();
 });
 </script>
+<div style="position:fixed;right:6px;bottom:4px;font:10px sans-serif;color:#888;opacity:.6;pointer-events:none;z-index:9999">WFA-25.09.26a</div>
 </body>
 </html>
