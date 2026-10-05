@@ -34,8 +34,8 @@ let CURRENT_WEEK = { term: "T1", week: "W1" };
    verified first, then a real roster sync run against the Bromcom hub
    (the old Sheet-typed roster was missing 30 real pupils never added by
    hand). Old Apps Script backend deliberately left running, untouched,
-   as an instant one-line rollback if ever needed:
-     "https://script.google.com/macros/s/AKfycbwP3s1LdhCV3FZCYwY8QPtGZ2xeJgY8ZlEzRY44Igw2Bvr_nGUJtx7uB7JOEIXwXsPb/exec" */
+   as a rollback. That Apps Script backend was retired and deleted on
+   05.10.26, so there is no rollback target any more. */
 const BACKEND_URL = "https://api.wallscourt-farm-academy.co.uk/planning/spellinggames-db";
 
 /* Every game cards.html should generate a QR code for, one row per
