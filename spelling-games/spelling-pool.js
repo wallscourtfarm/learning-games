@@ -322,9 +322,9 @@ async function spFetchAdminStats(backendUrl) {
 async function spIssuePins(backendUrl, ids) {
   if (!backendUrl) return { error: "no backend" };
   try {
-    const res = await fetch(backendUrl, {
+    const res = await fetch(`${backendUrl}?token=${SG_STAFF_TOKEN}`, {
       method: "POST",
-      body: JSON.stringify({ action: "issuePins", ids: ids || [], adminToken: SG_ADMIN_TOKEN }),
+      body: JSON.stringify({ action: "issuePins", ids: ids || [] }),
       headers: { "Content-Type": "text/plain" },
       signal: AbortSignal.timeout(30000),
     });
