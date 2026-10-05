@@ -72,6 +72,7 @@
     </div>
     <div class="toolbar-btns">
       <button onclick="window.print()">🖨️ Print cards</button>
+      <button id="issue-btn" class="secondary" style="display:none" onclick="issueNewPins()">🔑 Issue new PINs</button>
       <button id="label-btn" class="secondary" onclick="downloadLabelSheet()">🏷️ Download labels (PDF)</button>
     </div>
   </div>
@@ -108,6 +109,25 @@
     return target;
   }
 
+  /* PINs issued this visit, held in memory only so they can be printed. They
+     are not stored anywhere in the browser and vanish when the page closes. */
+  const issuedPins = {};
+
+  async function issueNewPins() {
+    const n = ROSTER.filter(p => !p.pin).length;
+    if (!confirm(`Issue new PINs for ${n} pupils? Each pupil's old PIN stops working straight away. Print the cards before you close this page: the PINs cannot be shown again.`)) return;
+    const btn = document.getElementById("issue-btn");
+    btn.disabled = true;
+    const result = await spIssuePins(BACKEND_URL, ROSTER.filter(p => !p.pin).map(p => p.id));
+    btn.disabled = false;
+    if (result.error || !result.issued) {
+      alert("Could not issue PINs: " + (result.error || "unexpected reply from the backend"));
+      return;
+    }
+    result.issued.forEach(i => { issuedPins[i.id] = i.pin; });
+    renderCards();
+  }
+
   async function renderCards() {
     const live = await spFetchLiveRoster(BACKEND_URL);
     if (live) {
@@ -120,6 +140,17 @@
     // above (PIN-less, or the static roster.js demo data) if it fails.
     const adminRoster = await spFetchAdminRoster(BACKEND_URL);
     if (adminRoster && adminRoster.length) ROSTER = adminRoster.filter(p => p.active !== false);
+
+    // Once PINs are hashed the roster carries no PIN. Merge in any PINs just
+    // issued (kept in memory only, never stored) and offer the issue button.
+    ROSTER.forEach(p => { if (!p.pin && issuedPins[p.id]) p.pin = issuedPins[p.id]; });
+    const missingPins = ROSTER.filter(p => !p.pin).length;
+    const issueBtn = document.getElementById("issue-btn");
+    issueBtn.style.display = missingPins ? "" : "none";
+    if (missingPins) {
+      issueBtn.textContent = `🔑 Issue new PINs (${missingPins} pupils)`;
+    }
+    document.getElementById("card-grid").innerHTML = "";
 
     const grid = document.getElementById("card-grid");
     const weeks = spGetWeeksForYear(ROSTER[0]?.year || "Y5");
@@ -142,8 +173,9 @@
         <div class="info">
           <div class="kicker">Spelling Games · WFA · ${learner.year}</div>
           <div class="pname">${learner.name}</div>
+          ${learner.realName ? `<div class="row">For ${learner.realName}</div>` : ""}
           <div class="row">Code&nbsp;<b>${learner.id}</b></div>
-          <div class="row">PIN&nbsp;<b class="pin-val">${learner.pin}</b></div>
+          <div class="row">PIN&nbsp;<b class="pin-val">${learner.pin || "ask for a new PIN"}</b></div>
         </div>
         <div class="qr-wrap">
           <div class="qr">${qrSvgFor(target.href)}</div>
@@ -243,6 +275,13 @@
         doc.setFontSize(14);
         doc.setTextColor(18, 38, 58);
         doc.text(learner.name, textX, ty);
+        if (learner.realName) {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(7);
+          doc.setTextColor(91, 122, 138);
+          doc.text(`For ${learner.realName}`, textX, ty + 3.5);
+          ty += 3;
+        }
         ty += 7;
         doc.setFont("helvetica", "normal");
         doc.setFontSize(9);
@@ -260,7 +299,7 @@
         doc.setFont("courier", "bold");
         doc.setFontSize(12);
         doc.setTextColor(18, 38, 58);
-        doc.text(learner.pin, textX + 13, ty);
+        doc.text(learner.pin || "-", textX + 13, ty);
       }
 
       doc.save("wfa-spelling-games-labels.pdf");

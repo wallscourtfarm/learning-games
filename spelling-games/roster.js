@@ -38,6 +38,15 @@ let CURRENT_WEEK = { term: "T1", week: "W1" };
      "https://script.google.com/macros/s/AKfycbwP3s1LdhCV3FZCYwY8QPtGZ2xeJgY8ZlEzRY44Igw2Bvr_nGUJtx7uB7JOEIXwXsPb/exec" */
 const BACKEND_URL = "https://api.wallscourt-farm-academy.co.uk/planning/spellinggames-db";
 
+/* PRIVACY CHANGE, NOT YET LIVE (see docs/anonymisation-change.md).
+   Leave false until the wfa-data backend supports it, then flip to true:
+   - the PIN check is sent in a POST body instead of the web address, so it
+     stops appearing in server, proxy and web filter logs;
+   - the roster the games load carries random display names (e.g. "Grape
+     Satsuma"), never real names, and PINs are stored hashed, so staff pages
+     issue new PINs rather than reading old ones back. */
+const SP_PIN_VIA_POST = false;
+
 /* Every game cards.html should generate a QR code for, one row per
    learner. Add a new entry here when a new game is built — nothing else
    about the card-printing page needs to change.

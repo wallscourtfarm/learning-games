@@ -55,9 +55,9 @@
   </tr></thead><tbody></tbody></table></div>
 
   <div id="roster-pane" style="display:none">
-    <p class="sub">PINs are hidden by default — click "show" on a row to reveal one at a time.</p>
+    <p class="sub">Pupils see the game name. PINs are stored hashed and cannot be shown; use "Issue new PINs" on the Cards page to make fresh ones. (Until that change is live, PINs are hidden by default: click "show" to reveal one at a time.)</p>
     <table id="roster-table"><thead><tr>
-      <th>Name</th><th>Year</th><th>Code</th><th>PIN</th><th>Status</th>
+      <th>Game name</th><th>Real name</th><th>Year</th><th>Code</th><th>PIN</th><th>Status</th>
     </tr></thead><tbody></tbody></table>
   </div>
 </div>
@@ -90,11 +90,13 @@ function renderRoster(rows) {
   const tbody = document.querySelector('#roster-table tbody');
   tbody.innerHTML = rows.map((r, i) => `
     <tr>
-      <td>${r.name}</td><td>${r.year}</td>
+      <td>${r.name}</td><td>${r.realName || ''}</td><td>${r.year}</td>
       <td class="mono">${r.id}</td>
-      <td class="mono"><span class="pin-hidden" id="pin-${i}">••••</span><span class="pin-toggle" onclick="togglePin(${i},'${r.pin}')">show</span></td>
+      <td class="mono">${r.pin
+        ? `<span class="pin-hidden" id="pin-${i}">••••</span><span class="pin-toggle" onclick="togglePin(${i},'${r.pin}')">show</span>`
+        : 'Hashed'}</td>
       <td>${r.active ? 'Active' : 'Inactive'}</td>
-    </tr>`).join('') || '<tr><td colspan="5">No matching learners.</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="6">No matching learners.</td></tr>';
 }
 
 function togglePin(i, pin) {
@@ -108,7 +110,7 @@ function applyFilter() {
   if (activeTab === 'stats') {
     renderStats(q ? allStats.filter(r => r.name.toLowerCase().includes(q)) : allStats);
   } else {
-    renderRoster(q ? allRoster.filter(r => r.name.toLowerCase().includes(q)) : allRoster);
+    renderRoster(q ? allRoster.filter(r => (r.name + ' ' + (r.realName || '')).toLowerCase().includes(q)) : allRoster);
   }
 }
 
