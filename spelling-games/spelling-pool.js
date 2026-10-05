@@ -314,6 +314,27 @@ async function spFetchAdminStats(backendUrl) {
   }
 }
 
+/* Staff only. PINs are stored hashed once the privacy change is live, so they
+   cannot be read back. This asks the backend to make fresh random PINs for the
+   given pupil codes (or every active pupil if ids is empty) and returns them
+   ONCE as { issued: [{ id, pin }] }. Anything issued here replaces that
+   pupil's old PIN straight away. */
+async function spIssuePins(backendUrl, ids) {
+  if (!backendUrl) return { error: "no backend" };
+  try {
+    const res = await fetch(backendUrl, {
+      method: "POST",
+      body: JSON.stringify({ action: "issuePins", ids: ids || [], adminToken: SG_ADMIN_TOKEN }),
+      headers: { "Content-Type": "text/plain" },
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return await res.json();
+  } catch (e) {
+    return { error: String(e) };
+  }
+}
+
 async function spSyncRoster(backendUrl, dryRun) {
   if (!backendUrl) return { error: "no backend" };
   try {
@@ -419,8 +440,19 @@ function spFindLearnerOrTeacher(roster, code) {
 async function spVerifyPin(backendUrl, code, pin) {
   if (!backendUrl) return { ok: false };
   try {
-    const url = `${backendUrl}?action=verifyPin&code=${encodeURIComponent(code)}&pin=${encodeURIComponent(pin)}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(SP_FETCH_TIMEOUT_MS) });
+    // PIN in a POST body keeps it out of the URL (and so out of any log that
+    // records URLs). Gated by SP_PIN_VIA_POST in roster.js until the backend
+    // accepts it. text/plain avoids a CORS preflight, same as score posts.
+    const viaPost = typeof SP_PIN_VIA_POST !== "undefined" && SP_PIN_VIA_POST;
+    const res = viaPost
+      ? await fetch(backendUrl, {
+          method: "POST",
+          body: JSON.stringify({ action: "verifyPin", code: code, pin: pin }),
+          headers: { "Content-Type": "text/plain" },
+          signal: AbortSignal.timeout(SP_FETCH_TIMEOUT_MS)
+        })
+      : await fetch(`${backendUrl}?action=verifyPin&code=${encodeURIComponent(code)}&pin=${encodeURIComponent(pin)}`,
+          { signal: AbortSignal.timeout(SP_FETCH_TIMEOUT_MS) });
     if (!res.ok) return { ok: false, networkError: true };
     const data = await res.json();
     // A backend hiccup (e.g. Apps Script overloaded) returns { error }
