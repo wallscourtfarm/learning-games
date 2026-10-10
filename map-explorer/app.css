@@ -98,6 +98,13 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 #scaleBar .sb-lab { position: relative; height: 0; font-weight: 900; font-size: 15px; }
 #scaleBar .sb-lab span { position: absolute; top: 3px; transform: translateX(-50%); white-space: nowrap; }
 
+#mapKey { position: absolute; left: 100px; bottom: 30px; z-index: 3; background: rgba(255,255,255,.94); border-radius: 14px; padding: 8px 34px 8px 12px; box-shadow: 0 1px 6px rgba(0,0,0,.18); font-weight: 800; font-size: calc(15px * var(--fs)); display: flex; flex-direction: column; gap: 3px; }
+#mapKey > div { display: flex; align-items: center; gap: 6px; }
+#mapKey .small { font-size: 12px; color: #4a6577; }
+#mapKey b { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--blue-d); }
+#mapKeyX { position: absolute; right: 4px; top: 2px; border: 0; background: none; font-size: 22px; font-weight: 900; color: #4a6577; width: 28px; height: 28px; }
+#scaleBar:not([hidden]) ~ #mapKey { bottom: 100px; }
+
 /* rulers (grid numbers on local maps) */
 .ruler { position: absolute; pointer-events: none; z-index: 2; font-weight: 900; color: #1a5fb4; }
 .ruler.rb { left: 0; right: 0; bottom: 0; height: 40px; background: #fff; border-top: 2px solid #2c7fd6; }

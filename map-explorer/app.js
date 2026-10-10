@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '10.10.26e';
+const VERSION = '10.10.26f';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -136,6 +136,8 @@ function applyView() {
   const w = V.W * V.k, h = V.H * V.k;
   svg.setAttribute('viewBox', `${V.cx - w / 2} ${V.cy - h / 2} ${w} ${h}`);
   svg.style.setProperty('--k', V.k);
+  // markers are smaller when zoomed out to the whole map, full size once zoomed in
+  svg.style.setProperty('--ms', clamp(.5 + .25 * (fitK(V.b.w, V.b.h) / V.k - 1), .5, 1));
   views[S.map] = { cx: V.cx, cy: V.cy, k: V.k };
   onViewChange();
 }
@@ -575,12 +577,16 @@ function drawMarker(parent, it, opts = {}) {
   const g = cs(parent, x, y, 'mk' + (it.cap || it.id === 'school' ? ' capm' : '') + (opts.rev ? ' rev' : ''));
   g.dataset.id = it.id;
   E('circle', { r: 26, fill: 'transparent' }, g);
-  const sg = E('g', { class: 'shape', transform: opts.rev ? 'scale(.62)' : null }, g);   // earlier years' places are drawn smaller
+  const sg = E('g', { class: 'shape' }, g);
+  sg.style.transform = `scale(calc(var(--ms, 1) * ${opts.rev ? .62 : 1}))`;          // earlier years' places are drawn smaller
   if (it.phys) E('path', { d: 'M0-13L12 9H-12z', fill: markerColour(it), stroke: '#fff', 'stroke-width': 2.5, class: 'dot' }, sg);
   else if (it.id === 'school') { E('circle', { r: 17, fill: '#fff', stroke: '#1798d3', 'stroke-width': 2.5 }, sg); E('image', { href: 'wfa-icon.png', x: -12, y: -14, width: 24, height: 27.5 }, sg); }
   else if (it.cap) E('rect', { x: -9, y: -9, width: 18, height: 18, fill: markerColour(it), stroke: '#fff', 'stroke-width': 2.5, transform: 'rotate(45)' }, sg);
   else E('circle', { r: 9, fill: markerColour(it), class: 'dot' }, sg);
-  if (opts.label) E('text', { x: opts.rev ? 10 : it.id === 'school' ? 21 : 15, y: opts.rev ? 5 : 6, 'font-size': opts.rev ? 15 : 18, opacity: opts.rev ? .85 : 1 }, g).textContent = it.n;
+  if (opts.label) {
+    const t = E('text', { x: opts.rev ? 10 : it.id === 'school' ? 21 : 15, y: opts.rev ? 5 : 6, 'font-size': opts.rev ? 15 : 18, opacity: opts.rev ? .85 : 1 }, g);
+    t.textContent = it.n; t.style.transform = `translateX(calc((var(--ms, 1) - 1) * ${opts.rev ? 8 : 13}px))`;
+  }
   return g;
 }
 function drawItemLine(parent, it, label) {
@@ -597,9 +603,10 @@ function refreshDyn() {
   const quiz = S.mode !== 'explore';
   if (S.map === 'world') m.g.querySelectorAll('.wl-lab').forEach(e => e.style.display = quiz ? 'none' : '');
   const names = S.mode === 'explore' && (S.map === 'world' ? S.layers.world.names : S.map === 'uk' ? S.layers.uk.names : S.layers.local.names);
-  if (S.map.startsWith('local') || S.map === 'merc') return;
+  if (S.map.startsWith('local') || S.map === 'merc') { drawMapKey(); return; }
   const its = visibleItems();
   const showMk = S.map === 'world' ? S.layers.world.markers !== false : S.layers.uk.markers !== false;
+  drawMapKey();
   if (!quiz && showMk) {
     const hideCats = new Set(S.layers[S.map].hideCats || []);
     for (const it of its) {
@@ -679,12 +686,14 @@ function declutter() {                       // hide labels that would overlap, 
     const rank = g => (g.classList.contains('rev') ? 2 : 0) + (g.classList.contains('capm') ? 0 : 1);
     mks.sort((a, b) => rank(a) - rank(b));
     mks.forEach(g => g.style.visibility = '');
-    const taken = [];
+    const taken = [], revShapes = [];
     for (const g of mks) {
       const r = g.querySelector('.shape').getBoundingClientRect();
       if (taken.some(o => r.left < o.right + 2 && r.right > o.left - 2 && r.top < o.bottom + 2 && r.bottom > o.top - 2)) g.style.visibility = 'hidden';
-      else taken.push(r);
+      else { taken.push(r); if (g.classList.contains('rev')) revShapes.push(r); }
     }
+    // this year's labels may sit over small earlier-year markers, so leave those out until later
+    const labelTaken = taken.filter(r => !revShapes.includes(r));
     // 2. labels
     const shown = t => { const mk = t.closest('.mk'); return !mk || mk.style.visibility !== 'hidden'; };
     const groups = [
@@ -694,14 +703,17 @@ function declutter() {                       // hide labels that would overlap, 
       [...m.dyn.querySelectorAll('.mk.rev text')],
       [...(m.names ? m.names.querySelectorAll('text:not(.pri)') : [])].filter(t => t.parentNode.style.display !== 'none'),
     ];
+    const nMain = groups.slice(0, 3).flat().filter(shown).length;
     const all = groups.flat().filter(shown);
     all.forEach(t => t.style.visibility = '');
     const rects = all.map(t => t.getBoundingClientRect());
+    const list = labelTaken;
     all.forEach((t, i) => {
+      if (i === nMain) list.push(...revShapes);           // now the small markers count too
       const r = rects[i];
       if (!r.width) return;
-      const hit = taken.some(o => r.left < o.right - 1 && r.right > o.left + 1 && r.top < o.bottom - 1 && r.bottom > o.top + 1);
-      if (hit) t.style.visibility = 'hidden'; else taken.push(r);
+      const hit = list.some(o => r.left < o.right - 1 && r.right > o.left + 1 && r.top < o.bottom - 1 && r.bottom > o.top + 1);
+      if (hit) t.style.visibility = 'hidden'; else list.push(r);
     });
   });
 }
@@ -936,6 +948,21 @@ function exploreStart() {
       <button class="btn sec" id="printBtn">🖨️ Print a worksheet of this view</button>`);
     $('#printBtn').onclick = printSheet;
   }
+}
+function drawMapKey() {
+  const el = $('#mapKey');
+  const on = (S.map === 'world' || S.map === 'uk') && S.mode === 'explore' && S.layers[S.map].markers !== false && !S.mapKeyOff;
+  el.hidden = !on; if (!on) return;
+  const hc = new Set(S.layers[S.map].hideCats || []);
+  const row = (svgInner, t) => `<div><svg width="22" height="22" viewBox="-14 -14 28 28">${svgInner}</svg>${t}</div>`;
+  el.innerHTML = `<button id="mapKeyX" aria-label="Hide the key">×</button><b>Key</b>
+    ${hc.has('cap') ? '' : row('<rect x="-8" y="-8" width="16" height="16" fill="#d32f2f" stroke="#fff" stroke-width="2" transform="rotate(45)"/>', 'Capital city')}
+    ${hc.has('place') ? '' : row('<circle r="8" fill="#5e35b1" stroke="#fff" stroke-width="2"/>', 'City or landmark')}
+    ${hc.has('phys') ? '' : row('<path d="M0-11L10 8H-10z" fill="#2e7d32" stroke="#fff" stroke-width="2"/>', 'Physical feature')}
+    ${hc.has('line') ? '' : row('<path d="M-12 0H12" stroke="#8d5524" stroke-width="4" stroke-dasharray="1 5" stroke-linecap="round"/>', 'Mountain range')}
+    ${S.map === 'uk' && S.layers.uk.rivers ? row('<path d="M-12 0H12" stroke="#1e88e5" stroke-width="4"/>', 'River') : ''}
+    ${yr() && S.revision ? `<div class="small">Small symbols: earlier years</div>` : ''}`;
+  $('#mapKeyX').onclick = () => { S.mapKeyOff = true; save(); drawMapKey(); toast('The key is in 📍 Places if you want it back'); };
 }
 function legendHTML() {
   const row = (svgInner, t) => `<div style="display:flex;align-items:center;gap:12px;font-weight:800;font-size:calc(18px*var(--fs))"><svg width="34" height="34" viewBox="-17 -17 34 34">${svgInner}</svg>${t}</div>`;
@@ -2035,11 +2062,13 @@ $('#symBtn').onclick = e => {
       ${key === 'uk' ? `<label class="tog"><input type="checkbox" data-l="rivers" ${L.rivers ? 'checked' : ''}>Rivers and canals</label>` : ''}
       <label class="tog"><input type="checkbox" data-l="names" ${L.names ? 'checked' : ''}>Names</label>
       <label class="tog"><input type="checkbox" id="revTog" ${S.revision ? 'checked' : ''}>Include earlier years' places</label>
+      <label class="tog"><input type="checkbox" id="keyTog" ${S.mapKeyOff ? '' : 'checked'}>Key on the map</label>
       <p style="margin:0;font-size:15px;color:#4a6577;font-weight:700">Earlier years' places are drawn smaller. Zoom in to see places hidden where they crowd together.</p>`,
     p => {
       p.querySelectorAll('[data-l]').forEach(c => c.onchange = () => { L[c.dataset.l] = c.checked; save(); restyle(); refreshDyn(); });
       p.querySelectorAll('[data-cat]').forEach(c => c.onchange = () => { const h = new Set(L.hideCats || []); c.checked ? h.delete(c.dataset.cat) : h.add(c.dataset.cat); L.hideCats = [...h]; save(); refreshDyn(); });
       p.querySelector('#revTog').onchange = ev => { S.revision = ev.target.checked; save(); refreshDyn(); };
+      p.querySelector('#keyTog').onchange = ev => { S.mapKeyOff = !ev.target.checked; save(); drawMapKey(); };
     });
   }
   const r = e.currentTarget.getBoundingClientRect(), pp = $('#pop'); pp.style.left = Math.max(10, r.right - pp.offsetWidth) + 'px';
