@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '10.10.26d';
+const VERSION = '10.10.26e';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -17,7 +17,7 @@ const DEFAULTS = {
   layers: {
     world: { names: true, colour: true, lines: true, grid: false, markers: true, tz: false },
     uk: { names: true, regions: false, counties: false, rivers: true, markers: true },
-    local: { names: true, symbols: true, contours: true, hide: [] },
+    local: { names: true, symbols: true, contours: true, tenths: true, hide: [] },
   },
 };
 let S = (() => {
@@ -720,7 +720,7 @@ function onViewChange() {
   svg.classList.toggle('zoomed', V.k < 3.6);
   const m = cur();
   if (m && m.L) {
-    m.tenths.style.display = V.k < 2.8 ? '' : 'none';
+    m.tenths.style.display = tenthsOn() ? '' : 'none';
     drawRulers(m);
   }
   drawScale();
@@ -737,7 +737,7 @@ function drawRulers(m) {
   Object.assign(rl.style, { left: lx + 'px', top: lTop + 'px', height: Math.max(0, lBot - lTop) + 'px', bottom: 'auto' });
   Object.assign(rb.style, { left: bLeft + 'px', top: by + 'px', width: Math.max(0, bRight - bLeft) + 'px', right: 'auto', bottom: 'auto' });
   let hb = '', hl = '';
-  const showT = V.k < 2.8;
+  const showT = tenthsOn();
   for (let e = Math.ceil(L.e0 / 100) * 100; e <= L.e1; e += 100) {
     const sx = (e - L.e0 - x0) / V.k;
     if (sx < lx + RW + 4 || sx > bRight - 8) continue;
@@ -921,10 +921,12 @@ function exploreStart() {
   ov.replaceChildren(); clearHL();
   if (S.map.startsWith('local')) {
     setPanel(`<p class="ptitle">Explore</p><div class="qcard"><p class="q">Tap a symbol to find out what it is.</p><p class="hint">Tap anywhere else to see its grid square.</p></div>
+      <button class="btn sec" id="tenthsBtn">${S.layers.local.tenths !== false ? '▦ Hide' : '▦ Show'} the 100 m lines</button>
       <button class="btn sec" id="keyBtn">🔑 Show the key</button>
       <button class="btn sec" id="printBtn">🖨️ Print a worksheet of this view</button>
       <p class="hint">Drag to move the map. Use ＋ and － to zoom in and out. Blue lines are grid lines, 1 km apart.</p>`);
     $('#keyBtn').onclick = showKey;
+    $('#tenthsBtn').onclick = () => { S.layers.local.tenths = S.layers.local.tenths === false; save(); onViewChange(); exploreStart(); if (S.layers.local.tenths && V.k >= 2.8) toast('Zoom in to see the 100 m lines'); };
     $('#printBtn').onclick = printSheet;
   } else {
     const its = visibleItems();
@@ -1001,6 +1003,24 @@ function refOf(L, x, y, level) {
   if (level === 4) return [String(Math.floor(e / 1000) % 100).padStart(2, '0'), String(Math.floor(n / 1000) % 100).padStart(2, '0')];
   return [String(Math.floor(e / 100) % 1000).padStart(3, '0'), String(Math.floor(n / 100) % 1000).padStart(3, '0')];
 }
+const tenthsOn = () => S.layers.local.tenths !== false && V.k < 2.8;     // 100 m lines showing?
+function squareHighlight(g, L, x, y, small) {
+  // yellow = the 1 km grid square; blue = the 100 m square inside it (6-figure)
+  const E_ = L.e0 + x, N_ = L.n1 - y;
+  const x0 = Math.floor(E_ / 1000) * 1000 - L.e0, y0 = L.n1 - (Math.floor(N_ / 1000) * 1000 + 1000);
+  E('rect', { x: x0, y: y0, width: 1000, height: 1000, fill: '#ffd54a', opacity: .3, stroke: '#e6a100', 'stroke-width': 4, 'vector-effect': 'non-scaling-stroke' }, g);
+  E('rect', { x: x0, y: y0, width: 1000, height: 1000, fill: 'none', stroke: '#e6a100', 'stroke-width': 4, 'vector-effect': 'non-scaling-stroke' }, g);
+  if (small) {
+    const sx = Math.floor(E_ / 100) * 100 - L.e0, sy = L.n1 - (Math.floor(N_ / 100) * 100 + 100);
+    E('rect', { x: sx, y: sy, width: 100, height: 100, fill: '#1e88e5', opacity: .45 }, g);
+    E('rect', { x: sx, y: sy, width: 100, height: 100, fill: 'none', stroke: '#0d47a1', 'stroke-width': 3.5, 'vector-effect': 'non-scaling-stroke' }, g);
+  }
+}
+const swatch = (fill, stroke) => `<span style="display:inline-block;width:22px;height:22px;border-radius:5px;background:${fill};border:3px solid ${stroke};vertical-align:-4px;margin-right:8px"></span>`;
+function refRowsHTML(r4, r6, show6) {
+  return `<dl><dt>${swatch('#ffe48a', '#e6a100')}4-figure grid reference (1 km square)</dt><dd style="font-size:36px">${r4.join(' ')}</dd>
+    ${show6 ? `<dt>${swatch('#8fc3f0', '#0d47a1')}6-figure grid reference (100 m square)</dt><dd style="font-size:36px">${r6.join(' ')}</dd>` : ''}</dl>`;
+}
 function localExplore(p) {
   const m = cur(), L = m.L;
   if (p.x < 0 || p.y < 0 || p.x > m.b.w || p.y > m.b.h) return;
@@ -1010,21 +1030,22 @@ function localExplore(p) {
   if (best != null) {
     const q = m.pois[best]; forcePoi(best);
     const r4 = refOf(L, q.x, q.y, 4), r6 = refOf(L, q.x, q.y, 6);
+    const show6 = yr() === 0 || yr() >= 4 || tenthsOn();
+    squareHighlight(g, L, q.x, q.y, show6 && tenthsOn());
     E('circle', { class: 'pulse', r: 16 }, cs(g, q.x, q.y));
-    const show6 = yr() === 0 || yr() >= 4;
     setPanel(`<div class="info"><p class="ptitle">You tapped…</p>
       <div style="display:flex;align-items:center;gap:14px"><svg width="70" height="56" viewBox="-35 -28 70 56"><use href="#sym-${q.t}" transform="scale(1.6)"/></svg><h2>${esc(POI[q.t])}</h2></div>
       ${q.n ? `<div class="sub">${esc(q.n)}</div>` : ''}
-      <dl><dt>4-figure grid reference</dt><dd style="font-size:32px">${r4.join(' ')}</dd>${show6 ? `<dt>6-figure grid reference</dt><dd style="font-size:32px">${r6.join(' ')}</dd>` : ''}</dl></div>
+      ${refRowsHTML(r4, r6, show6)}</div>
       <p class="hint">Remember: along the corridor (eastings) first, then up the stairs (northings).</p>
       <button class="btn sec" id="backExplore">Back</button>`);
   } else {
-    const r4 = refOf(L, p.x, p.y, 4);
-    const x0 = Math.floor((L.e0 + p.x) / 1000) * 1000 - L.e0, y0 = L.n1 - (Math.floor((L.n1 - p.y) / 1000) * 1000 + 1000);
-    E('rect', { x: x0, y: y0, width: 1000, height: 1000, fill: '#ffd54a', opacity: .35, stroke: '#e6a100', 'stroke-width': 3, 'vector-effect': 'non-scaling-stroke' }, g);
-    setPanel(`<div class="info"><p class="ptitle">Grid square</p><h2 style="font-size:56px">${r4.join(' ')}</h2>
-      <div class="sub">Eastings ${r4[0]} (along), northings ${r4[1]} (up)</div></div>
-      <p class="hint">A grid square is named by the lines at its bottom-left corner.</p>
+    const r4 = refOf(L, p.x, p.y, 4), r6 = refOf(L, p.x, p.y, 6), small = tenthsOn();
+    squareHighlight(g, L, p.x, p.y, small);
+    setPanel(`<div class="info"><p class="ptitle">You tapped…</p>
+      ${refRowsHTML(r4, r6, small)}
+      <div class="sub" style="margin-top:8px">Eastings first (along), then northings (up).</div></div>
+      <p class="hint">${small ? 'The yellow square is the 1 km grid square. The blue square is the 100 m square inside it: count tenths along, then up.' : 'A grid square is named by the lines at its bottom-left corner. Zoom in to see the 100 m lines for 6-figure references.'}</p>
       <button class="btn sec" id="backExplore">Back</button>`);
   }
   $('#backExplore').onclick = () => { ov.replaceChildren(); exploreStart(); };
@@ -1983,10 +2004,10 @@ $('#layerBtn').onclick = e => {
   const key = mapKind(), L = S.layers[key];
   const opts = key === 'world' ? [['names', 'Names'], ['colour', 'Colour the continents'], ['lines', 'Equator, tropics and polar circles'], ['grid', 'Lines of latitude and longitude'], ['tz', 'Time zones']]
     : key === 'uk' ? [['names', 'Names'], ['rivers', 'Rivers and canals'], ['regions', 'Regions of England'], ['counties', 'Counties of England']]
-      : [['names', 'Place names and labels'], ['symbols', 'Map symbols'], ['contours', 'Contour lines (height)']];
+      : [['names', 'Place names and labels'], ['symbols', 'Map symbols'], ['contours', 'Contour lines (height)'], ['tenths', '100 m grid lines (for 6-figure references, when zoomed in)']];
   openPop(e.currentTarget, `<h3>Show on the map</h3>${opts.map(([k, t]) => `<label class="tog"><input type="checkbox" data-l="${k}" ${L[k] ? 'checked' : ''}>${t}</label>`).join('')}${key === 'local' ? '<button class="opt" id="popKey">🔑 Map key</button>' : ''}`,
     p => {
-      p.querySelectorAll('[data-l]').forEach(c => c.onchange = () => { L[c.dataset.l] = c.checked; save(); restyle(); refreshDyn(); });
+      p.querySelectorAll('[data-l]').forEach(c => c.onchange = () => { L[c.dataset.l] = c.checked; save(); restyle(); refreshDyn(); onViewChange(); });
       const k = p.querySelector('#popKey'); if (k) k.onclick = () => { closePop(); showKey(); };
     });
   const r = e.currentTarget.getBoundingClientRect(), pp = $('#pop'); pp.style.left = (r.right - pp.offsetWidth) + 'px';
