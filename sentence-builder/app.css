@@ -261,3 +261,4 @@ button.wr-and{border:2px solid #c0392b;color:#c0392b;font-family:'Andika',sans-s
 @media (max-width:640px){ #mainNav button{font-size:.88rem;padding:7px 9px} }
 @media (max-width:600px){ .crumb-actions{margin-left:0} }
 .crumb-path .sub{display:none}
+.wr-problem.punct{background:#eef6fd;border-color:#9ccbee}

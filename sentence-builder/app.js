@@ -8,7 +8,7 @@
  * Nothing about the child is stored; only teacher settings, on this device. Picture word
  * banks live in content.js; the sentence engine (parts, text, sense check) in engine.js.
  */
-const VERSION = '10.10.26e';
+const VERSION = '10.10.26f';
 
 const CAT = {
   who:      {label:'who',      icon:'who',      q:() => 'Who or what is in the picture?'},
@@ -1486,6 +1486,15 @@ function fixRelToMain(sen, relIdea){             // "the mars rover, which is a 
   const relTok = relIdea.start; const a = sen.offs[relTok][0], b = sen.offs[relTok][1];
   applyFix(txt => { let before = txt.slice(0, a).replace(/[\s,(]+$/, ''); let after = txt.slice(b).replace(/^\s+/, ''); return before + ' ' + after; });
 }
+function fixInsertBefore(sen, tokIdx, mark){       // e.g. a comma before the main doing word
+  const at = sen.offs[tokIdx][0];
+  applyFix(txt => { const before = txt.slice(0, at).replace(/\s+$/, ''); return before + mark + ' ' + txt.slice(at); });
+}
+function fixRelCommas(sen, relTok, closeTok){      // ", which is a satellite," — close first so offsets stay right
+  const a = sen.offs[relTok][0], c = sen.offs[closeTok][0];
+  applyFix(txt => { const t1 = txt.slice(0, c).replace(/\s+$/, '') + ', ' + txt.slice(c); const b = t1.slice(0, a).replace(/\s+$/, ''); return b + ', ' + t1.slice(a); });
+}
+function fixReplaceTok(sen, tokIdx, word){ const [a, b] = sen.offs[tokIdx]; applyFix(txt => txt.slice(0, a) + word + txt.slice(b)); }
 function fixCapital(sen){ applyFix(txt => capAt(txt, sen.offs[0][0])); }
 function fixStopEnd(sen){ const e = sen.offs[sen.offs.length - 1][1]; applyFix(txt => txt.slice(0, e) + '.' + txt.slice(e)); }
 function fixAndToStop(sen, andTok){
@@ -1536,6 +1545,29 @@ function problemCard(sen, pr, si){
     fix = ['Add the comma before ' + q(sen.tokens[pr.idea.start]), () => fixCommaBefore(sen, pr.idea.start)];
   } else if (pr.type === 'ands'){
     msg = `That's <b>${pr.count} ideas</b> joined with <b>and</b>. That's a lot to hear in one go. Could some of them be new sentences? Tap an <b>and</b> below to change it to a full stop.`;
+  } else if (pr.type === 'relcomma'){
+    const extra = sen.tokens.slice(pr.at, pr.close).join(' ');
+    msg = `${q(extra)} is <b>extra information</b> about the who. Put it inside <b>two commas</b>: one before ${q(sen.tokens[pr.at])} and one after it, before the doing word ${q(sen.tokens[pr.close])}.`;
+    fix = ['Add the two commas', () => fixRelCommas(sen, pr.at, pr.close)];
+  } else if (pr.type === 'relclose'){
+    msg = pr.bracket ? `You opened a <b>bracket</b> for the extra information. Close it with <b>)</b> before ${q(sen.tokens[pr.at])}.`
+                     : `You started the extra information with a comma. It needs a <b>second comma</b> at the end, before ${q(sen.tokens[pr.at])}.`;
+    fix = [pr.bracket ? 'Close the bracket' : 'Add the second comma', () => fixInsertBefore(sen, pr.at, pr.bracket ? ')' : ',')];
+  } else if (pr.type === 'frontcomma'){
+    msg = `${q(cap(pr.front))} is a <b>fronted adverbial</b>: it tells you when, where or how. Put a <b>comma</b> after it.`;
+    fix = ['Add the comma after ' + q(pr.front), () => fixInsertBefore(sen, pr.at, ',')];
+  } else if (pr.type === 'question'){
+    msg = 'This sentence <b>asks</b> something, so it ends with a <b>question mark</b>.';
+    fix = ['Change the full stop to ?', () => fixReplaceTok(sen, pr.at, '?')];
+  } else if (pr.type === 'capI'){
+    msg = 'When you write about yourself, <b>I</b> is always a capital letter.';
+    fix = ['Make it I', () => fixReplaceTok(sen, pr.at, 'I')];
+  } else if (pr.type === 'propercap'){
+    msg = `Days and months start with a <b>capital letter</b>: ${q(cap(pr.word))}.`;
+    fix = ['Make it ' + cap(pr.word), () => fixReplaceTok(sen, pr.at, cap(pr.word))];
+  } else if (pr.type === 'apos'){
+    msg = `${q(pr.word)} is a shortened word. It needs an <b>apostrophe</b> where letters are missing: ${q(pr.fix)}.`;
+    fix = ['Make it ' + pr.fix, () => fixReplaceTok(sen, pr.at, pr.fix)];
   } else if (pr.type === 'capital'){
     msg = 'A sentence starts with a <b>capital letter</b>.';
     fix = ['Add the capital letter', () => fixCapital(sen)];
@@ -1543,7 +1575,9 @@ function problemCard(sen, pr, si){
     msg = 'A sentence ends with a <b>full stop</b> (or ? or !).';
     fix = ['Add a full stop', () => fixStopEnd(sen)];
   }
-  box.innerHTML = `<span class="ic">${pr.type === 'capital' || pr.type === 'stop' ? '✏️' : '🤔'}</span><div>${msg}</div>`;
+  const punct = ['capital','stop','relcomma','relclose','frontcomma','question','capI','propercap','apos'].includes(pr.type);
+  box.innerHTML = `<span class="ic">${punct ? '✏️' : '🤔'}</span><div>${msg}</div>`;
+  if (punct) box.classList.add('punct');
   if (fix){ const b = el('button', 'btn', '🔧 ' + fix[0]); b.onclick = fix[1]; box.querySelector('div').appendChild(b); }
   return box;
 }
@@ -1566,10 +1600,17 @@ function sentenceStrip(sen, si){
   });
   // a rel clause ends at the next comma
   sen.ideas.filter(x => x.kind === 'rel').forEach(x => {
-    for (let i = x.start; i < sen.tokens.length; i++){ if (i > x.start && sen.tokens[i] === ',') break; ideaOf[i] = 'rel'; }
+    const host = sen.ideas.find(m => m.kind !== 'rel' && m.start < x.start && m.verb != null && m.verb > x.start);
+    for (let i = x.start; i < sen.tokens.length; i++){ if ((i > x.start && /^[,)]$/.test(sen.tokens[i])) || (host && i >= host.verb)) break; ideaOf[i] = 'rel'; }
   });
   const gaps = new Map();
-  sen.problems.forEach(pr => { if (pr.type === 'runon') gaps.set(pr.idea.start, 'runon'); if (pr.type === 'splice') gaps.set(pr.at, 'splice'); if (pr.type === 'subcomma') gaps.set(pr.idea.start, 'subcomma'); });
+  sen.problems.forEach(pr => {
+    if (pr.type === 'runon') gaps.set(pr.idea.start, 'runon');
+    if (pr.type === 'splice') gaps.set(pr.at, 'splice');
+    if (pr.type === 'subcomma') gaps.set(pr.idea.start, 'subcomma');
+    if (pr.type === 'frontcomma' || pr.type === 'relclose') gaps.set(pr.at, 'subcomma');
+    if (pr.type === 'relcomma'){ gaps.set(pr.at, 'subcomma'); gaps.set(pr.close, 'subcomma'); }
+  });
   const ands = sen.problems.some(p => p.type === 'ands');
   // no doing word: mark the who, and show where the doing word is missing
   const frag = sen.problems.find(p => p.type === 'fragment' || p.type === 'fragment-rel');
@@ -1579,7 +1620,8 @@ function sentenceStrip(sen, si){
   sen.tokens.forEach((tk, i) => {
     if (gaps.get(i) === 'runon' || gaps.get(i) === 'subcomma'){
       const g = el('button', 'wr-gap', gaps.get(i) === 'runon' ? '▾ <small>full stop?</small>' : '▾ <small>comma?</small>');
-      g.onclick = () => gaps.get(i) === 'runon' ? fixStopBefore(sen, i) : fixCommaBefore(sen, i);
+      const rc = sen.problems.find(p => p.type === 'relcomma' && (p.at === i || p.close === i));
+      g.onclick = () => gaps.get(i) === 'runon' ? fixStopBefore(sen, i) : rc ? fixRelCommas(sen, rc.at, rc.close) : fixCommaBefore(sen, i);
       wrap.appendChild(g);
     }
     const id = ideaOf[i];
@@ -1633,7 +1675,7 @@ function renderWrite(){
     const nIdeas = wr.result.sentences.reduce((a, x) => a + x.ideas.filter(i => i.kind !== 'rel').length, 0);
     c.innerHTML = all.length
       ? `<span class="ic">🔎</span><div>I found <b>${wr.result.sentences.length}</b> sentence${plural(wr.result.sentences.length)} and <b>${nIdeas}</b> idea${plural(nIdeas)}. Each colour is one idea: the <span class="wr-w w-who">who</span> and the <span class="wr-w w-doing">doing word</span> are marked. Look at the questions below.</div>`
-      : `<span class="ic">🌟</span><div>Each sentence has a who and a doing word, and the ideas are joined or separated. Now read it aloud one more time: <b>does it make sense?</b></div>`;
+      : `<span class="ic">🌟</span><div>Each sentence has a who and a doing word, the ideas are joined or separated, and I can't see any punctuation to fix. Now read it aloud one more time: <b>does it make sense?</b></div>`;
   }
   if (wr.choosing && !wr.pic){
     const g = el('div', 'bank-group');
@@ -1653,7 +1695,7 @@ function renderWrite(){
       if (canSpeak()){ const rb = el('button', 'btn small', '🔊'); rb.onclick = () => readSentenceText(sen, si); head.appendChild(rb); }
       card.appendChild(head);
       card.appendChild(sentenceStrip(sen, si));
-      if (!sen.problems.length) card.appendChild(el('div', 'wr-ok', '✅ I can hear a who and a doing word. Does it make sense when you read it aloud?'));
+      if (!sen.problems.length) card.appendChild(el('div', 'wr-ok', '✅ I can hear a who and a doing word, and the punctuation looks right. Does it make sense when you read it aloud?'));
       sen.problems.forEach(pr => card.appendChild(problemCard(sen, pr, si)));
       bank.appendChild(card);
     });
