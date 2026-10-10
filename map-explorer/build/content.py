@@ -458,7 +458,9 @@ COUNTY_GROUPS = {
 # Local OS-style map extracts (British National Grid, metres).
 LOCAL_MAPS = [
     dict(id='school', name='Our school and Stoke Gifford', e0=359000, n0=175000, e1=365000, n1=181000, raw='school',
-         years=[1, 2, 3, 4, 5, 6]),
+         years=[1, 2, 3, 4, 5, 6], sq='ST', contour=10),
     dict(id='gorge', name='Clifton and the Avon Gorge', e0=355000, n0=170000, e1=361000, n1=176000, raw='gorge',
-         years=[3, 4, 5, 6], views={'Suspension Bridge': [356475, 173067], 'City centre': [358800, 172900]}),
+         years=[3, 4, 5, 6], views={'Suspension Bridge': [356475, 173067], 'City centre': [358800, 172900]}, sq='ST', contour=10),
+    dict(id='penyfan', name='Pen y Fan, Bannau Brycheiniog', e0=300000, n0=218000, e1=306000, n1=224000, raw='penyfan',
+         years=[4, 5, 6], views={'Pen y Fan summit': [301200, 221550]}, sq='SO', contour=10),
 ]

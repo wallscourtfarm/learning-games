@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231798d3'/%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='white' stroke-width='2.5'/%3E%3Cpath d='M6 16h20M16 6c-5 6-5 14 0 20M16 6c5 6 5 14 0 20' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css?v=10.10.26a">
+<link rel="stylesheet" href="app.css?v=10.10.26b">
 </head>
 <body>
 <div id="app">
@@ -21,8 +21,9 @@
     <nav class="seg" id="modeSeg" aria-label="Activity">
       <button data-mode="explore">🔍 Explore</button>
       <button data-mode="find">📍 Find it!</button>
-      <button data-mode="grid">#️⃣ Grid refs</button>
+      <button data-mode="grid">🗺️ OS maps</button>
       <button data-mode="compass">🧭 Compass</button>
+      <button data-mode="globe">🌐 Lat &amp; long</button>
     </nav>
     <div class="tools">
       <button class="tool" id="penBtn" title="Draw on the map">✏️<span>Pen</span></button>
@@ -50,7 +51,7 @@
         <button id="zHome" aria-label="Whole map">⌂</button>
       </div>
       <div id="viewBar"></div>
-      <div id="layerBtnWrap"><button id="layerBtn">🗂️ Layers</button></div>
+      <div id="layerBtnWrap"><button id="symBtn">📍 Symbols</button><button id="layerBtn">🗂️ Layers</button></div>
       <div id="inkBar" hidden>
         <button data-ink="#e53935" class="sw" style="--c:#e53935"></button>
         <button data-ink="#1e88e5" class="sw" style="--c:#1e88e5"></button>
@@ -58,6 +59,7 @@
         <button id="inkClear">Clear</button>
         <button id="inkDone">Done</button>
       </div>
+      <div id="scaleBar" hidden></div>
       <div id="attrib"></div>
     </div>
     <aside id="panel">
@@ -71,7 +73,7 @@
 <div id="modal" hidden><div class="mbox"><div id="modalBody"></div></div></div>
 <div id="toast" hidden></div>
 
-<script src="map-data.js?v=10.10.26a"></script>
-<script src="app.js?v=10.10.26a"></script>
+<script src="map-data.js?v=10.10.26b"></script>
+<script src="app.js?v=10.10.26b"></script>
 </body>
 </html>

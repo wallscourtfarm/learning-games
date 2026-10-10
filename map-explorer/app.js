@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '10.10.26a';
+const VERSION = '10.10.26b';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -13,17 +13,17 @@ const $ = s => document.querySelector(s);
 const STORE = 'wfa_map_explorer_v1';
 const DEFAULTS = {
   year: null, map: 'world', mode: 'explore', revision: true, autoZoom: true, count: 10, big: false,
-  teams: 0, scores: [0, 0, 0, 0, 0, 0], gridLevel: 0, gridTask: 'give', panelOpen: true,
+  teams: 0, scores: [0, 0, 0, 0, 0, 0], gridLevel: 0, gridTask: 'give', globeTask: 'read', panelOpen: true,
   layers: {
-    world: { names: true, colour: true, lines: true, grid: false },
-    uk: { names: true, regions: false, counties: false, rivers: true },
-    local: { names: true, symbols: true },
+    world: { names: true, colour: true, lines: true, grid: false, markers: true, tz: false },
+    uk: { names: true, regions: false, counties: false, rivers: true, markers: true },
+    local: { names: true, symbols: true, contours: true, hide: [] },
   },
 };
 let S = (() => {
   try {
     const s = JSON.parse(localStorage.getItem(STORE) || 'null');
-    if (s) return Object.assign({}, DEFAULTS, s, { layers: Object.assign({}, DEFAULTS.layers, s.layers || {}) });
+    if (s) { const L = s.layers || {}; return Object.assign({}, DEFAULTS, s, { layers: { world: Object.assign({}, DEFAULTS.layers.world, L.world), uk: Object.assign({}, DEFAULTS.layers.uk, L.uk), local: Object.assign({}, DEFAULTS.layers.local, L.local) } }); }
   } catch (e) { /* storage blocked */ }
   return JSON.parse(JSON.stringify(DEFAULTS));
 })();
@@ -124,8 +124,12 @@ function fitK(w, h) { return Math.max(w / V.W, h / V.H); }
 function maxK() { return fitK(V.b.w, V.b.h) * 1.15; }
 function clampView() {
   V.k = clamp(V.k, V.minK, maxK());
-  V.cx = clamp(V.cx, V.b.x, V.b.x + V.b.w);
-  V.cy = clamp(V.cy, V.b.y, V.b.y + V.b.h);
+  const keep = (c, lo, len, half) => {        // never let the map slide away from the screen
+    const slack = 60 * V.k;
+    return len > 2 * half ? clamp(c, lo + half - slack, lo + len - half + slack) : clamp(c, lo + len - half - slack, lo + half + slack);
+  };
+  V.cx = keep(V.cx, V.b.x, V.b.w, V.W * V.k / 2);
+  V.cy = keep(V.cy, V.b.y, V.b.h, V.H * V.k / 2);
 }
 function applyView() {
   clampView();
@@ -170,7 +174,14 @@ function home(ms) { fitBox(V.b.x, V.b.y, V.b.w, V.b.h, 1.02, ms); }
 
 // pointer handling: drag to pan, pinch / wheel to zoom, tap to interact
 const ptrs = new Map(); let drag = null, pinch = null;
+let ghostDrag = null;
 svg.addEventListener('pointerdown', e => {
+  if (ghost && e.target.classList && e.target.classList.contains('ghost')) {
+    svg.setPointerCapture(e.pointerId);
+    const p = toMap(e.clientX, e.clientY);
+    ghostDrag = { id: e.pointerId, p0: p, x0: mercX(ghost.at.lon), y0: mercY(ghost.at.lat) };
+    return;
+  }
   svg.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   cancelAnimationFrame(anim);
@@ -183,6 +194,10 @@ svg.addEventListener('pointerdown', e => {
   }
 });
 svg.addEventListener('pointermove', e => {
+  if (ghostDrag && e.pointerId === ghostDrag.id) {
+    const p = toMap(e.clientX, e.clientY), ll = mercInv(ghostDrag.x0 + p.x - ghostDrag.p0.x, ghostDrag.y0 + p.y - ghostDrag.p0.y);
+    ghost.at = { lat: clamp(ll.lat, -75, 78), lon: ll.lon }; drawGhost(); return;
+  }
   if (!ptrs.has(e.pointerId)) return;
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (ptrs.size >= 2 && pinch) {
@@ -198,6 +213,7 @@ svg.addEventListener('pointermove', e => {
   }
 });
 function endPtr(e) {
+  if (ghostDrag && e.pointerId === ghostDrag.id) { ghostDrag = null; return; }
   if (!ptrs.has(e.pointerId)) return;
   ptrs.delete(e.pointerId);
   if (ptrs.size < 2) pinch = null;
@@ -220,9 +236,9 @@ const POI = {
   worship: 'Place of worship', school: 'School', univ: 'University', pub: 'Pub (public house)', po: 'Post office',
   parking: 'Parking', hospital: 'Hospital', bus: 'Bus station', fire: 'Fire station', police: 'Police station',
   station: 'Railway station', viewpoint: 'Viewpoint', museum: 'Museum', info: 'Information centre', picnic: 'Picnic site',
-  golf: 'Golf course', tower: 'Tower', antiquity: 'Ancient site',
+  golf: 'Golf course', tower: 'Tower', antiquity: 'Ancient site', peak: 'Summit (spot height)', trig: 'Trig point',
 };
-const POI_SHORT = { worship: 'place of worship', school: 'school', univ: 'university', pub: 'pub', po: 'post office', parking: 'car park', hospital: 'hospital', bus: 'bus station', fire: 'fire station', police: 'police station', station: 'railway station', viewpoint: 'viewpoint', museum: 'museum', info: 'information centre', picnic: 'picnic site', golf: 'golf course', tower: 'tower', antiquity: 'ancient site' };
+const POI_SHORT = { worship: 'place of worship', school: 'school', univ: 'university', pub: 'pub', po: 'post office', parking: 'car park', hospital: 'hospital', bus: 'bus station', fire: 'fire station', police: 'police station', station: 'railway station', viewpoint: 'viewpoint', museum: 'museum', info: 'information centre', picnic: 'picnic site', golf: 'golf course', tower: 'tower', antiquity: 'ancient site', peak: 'summit', trig: 'trig point' };
 function buildDefs() {
   const defs = $('#defs');
   const txt = (id, t, w) => {
@@ -252,6 +268,10 @@ function buildDefs() {
   g = E('g', { id: 'sym-antiquity' }, defs);
   E('circle', { r: 10, fill: '#fff', stroke: '#6d4c41', 'stroke-width': 2.5, opacity: .9 }, g);
   E('path', { d: 'M-5-5l10 10M5-5l-10 10', stroke: '#6d4c41', 'stroke-width': 2.5 }, g);
+  g = E('g', { id: 'sym-peak' }, defs);
+  E('circle', { r: 5, fill: '#111', stroke: '#fff', 'stroke-width': 2 }, g);
+  g = E('g', { id: 'sym-trig' }, defs);
+  E('path', { d: 'M0-11L10 7H-10z', fill: '#1565c0', stroke: '#fff', 'stroke-width': 2 }, g); E('circle', { cy: 1, r: 2.5, fill: '#fff' }, g);
   // pin used for answers
   g = E('g', { id: 'sym-pin' }, defs);
   E('path', { d: 'M0 0C-4-10-16-16-16-30A16 16 0 1 1 16-30C16-16 4-10 0 0z', fill: '#e53935', stroke: '#fff', 'stroke-width': 3 }, g);
@@ -303,9 +323,6 @@ function buildWorld() {
   for (let lat = 90; lat >= -90; lat -= 5) { const p = rob(180, lat); outline.push(p); }
   for (let lat = -90; lat <= 90; lat += 5) { const p = rob(-180, lat); outline.push(p); }
   E('path', { d: 'M' + outline.map(p => p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join('L') + 'z', fill: '#cfe7f5', stroke: '#9cc6de', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, g);
-  const grat = E('g', { id: 'w-grat', stroke: '#9cc6de', 'stroke-width': .8, 'vector-effect': 'non-scaling-stroke', fill: 'none' }, g);
-  for (let lat = -75; lat <= 75; lat += 15) { const a = rob(-180, lat), b = rob(180, lat); E('path', { d: `M${a.x} ${a.y}H${b.x}`, 'vector-effect': 'non-scaling-stroke' }, grat); }
-  for (let lon = -180; lon <= 180; lon += 15) { const pts = []; for (let lat = -90; lat <= 90; lat += 5) pts.push(rob(lon, lat)); E('path', { d: 'M' + pts.map(p => p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join('L'), 'vector-effect': 'non-scaling-stroke' }, grat); }
   const land = E('g', { id: 'w-land' }, g);
   const parts = [];
   for (const [code, cont, d] of W.parts) {
@@ -313,6 +330,25 @@ function buildWorld() {
     parts.push(p);
   }
   E('path', { d: W.lakes, fill: '#cfe7f5', stroke: '#8a8a7a', 'stroke-width': .6, 'vector-effect': 'non-scaling-stroke' }, g);
+  // time zones (standard time, Natural Earth)
+  const tz = E('g', { id: 'w-tz', 'pointer-events': 'none' }, g);
+  const tzPaths = D.tz.map(z => E('path', { d: z.d, fill: Math.abs(Math.round(z.z)) % 2 ? 'rgba(40,70,160,.16)' : 'rgba(255,255,255,0)', stroke: '#5c6fa8', 'stroke-width': .9, 'stroke-dasharray': '4 3', 'vector-effect': 'non-scaling-stroke', 'data-z': z.z }, tz));
+  for (let z = -12; z <= 14; z++) {
+    const p = rob(clamp(z * 15, -176, 176), -57);
+    E('text', { 'text-anchor': 'middle', 'font-size': 14, 'font-weight': 900, fill: '#26408b' }, cs(tz, p.x, p.y, 'lbl')).textContent = z === 0 ? 'GMT' : (z > 0 ? '+' + z : '−' + -z);
+  }
+  // lines of latitude and longitude, every 10 degrees, drawn over the land
+  const grat = E('g', { id: 'w-grat', stroke: '#4f86b8', 'stroke-width': .8, opacity: .75, fill: 'none' }, g);
+  for (let lat = -80; lat <= 80; lat += 10) { const a = rob(-180, lat), b = rob(180, lat); E('path', { d: `M${a.x} ${a.y}H${b.x}`, 'vector-effect': 'non-scaling-stroke' }, grat); }
+  for (let lon = -180; lon <= 180; lon += 10) { const pts = []; for (let lat = -90; lat <= 90; lat += 5) pts.push(rob(lon, lat)); E('path', { d: 'M' + pts.map(p => p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join('L'), 'vector-effect': 'non-scaling-stroke' }, grat); }
+  const glab = E('g', { id: 'w-gratlab' }, g);
+  const deg = (v, pos, neg) => v === 0 ? '0°' : Math.abs(v) + '°' + (v > 0 ? pos : neg);
+  for (let lat = -80; lat <= 80; lat += 10) for (const lon of [-175, 175, -5]) {
+    const p = rob(lon, lat); E('text', { 'text-anchor': lon > 0 ? 'end' : lon === -5 ? 'end' : 'start', y: -3, 'font-size': 13, 'font-weight': 900, fill: '#1f5f99', class: 'lbl' }, cs(glab, p.x, p.y, 'lbl' + (lat % 30 ? ' minor' : ''))).textContent = deg(lat, 'N', 'S');
+  }
+  for (let lon = -170; lon <= 170; lon += 10) for (const lat of [-1.5, 61.5, -48.5]) {
+    const p = rob(lon, lat); E('text', { 'text-anchor': 'middle', y: lat < 0 ? 14 : -4, 'font-size': 13, 'font-weight': 900, fill: '#1f5f99', class: 'lbl' }, cs(glab, p.x, p.y, 'lbl' + (lon % 30 ? ' minor' : ''))).textContent = deg(lon, 'E', 'W');
+  }
   const lines = E('g', { id: 'w-lines' }, g);
   const ln = (lat, col, dash, name) => {
     const a = rob(-180, lat), b = rob(180, lat);
@@ -326,14 +362,17 @@ function buildWorld() {
   const pml = rob(0, -50); E('text', { y: 0, 'font-size': 15, fill: '#2e7d32', 'font-style': 'italic' }, cs(lines, pml.x + 6, pml.y, 'lbl wl-lab')).textContent = 'Prime Meridian';
   const names = E('g', { id: 'w-allnames', class: 'lbl' }, g);
   const dyn = E('g', { id: 'dyn' }, g);
-  const res = { g, parts, b: { x: 0, y: 0, w: WW, h: WH }, minK: .25, dyn, names, sized: false };
+  const res = { g, parts, tzPaths, b: { x: 0, y: 0, w: WW, h: WH }, minK: .25, dyn, names, sized: false };
   res.countryW = {};
   return res;
 }
 function styleWorld(m) {
   const L = S.layers.world;
   for (const p of m.parts) p.setAttribute('fill', L.colour ? (CONT_COL[p.dataset.cont] || '#ddd') : '#f1ece0');
-  m.g.querySelector('#w-grat').style.display = L.grid ? '' : 'none';
+  const grid = L.grid || (S.mode === 'globe' && ['read', 'plot'].includes(S.globeTask)), tzOn = L.tz || (S.mode === 'globe' && S.globeTask === 'time');
+  m.g.querySelector('#w-grat').style.display = grid ? '' : 'none';
+  m.g.querySelector('#w-gratlab').style.display = grid ? '' : 'none';
+  m.g.querySelector('#w-tz').style.visibility = tzOn ? '' : 'hidden';
   m.g.querySelector('#w-lines').style.display = L.lines ? '' : 'none';
 }
 
@@ -395,6 +434,11 @@ function buildLocal(id) {
   line(Lm.raildis, { stroke: '#9e9e9e', 'stroke-width': 3, 'stroke-dasharray': '12 8' });
   line(Lm.rail, { stroke: '#222', 'stroke-width': 7 });
   line(Lm.rail, { stroke: '#fff', 'stroke-width': 3, 'stroke-dasharray': '16 16', 'stroke-linecap': 'butt' });
+  // contour lines (OS Terrain 50)
+  const cont = E('g', { id: 'l-cont', fill: 'none', stroke: '#c27a3a' }, g);
+  for (const c of Lm.contours || []) E('path', { d: c.d, 'stroke-width': c.i ? 2 : 1, opacity: c.i ? .95 : .8, 'vector-effect': 'non-scaling-stroke', 'data-h': c.h }, cont);
+  const clab = E('g', { id: 'l-clab' }, cont);
+  for (const c of Lm.clabels || []) { const lg = cs(clab, c.x, c.y); E('text', { 'text-anchor': 'middle', y: 5, 'font-size': 13, 'font-weight': 800, fill: '#a5571c', stroke: '#fbfaf3', 'stroke-width': 4, 'paint-order': 'stroke', transform: `rotate(${c.a})` }, lg).textContent = c.h; }
   // grid
   const grid = E('g', { id: 'l-grid' }, g), tenths = E('g', { id: 'l-tenths', style: 'display:none' }, g);
   for (let e = Math.ceil(Lm.e0 / 100) * 100; e <= Lm.e1; e += 100) {
@@ -425,20 +469,25 @@ function buildLocal(id) {
   const poiG = E('g', { id: 'l-pois' }, g);
   Lm.pois.forEach((p, i) => {
     const gg = cs(poiG, p.x, p.y, 'poi');
-    gg.dataset.i = i;
+    gg.dataset.i = i; gg.dataset.t = p.t;
     E('use', { href: '#sym-' + p.t }, gg);
+    if (p.t === 'peak') { E('text', { x: 8, y: 5, 'font-size': 15, 'font-weight': 900, fill: '#111', class: 'lbl' }, gg).textContent = p.h; if (p.n) E('text', { x: 8, y: -10, 'font-size': 14, 'font-weight': 800, 'font-style': 'italic', fill: '#333', class: 'lbl' }, gg).textContent = p.n; }
     if (p.ours) {
       E('path', { d: 'M0-34l5 10 11 1.6-8 7.8 1.9 11L0 1.2-9.9 6.4-8-4.6-16-12.4-5-14z', fill: '#ffd54a', stroke: '#b07d00', 'stroke-width': 1.5, transform: 'translate(0,-12) scale(.9)' }, gg);
       E('text', { y: 30, 'text-anchor': 'middle', 'font-size': 17, 'font-weight': 900, fill: '#0f6e9c', class: 'lbl' }, gg).textContent = 'Wallscourt Farm Academy';
     }
   });
   const dyn = E('g', { id: 'dyn' }, g);
-  return { g, L: Lm, pois: Lm.pois, poiG, labs, grid, tenths, dyn, b: { x: 0, y: 0, w: W, h: Hh }, minK: .12 };
+  return { g, L: Lm, pois: Lm.pois, poiG, labs, grid, tenths, cont, dyn, b: { x: 0, y: 0, w: W, h: Hh }, minK: .12 };
 }
 function styleLocal(m) {
   const L = S.layers.local;
   m.labs.style.display = L.names ? '' : 'none';
   m.poiG.style.display = L.symbols ? '' : 'none';
+  m.cont.style.display = L.contours ? '' : 'none';
+  const hide = new Set(L.hide || []);
+  for (const g of m.poiG.children) g.style.display = hide.has(g.dataset.t) && !(m.force && m.force.has(+g.dataset.i)) ? 'none' : '';
+  declutter();
 }
 
 function cur() { return built[S.map]; }
@@ -446,12 +495,13 @@ function ensureMap(id) {
   if (built[id]) return built[id];
   let m;
   if (id === 'world') m = buildWorld();
+  else if (id === 'merc') m = buildMerc();
   else if (id === 'uk') m = buildUK();
   else m = buildLocal(id.split(':')[1]);
   built[id] = m; return m;
 }
 function showMap(id, keepView) {
-  S.map = id; save();
+  S.map = id; if (id !== 'merc') save();
   const m = ensureMap(id);
   layersG.replaceChildren(m.g);
   ov.replaceChildren();
@@ -466,6 +516,9 @@ function showMap(id, keepView) {
   $('#mapTxt').textContent = mapLabel(id);
   document.body.classList.toggle('has-rulers', id.startsWith('local'));
   $('#rulerB').hidden = $('#rulerL').hidden = !id.startsWith('local');
+  if (!id.startsWith('local')) $('#zoomBar').style.left = '';
+  $('#symBtn').textContent = id.startsWith('local') ? '📍 Symbols' : '📍 Places';
+  $('#symBtn').hidden = $('#layerBtn').hidden = id === 'merc';
   buildViewBar();
   const v = views[id];
   if (keepView && v) { V.cx = v.cx; V.cy = v.cy; V.k = v.k; applyView(); }
@@ -475,15 +528,17 @@ function showMap(id, keepView) {
 }
 function restyle() {
   const m = cur(); if (!m) return;
-  if (S.map === 'world') styleWorld(m); else if (S.map === 'uk') styleUK(m); else styleLocal(m);
+  if (S.map === 'world') styleWorld(m); else if (S.map === 'uk') styleUK(m); else if (m.L) styleLocal(m);
 }
 function mapLabel(id) {
-  return id === 'world' ? 'World' : id === 'uk' ? 'United Kingdom' : (id.endsWith('school') ? 'OS: Our school' : 'OS: Avon Gorge');
+  if (id === 'world' || id === 'merc') return 'World';
+  if (id === 'uk') return 'United Kingdom';
+  return { school: 'OS: Our school', gorge: 'OS: Avon Gorge', penyfan: 'OS: Pen y Fan' }[id.split(':')[1]] || 'OS map';
 }
 function setAttrib() {
-  const a = S.map === 'world' ? 'Map data: Natural Earth' :
+  const a = S.map === 'world' || S.map === 'merc' ? 'Map data: Natural Earth' :
     S.map === 'uk' ? 'Contains OS data © Crown copyright and database right 2024 · Source: Office for National Statistics (OGL) · Natural Earth' :
-      'Map data © OpenStreetMap contributors · Drawn in the style of an Ordnance Survey map · Grid: British National Grid (square ST)';
+      `© OpenStreetMap contributors · Heights: OS Terrain 50 © Crown copyright · OS-style map, British National Grid square ${cur().L.sq || 'ST'}`;
   $('#attrib').textContent = a + ' · Version ' + VERSION;
 }
 function buildViewBar() {
@@ -491,6 +546,8 @@ function buildViewBar() {
   const add = (t, f) => { const b = H(`<button>${esc(t)}</button>`); b.onclick = f; bar.appendChild(b); };
   if (S.map === 'world') {
     for (const [n, bb] of Object.entries(WORLD_VIEWS)) add(n, () => bb ? fitLL(bb) : home());
+  } else if (S.map === 'merc') {
+    add('Back to the world map', () => { S.globeTask = 'read'; save(); startMode(); });
   } else if (S.map === 'uk') {
     for (const [n, bb] of Object.entries(UK_VIEWS)) add(n, () => bb ? fitBNG(bb) : home());
   } else {
@@ -536,9 +593,10 @@ function refreshDyn() {
   const quiz = S.mode !== 'explore';
   if (S.map === 'world') m.g.querySelectorAll('.wl-lab').forEach(e => e.style.display = quiz ? 'none' : '');
   const names = S.mode === 'explore' && (S.map === 'world' ? S.layers.world.names : S.map === 'uk' ? S.layers.uk.names : S.layers.local.names);
-  if (S.map.startsWith('local')) return;
+  if (S.map.startsWith('local') || S.map === 'merc') return;
   const its = visibleItems();
-  if (!quiz) {
+  const showMk = S.map === 'world' ? S.layers.world.markers !== false : S.layers.uk.markers !== false;
+  if (!quiz && showMk) {
     for (const it of its) {
       if (it.k === 'point') drawMarker(m.dyn, it, { label: names });
       else if (it.k === 'line') drawItemLine(m.dyn, it, names);
@@ -578,7 +636,7 @@ function refreshDyn() {
 }
 const POI_RANK = ['station', 'museum', 'hospital', 'univ', 'worship', 'school', 'tower', 'viewpoint', 'antiquity', 'info', 'golf', 'bus', 'fire', 'police', 'picnic', 'po', 'pub', 'parking'];
 function poiRank(p) { return p.ours ? -1 : (POI_RANK.indexOf(p.t) + 1 || 99); }
-function forcePoi(...idx) { const m = cur(); if (m && m.L) { m.force = new Set(idx); declutter(); } }
+function forcePoi(...idx) { const m = cur(); if (m && m.L) { m.force = new Set(idx); styleLocal(m); } }
 let declT = 0;
 function declutter() {                       // hide labels that would overlap, most important first
   cancelAnimationFrame(declT);
@@ -598,6 +656,7 @@ function declutter() {                       // hide labels that would overlap, 
           if (over(rects[i], taken, 3)) g.style.visibility = 'hidden'; else taken.push(rects[i]);
         });
       }
+      if (S.layers.local.symbols) m.poiG.querySelectorAll('text').forEach(t => taken.push(t.getBoundingClientRect()));
       if (!S.layers.local.names) return;
       const labs = [...m.labs.children];
       labs.forEach(g => g.style.visibility = '');
@@ -635,33 +694,56 @@ function zoomNames() {
   if (S.map === 'uk' && m.ctyNames) for (const t of m.ctyNames) t.style.display = V.k < .9 ? '' : 'none';
 }
 
-/* ------------------------------------------------------------ view change hooks: rulers etc. */
+/* ------------------------------------------------------------ view change hooks: rulers, scale bar */
 function onViewChange() {
   zoomNames();
+  svg.classList.toggle('zoomed', V.k < 3.6);
   const m = cur();
   if (m && m.L) {
     m.tenths.style.display = V.k < 2.8 ? '' : 'none';
     drawRulers(m);
   }
+  drawScale();
 }
 function drawRulers(m) {
-  const L = m.L, rb = $('#rulerB'), rl = $('#rulerL'), r = svg.getBoundingClientRect();
+  // grid numbers sit on strips that hug the edges of the map, not the edges of the screen
+  const L = m.L, rb = $('#rulerB'), rl = $('#rulerL');
   const x0 = V.cx - V.W / 2 * V.k, y0 = V.cy - V.H / 2 * V.k;
+  const sxL = -x0 / V.k, sxR = (m.b.w - x0) / V.k, syT = -y0 / V.k, syB = (m.b.h - y0) / V.k;
+  const RW = 52, RH = 40;
+  const lx = clamp(sxL - RW, 0, V.W - RW), by = clamp(syB, 0, V.H - RH);
+  const lTop = Math.max(0, syT), lBot = Math.min(by, V.H - RH);
+  const bLeft = lx, bRight = Math.min(V.W, Math.max(sxR, bLeft + RW + 10));
+  Object.assign(rl.style, { left: lx + 'px', top: lTop + 'px', height: Math.max(0, lBot - lTop) + 'px', bottom: 'auto' });
+  Object.assign(rb.style, { left: bLeft + 'px', top: by + 'px', width: Math.max(0, bRight - bLeft) + 'px', right: 'auto', bottom: 'auto' });
   let hb = '', hl = '';
   const showT = V.k < 2.8;
-  for (let e = Math.ceil((L.e0 + Math.max(0, x0)) / 100) * 100; e <= Math.min(L.e1, L.e0 + x0 + V.W * V.k); e += 100) {
+  for (let e = Math.ceil(L.e0 / 100) * 100; e <= L.e1; e += 100) {
     const sx = (e - L.e0 - x0) / V.k;
-    if (sx < 56 || sx > V.W - 10) continue;
-    if (e % 1000 === 0) hb += `<span style="left:${sx}px">${String(Math.floor(e / 1000) % 100).padStart(2, '0')}</span>`;
-    else if (showT) hb += `<span class="t" style="left:${sx}px">${(e / 100) % 10}</span>`;
+    if (sx < lx + RW + 4 || sx > bRight - 8) continue;
+    if (e % 1000 === 0) hb += `<span style="left:${sx - bLeft}px">${String(Math.floor(e / 1000) % 100).padStart(2, '0')}</span>`;
+    else if (showT) hb += `<span class="t" style="left:${sx - bLeft}px">${(e / 100) % 10}</span>`;
   }
   for (let n = Math.ceil(L.n0 / 100) * 100; n <= L.n1; n += 100) {
     const sy = (L.n1 - n - y0) / V.k;
-    if (sy < 10 || sy > V.H - 46) continue;
-    if (n % 1000 === 0) hl += `<span style="top:${sy}px">${String(Math.floor(n / 1000) % 100).padStart(2, '0')}</span>`;
-    else if (showT) hl += `<span class="t" style="top:${sy}px">${(n / 100) % 10}</span>`;
+    if (sy < lTop + 8 || sy > lBot - 6) continue;
+    if (n % 1000 === 0) hl += `<span style="top:${sy - lTop}px">${String(Math.floor(n / 1000) % 100).padStart(2, '0')}</span>`;
+    else if (showT) hl += `<span class="t" style="top:${sy - lTop}px">${(n / 100) % 10}</span>`;
   }
   rb.innerHTML = hb; rl.innerHTML = hl;
+  $('#zoomBar').style.left = (lx >= 100 ? lx - 86 : lx + RW + 14) + 'px';
+}
+function drawScale() {
+  // a scale bar for maps where distance is the same everywhere (UK and OS maps)
+  const el = $('#scaleBar');
+  const mpp = S.map === 'uk' ? V.k * D.uk.s : S.map.startsWith('local') ? V.k : 0;   // metres per screen pixel
+  if (!mpp) { el.hidden = true; return; }
+  el.hidden = false;
+  let best = 100;
+  for (const v of [50, 100, 200, 250, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000]) if (v / mpp <= 220) best = v;
+  const px = best / mpp, half = best / 2;
+  const fmt = v => v >= 1000 ? (v / 1000) + ' km' : v + ' m';
+  el.innerHTML = `<div class="sb-bar" style="width:${px}px"><i></i><i></i></div><div class="sb-lab"><span>0</span><span style="left:${px / 2}px">${fmt(half)}</span><span style="left:${px}px">${fmt(best)}</span></div>`;
 }
 
 /* ------------------------------------------------------------ hit testing */
@@ -811,6 +893,7 @@ function onTap(cx, cy) {
   if (S.mode === 'explore') exploreTap(p, cx, cy);
   else if (S.mode === 'find') findTap(p);
   else if (S.mode === 'grid') gridTap(p, cx, cy);
+  else if (S.mode === 'globe') globeTap(p);
 }
 
 /* ------------------------------------------------------------ EXPLORE */
@@ -819,13 +902,17 @@ function exploreStart() {
   if (S.map.startsWith('local')) {
     setPanel(`<p class="ptitle">Explore</p><div class="qcard"><p class="q">Tap a symbol to find out what it is.</p><p class="hint">Tap anywhere else to see its grid square.</p></div>
       <button class="btn sec" id="keyBtn">🔑 Show the key</button>
+      <button class="btn sec" id="printBtn">🖨️ Print a worksheet of this view</button>
       <p class="hint">Drag to move the map. Use ＋ and － to zoom in and out. Blue lines are grid lines, 1 km apart.</p>`);
     $('#keyBtn').onclick = showKey;
+    $('#printBtn').onclick = printSheet;
   } else {
     const its = visibleItems();
     setPanel(`<p class="ptitle">Explore</p><div class="qcard"><p class="q">Tap anything on the map to find out about it.</p><p class="hint">${S.map === 'world' ? 'Countries, oceans, cities and landmarks' : 'Countries, seas, cities, rivers and landmarks'} for ${yr() ? 'Year ' + yr() : 'all years'}: ${its.length} places to explore.</p></div>
       ${legendHTML()}
-      <p class="hint">Drag to move the map. Pinch, scroll or use ＋ and － to zoom.</p>`);
+      <p class="hint">Drag to move the map. Pinch, scroll or use ＋ and － to zoom.</p>
+      <button class="btn sec" id="printBtn">🖨️ Print a worksheet of this view</button>`);
+    $('#printBtn').onclick = printSheet;
   }
 }
 function legendHTML() {
@@ -1165,13 +1252,14 @@ let G = null;
 function gridStart() {
   ov.replaceChildren(); clearHL();
   if (!S.map.startsWith('local')) {
-    setPanel(`<p class="ptitle">Grid references</p><div class="qcard"><p class="q">Grid references are practised on our OS-style maps.</p><p class="hint">They use the real Ordnance Survey grid, so they match paper OS maps.</p></div>
+    setPanel(`<p class="ptitle">OS map skills</p><div class="qcard"><p class="q">Grid references, symbols, distance and height are practised on our OS-style maps.</p><p class="hint">They use the real Ordnance Survey grid, so they match paper OS maps. Pen y Fan is best for contours.</p></div>
       ${D.local.map(l => `<button class="btn" data-local="${l.id}">🗺️ ${esc(l.name)}</button>`).join('')}`);
     panel.querySelectorAll('[data-local]').forEach(b => b.onclick = () => { showMap('local:' + b.dataset.local); startMode(); });
     return;
   }
+  if (S.gridTask === 'far' || S.gridTask === 'high') { G = { idx: 0, n: S.count || Infinity, score: 0, pois: osPois(), task: S.gridTask }; return gridAsk(); }
   const lvl = gridLevel();
-  const pois = cur().pois.map((p, i) => Object.assign({ i }, p)).filter(p => {
+  const pois = osPois().filter(p => {
     const e = cur().L.e0 + p.x, n = cur().L.n1 - p.y;
     if (p.x < 300 || p.y < 300 || p.x > cur().b.w - 300 || p.y > cur().b.h - 300) return false;
     if (lvl === 6) { const a = e % 100, b = n % 100; return a > 14 && a < 86 && b > 14 && b < 86; }
@@ -1183,12 +1271,19 @@ function gridStart() {
 function gridHeader() {
   const lvl = gridLevel();
   const pr = G ? `<span style="float:right;text-transform:none">${G.n === Infinity ? 'Q' + (G.idx + 1) : (G.idx + 1) + ' of ' + G.n} · ⭐ ${G.score}</span>` : '';
-  return `<p class="ptitle">Grid references${pr}</p>
-    <div class="chips"><button class="chip on" id="taskPick">${GRID_TASKS[S.gridTask]} ▾</button>${S.gridTask !== 'symbols' ? `<button class="chip on" id="lvlPick">${lvl}-figure ▾</button>` : ''}</div>`;
+  return `<p class="ptitle">OS map skills${pr}</p>
+    <div class="chips"><button class="chip on" id="taskPick">${GRID_TASKS[S.gridTask]} ▾</button>${['give', 'find'].includes(S.gridTask) ? `<button class="chip on" id="lvlPick">${lvl}-figure ▾</button>` : ''}</div>`;
 }
-const GRID_TASKS = { give: 'Give the reference', find: 'Find the place', symbols: 'Map symbols' };
+const GRID_TASKS = { give: 'Give the grid reference', find: 'Find the grid reference', symbols: 'Map symbols', far: 'How far? (scale)', high: 'How high? (contours)' };
+const GRID_TASK_YEARS = { give: 'Years 3-6', find: 'Years 3-6', symbols: 'Years 3-6', far: 'Years 5-6', high: 'Year 6' };
+function osPois() {
+  const m = cur(), hide = new Set(S.layers.local.hide || []);
+  const ps = m.pois.map((p, i) => Object.assign({ i }, p));
+  const vis = S.layers.local.symbols ? ps.filter(p => !hide.has(p.t)) : [];
+  return vis.length >= 4 ? vis : ps;
+}
 function wireGridHeader() {
-  $('#taskPick').onclick = e => openPop(e.currentTarget, `<h3>Activity</h3>${Object.entries(GRID_TASKS).map(([k, t]) => `<button class="opt ${S.gridTask === k ? 'on' : ''}" data-task="${k}">${t}</button>`).join('')}`,
+  $('#taskPick').onclick = e => openPop(e.currentTarget, `<h3>Activity</h3>${Object.entries(GRID_TASKS).map(([k, t]) => `<button class="opt ${S.gridTask === k ? 'on' : ''}" data-task="${k}">${t}<small>${GRID_TASK_YEARS[k]}</small></button>`).join('')}`,
     p => p.querySelectorAll('[data-task]').forEach(b => b.onclick = () => { closePop(); S.gridTask = b.dataset.task; save(); gridStart(); }));
   const lp = $('#lvlPick');
   if (lp) lp.onclick = e => openPop(e.currentTarget, `<h3>Grid references</h3>${[4, 6].map(l => `<button class="opt ${gridLevel() === l ? 'on' : ''}" data-lvl="${l}">${l}-figure<small>${l === 4 ? 'Year 3' : 'Years 4-6'}</small></button>`).join('')}`,
@@ -1200,6 +1295,8 @@ function gridAsk() {
   G.done = false; G.tries = 0; G.entry = ''; G.pin = null;
   if (!G.pois.length) { setPanel(gridHeader() + '<div class="qcard"><p class="q">No places to ask about here.</p></div>'); wireGridHeader(); return; }
   if (S.gridTask === 'symbols') return symbolAsk();
+  if (S.gridTask === 'far') return distanceAsk();
+  if (S.gridTask === 'high') return heightAsk();
   const p = pick(G.pois); G.p = p;
   const ref = refOf(L, p.x, p.y, G.lvl); G.ref = ref;
   forcePoi(p.i);
@@ -1212,15 +1309,15 @@ function gridAsk() {
       <div class="qcard"><p class="q">What is the ${G.lvl}-figure grid reference of the ${p.ours ? 'school (our school!)' : esc(POI_SHORT[p.t])}?</p></div>
       <div class="refbox" id="refbox"></div>
       <div class="ref-legend"><span class="e">Eastings (along)</span><span class="n">Northings (up)</span></div>
-      <div class="keypad" id="pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(n => `<button data-k="${n}">${n}</button>`).join('')}<button data-k="back">⌫</button><button data-k="ok" id="check" class="ok" disabled>Check</button></div>
+      <div class="keypad" id="pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(n => `<button data-k="${n}">${n}</button>`).join('')}<button data-k="back" class="wide">⌫</button><button data-k="ok" id="check" class="ok" disabled>Check</button></div>
       <div id="fbox"></div>
       <div class="row"><button class="btn sec" id="skip">Skip</button><button class="btn sec" id="showme">Show me how</button></div>`);
     wireGridHeader();
     drawRefBox();
     panel.querySelectorAll('[data-k]').forEach(b => b.onclick = () => keyIn(b.dataset.k));
   } else {
-    fitBox(m.b.x + (Math.random() * .3) * m.b.w, m.b.y + (Math.random() * .3) * m.b.h, m.b.w * .7, m.b.h * .7, 1);
-    if (G.lvl === 6) { const cx = Math.floor((L.e0 + p.x) / 1000) * 1000 - L.e0 + 500, cy = L.n1 - Math.floor((L.n1 - p.y) / 1000) * 1000 - 500; const off = () => (Math.random() - .5) * 1200; fitBox(cx - 1300 + off(), cy - 1300 + off(), 2600, 2600, 1); }
+    if (G.lvl === 4) home();
+    else { const cx = Math.floor((L.e0 + p.x) / 1000) * 1000 - L.e0 + 500, cy = L.n1 - Math.floor((L.n1 - p.y) / 1000) * 1000 - 500; const off = () => (Math.random() - .5) * 1200; fitBox(cx - 1300 + off(), cy - 1300 + off(), 2600, 2600, 1); }
     setPanel(gridHeader() + `
       <div class="qcard"><p class="q">Find this grid reference:</p><div class="big" style="font-size:calc(54px*var(--fs));letter-spacing:4px"><span style="color:#b0351f">${ref[0]}</span> <span style="color:#1a5fb4">${ref[1]}</span></div>
       <p class="hint">${G.lvl === 6 ? 'Tap the exact spot. Zoom in to see the tenths.' : 'Tap inside the grid square.'}</p></div>
@@ -1386,7 +1483,8 @@ function symbolAsk() {
   const types = [...new Set(m.pois.map(p => p.t))];
   const t = pick(types), choices = m.pois.filter(p => p.t === t), p = pick(choices);
   G.p = p; forcePoi(m.pois.indexOf(p));
-  const opts = shuffle([t, ...shuffle(types.filter(x => x !== t)).slice(0, 3)]);
+  const others = [...shuffle(types.filter(x => x !== t)), ...shuffle(Object.keys(POI).filter(x => x !== t && !types.includes(x)))];
+  const opts = shuffle([t, ...others.slice(0, 3)]);
   const g = cs(ov, p.x, p.y, 'hlx'); E('circle', { class: 'pulse', r: 16 }, g); E('circle', { r: 26, fill: 'none', stroke: '#ff3d00', 'stroke-width': 4 }, g);
   fitBox(p.x - 600, p.y - 600, 1200, 1200, 1);
   setPanel(gridHeader() + `
@@ -1407,13 +1505,420 @@ function symbolAsk() {
   $('#skip').onclick = gridNext;
 }
 
+/* ------------------------------------------------------------ OS MAPS: distance and height */
+function abMark(p, letter, col, label) {
+  const g = cs(ov, p.x, p.y, 'hlx');
+  E('circle', { class: 'pulse', r: 16 }, g);
+  E('circle', { r: 17, fill: col, stroke: '#fff', 'stroke-width': 3 }, g);
+  E('text', { 'text-anchor': 'middle', y: 7, 'font-size': 20, 'font-weight': 900, fill: '#fff' }, g).textContent = letter;
+  if (label) E('text', { x: 24, y: 7, 'font-size': 19, class: 'lbl' }, g).textContent = label;
+  return g;
+}
+const fmtDist = v => v >= 1000 ? (v / 1000) + ' km' : v + ' m';
+function choiceButtons(opts, fmt) { return `<div class="answers" id="answers">${opts.map((o, i) => `<button class="btn sec" data-o="${i}">${fmt(o)}</button>`).join('')}</div>`; }
+function finishChoice(ok, rightIdx, html) {
+  G.done = true; if (ok && G.tries === 0) G.score++;
+  panel.querySelectorAll('#answers [data-o]').forEach(x => x.classList.add(+x.dataset.o === rightIdx ? 'right' : 'wrong'));
+  $('#fbox').innerHTML = (ok ? `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>${html}</div>${teamAwardHTML()}` : `<div class="fb bad"><span class="em">${pick(NEARLY)}</span>${html}</div>`);
+  wireAward($('#fbox'));
+  const s = $('#skip'), last = G.n !== Infinity && G.idx + 1 >= G.n; s.textContent = last ? 'Finish' : 'Next ➜'; s.className = 'btn';
+  scrollEnd();
+}
+function distanceAsk() {
+  const m = cur(), pts = G.pois.filter(p => p.x > 200 && p.y > 200 && p.x < m.b.w - 200 && p.y < m.b.h - 200);
+  let a = null, b = null, d = 0;
+  for (let t = 0; t < 800; t++) {
+    const p = pick(pts), q = pick(pts);
+    if (p === q) continue;
+    d = Math.hypot(p.x - q.x, p.y - q.y);
+    if (d >= 400 && d <= 3800) { a = p; b = q; break; }
+  }
+  if (!a) { setPanel(gridHeader() + '<div class="qcard"><p class="q">Not enough places on this map.</p></div>'); wireGridHeader(); return; }
+  forcePoi(a.i, b.i);
+  const step = d < 950 ? 100 : 500, ans = Math.round(d / step) * step;
+  const ladder = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000];
+  const ai = ladder.indexOf(ans);
+  const others = shuffle([-4, -3, -2, 2, 3, 4, 5].map(k => ladder[ai + k]).filter(v => v && v !== ans)).slice(0, 3);
+  const opts = [ans, ...others].sort((x, y) => x - y);
+  G.cur = { a, b, d, ans };
+  const na = a.ours ? 'our school' : 'the ' + POI_SHORT[a.t], nb = b.ours ? 'our school' : 'the ' + POI_SHORT[b.t];
+  abMark(a, 'A', '#2e7d32', cap1(na.replace(/^the /, ''))); abMark(b, 'B', '#c62828', cap1(nb.replace(/^the /, '')));
+  fitBox(Math.min(a.x, b.x) - 500, Math.min(a.y, b.y) - 500, Math.abs(a.x - b.x) + 1000, Math.abs(a.y - b.y) + 1000, 1.15);
+  setPanel(gridHeader() + `
+    <div class="qcard"><p class="q">About how far is it in a straight line from <b>A</b> (${esc(na)}) to <b>B</b> (${esc(nb)})?</p>
+    <p class="hint" style="margin:0">Use the scale bar, or count grid squares: each square is 1 km across.</p></div>
+    ${choiceButtons(opts, fmtDist)}<div id="fbox"></div>
+    <div class="row"><button class="btn sec" id="skip">Skip</button></div>`);
+  wireGridHeader();
+  $('#skip').onclick = gridNext;
+  panel.querySelectorAll('#answers [data-o]').forEach(btn => btn.onclick = () => {
+    if (G.done) return;
+    const v = opts[+btn.dataset.o], ok = v === ans;
+    const g = E('g', { class: 'hlx' }, ov);
+    E('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: '#111', 'stroke-width': 4, 'stroke-dasharray': '10 6', 'vector-effect': 'non-scaling-stroke' }, g);
+    E('text', { 'text-anchor': 'middle', y: -10, 'font-size': 22, 'font-weight': 900, class: 'lbl' }, cs(g, (a.x + b.x) / 2, (a.y + b.y) / 2)).textContent = 'about ' + fmtDist(ans);
+    finishChoice(ok, opts.indexOf(ans), `It is about <b>${fmtDist(ans)}</b> from A to B${d >= 1000 ? ` — that is about ${(d / 1000).toFixed(1)} grid squares` : ''}.`);
+  });
+}
+function contourIndex(m) {
+  if (m.cl) return m.cl;
+  m.cl = (m.L.contours || []).map(c => ({ h: c.h, lines: parsePath(c.d) }));
+  return m.cl;
+}
+function contourPoint(m, c) {
+  const pts = c.lines.flat().filter(([x, y]) => x > 300 && y > 300 && x < m.b.w - 300 && y < m.b.h - 300);
+  return pts.length ? (([x, y]) => ({ x, y, h: c.h }))(pick(pts)) : null;
+}
+function heightAsk() {
+  const m = cur(), cl = contourIndex(m), ci = m.L.ci || 10;
+  const hs = cl.map(c => c.h);
+  if (cl.length < 3) {
+    setPanel(gridHeader() + `<div class="qcard"><p class="q">This map is quite flat, so it has only a few contour lines.</p><p class="hint">Pen y Fan, in the Brecon Beacons, has lots of hills to practise with.</p></div><button class="btn" id="toPyf">⛰️ Open the Pen y Fan map</button>`);
+    wireGridHeader(); $('#toPyf').onclick = () => { showMap('local:penyfan'); startMode(); }; return;
+  }
+  const kind = Math.random() < .5 ? 'which' : 'what';
+  let A = null, B = null;
+  for (let t = 0; t < 400 && !A; t++) {
+    const a = contourPoint(m, pick(cl)); if (!a) continue;
+    if (kind === 'what') { A = a; break; }
+    const c2 = pick(cl.filter(c => Math.abs(c.h - a.h) >= 2 * ci)); if (!c2) continue;
+    const b = contourPoint(m, c2); if (!b) continue;
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (d > 300 && d < 2000) { A = a; B = b; }
+  }
+  if (!A) return gridNext();
+  G.cur = { A, B, kind };
+  abMark(A, 'A', '#2e7d32'); if (B) abMark(B, 'B', '#c62828');
+  const span = B ? Math.max(1400, Math.abs(A.x - B.x) + 900, Math.abs(A.y - B.y) + 900) : 1800;
+  const cx = B ? (A.x + B.x) / 2 : A.x + (Math.random() - .5) * 400, cy = B ? (A.y + B.y) / 2 : A.y + (Math.random() - .5) * 400;
+  fitBox(cx - span / 2, cy - span / 2, span, span, 1.05);
+  let opts, ansIdx, q;
+  if (kind === 'which') {
+    opts = ['A', 'B']; ansIdx = A.h > B.h ? 0 : 1;
+    q = 'Which point is <b>higher</b>, A or B?';
+  } else {
+    const ds = shuffle([-5, -3, -2, -1, 1, 2, 3, 5]).map(k => A.h + k * ci).filter(v => v > 0 && hs.includes(v) || v > 0).slice(0, 3);
+    opts = [A.h, ...ds].sort((x, y) => x - y); ansIdx = opts.indexOf(A.h);
+    q = 'Point A is on a contour line. <b>How high</b> is point A above sea level?';
+  }
+  setPanel(gridHeader() + `<div class="qcard"><p class="q">${q}</p>
+    <p class="hint" style="margin:0">Contour lines join places of the same height. Every 5th line is thicker and has its height written on it. They are ${ci} m apart.</p></div>
+    ${choiceButtons(opts, o => kind === 'which' ? 'Point ' + o : o + ' metres')}<div id="fbox"></div>
+    <div class="row"><button class="btn sec" id="skip">Skip</button></div>`);
+  wireGridHeader();
+  $('#skip').onclick = gridNext;
+  panel.querySelectorAll('#answers [data-o]').forEach(btn => btn.onclick = () => {
+    if (G.done) return;
+    const ok = +btn.dataset.o === ansIdx;
+    const g = E('g', { class: 'hlx' }, ov);
+    for (const P of [A, B].filter(Boolean)) {
+      const c = cl.find(c => c.h === P.h);
+      for (const L of c.lines) E('path', { d: 'M' + L.map(p => p.join(' ')).join('L'), fill: 'none', stroke: '#ff6f00', 'stroke-width': 5, 'vector-effect': 'non-scaling-stroke', class: 'blink' }, g);
+      E('text', { x: 24, y: -16, 'font-size': 22, 'font-weight': 900, fill: '#a5571c', class: 'lbl' }, cs(g, P.x, P.y)).textContent = P.h + ' m';
+    }
+    finishChoice(ok, ansIdx, kind === 'which' ? `A is on the ${A.h} m contour and B is on the ${B.h} m contour, so <b>${A.h > B.h ? 'A' : 'B'}</b> is higher.` : `Point A is on the <b>${A.h} m</b> contour line.`);
+  });
+}
+
+/* ------------------------------------------------------------ LAT & LONG: read, plot, time zones, true size */
+let GL = null;
+const GLOBE_TASKS = { read: 'Read latitude and longitude', plot: 'Plot latitude and longitude', time: 'Time zones', size: 'True size of countries' };
+const GLOBE_YEARS = { read: 'Years 3-6', plot: 'Years 4-6', time: 'Years 3-6', size: 'Year 5' };
+const deg = (v, pos, neg) => v === 0 ? '0°' : Math.abs(v) + '°' + (v > 0 ? pos : neg);
+const fmtLL = (la, lo) => `${deg(la, 'N', 'S')}, ${deg(lo, 'E', 'W')}`;
+const r10 = v => Math.round(v / 10) * 10;
+function globePlaces() {
+  const out = D.world.caps.map(([n, c, lat, lon]) => ({ n, c, lat, lon }));
+  for (const it of ITEMS) if (it.m === 'world' && it.k === 'point' && !it.phys && !out.some(o => o.n === it.n)) out.push({ n: it.n, c: '', lat: it.ll[0], lon: it.ll[1] });
+  return out.filter(o => !/Vatican|San Marino|Vaduz|Monaco|Andorra/.test(o.n));
+}
+function globeHeader() {
+  const pr = GL ? `<span style="float:right;text-transform:none">${GL.n === Infinity ? 'Q' + (GL.idx + 1) : (GL.idx + 1) + ' of ' + GL.n} · ⭐ ${GL.score}</span>` : '';
+  return `<p class="ptitle">Latitude and longitude${pr}</p><div class="chips"><button class="chip on" id="gtaskPick">${GLOBE_TASKS[S.globeTask]} ▾</button></div>`;
+}
+function wireGlobeHeader() {
+  $('#gtaskPick').onclick = e => openPop(e.currentTarget, `<h3>Activity</h3>${Object.entries(GLOBE_TASKS).map(([k, t]) => `<button class="opt ${S.globeTask === k ? 'on' : ''}" data-gt="${k}">${t}<small>${GLOBE_YEARS[k]}</small></button>`).join('')}`,
+    p => p.querySelectorAll('[data-gt]').forEach(b => b.onclick = () => { closePop(); S.globeTask = b.dataset.gt; save(); startMode(); }));
+}
+function globeStart() {
+  ov.replaceChildren(); clearHL();
+  if (S.globeTask === 'size') return sizeStart();
+  if (S.map !== 'world') showMap('world');
+  restyle(); refreshDyn();
+  const all = globePlaces();
+  let pool;
+  if (S.globeTask === 'time') {
+    const m = cur();
+    pool = all.map(p => { const q = rob(p.lon, p.lat), pt = DPt(q.x, q.y); const z = m.tzPaths.find(e => e.isPointInFill(pt)); return Object.assign({ z: z ? +z.dataset.z : null }, p); })
+      .filter(p => p.z !== null && Number.isInteger(p.z) && p.n !== 'London');
+  } else pool = all.filter(p => Math.abs(p.lat - r10(p.lat)) <= 3 && Math.abs(p.lon - r10(p.lon)) <= 3 && Math.abs(p.lat) < 75 && Math.abs(r10(p.lon)) < 180);
+  let order = shuffle(pool);
+  if (S.globeTask === 'time') {                // spread questions across many time zones, not just Europe
+    const byZ = {}; for (const p of order) (byZ[p.z] ||= []).push(p);
+    const zs = shuffle(Object.keys(byZ)); order = [];
+    for (let r = 0; order.length < pool.length; r++) for (const z of zs) if (byZ[z][r]) order.push(byZ[z][r]);
+  }
+  GL = { idx: 0, n: S.count || Infinity, score: 0, order };
+  globeAsk();
+}
+function globeNext() {
+  GL.idx++;
+  if (GL.n !== Infinity && GL.idx >= GL.n) { ov.replaceChildren(); clearHL(); setPanel(globeHeader() + endHTML({ score: GL.score, n: GL.n })); wireGlobeHeader(); $('#again').onclick = globeStart; return; }
+  globeAsk();
+}
+function globeFinish(ok, html) {
+  GL.done = true; if (ok && GL.tries === 0) GL.score++;
+  $('#fbox').innerHTML = ok ? `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>${html}</div>${teamAwardHTML()}` : `<div class="fb bad"><span class="em">${pick(NEARLY)}</span>${html}</div>`;
+  wireAward($('#fbox'));
+  const s = $('#skip'), last = GL.n !== Infinity && GL.idx + 1 >= GL.n; s.textContent = last ? 'Finish' : 'Next ➜'; s.className = 'btn';
+  scrollEnd();
+}
+function placeName(p) { return p.c && p.c !== p.n ? `${p.n}, ${p.c}` : p.n; }
+function globeMark(p, label) {
+  const q = rob(p.lon, p.lat), g = cs(ov, q.x, q.y, 'hlx');
+  E('circle', { class: 'pulse', r: 16 }, g); E('circle', { r: 10, fill: '#e53935', stroke: '#fff', 'stroke-width': 3 }, g);
+  if (label) E('text', { x: 16, y: 6, 'font-size': 19, class: 'lbl' }, g).textContent = label;
+}
+function llGuides(la, lo) {
+  const g = E('g', { class: 'hlx' }, ov), a = rob(-180, la), b = rob(180, la), pts = [];
+  E('path', { d: `M${a.x} ${a.y}H${b.x}`, stroke: '#ff6f00', 'stroke-width': 4, 'vector-effect': 'non-scaling-stroke' }, g);
+  for (let lat = -90; lat <= 90; lat += 5) pts.push(rob(lo, lat));
+  E('path', { d: 'M' + pts.map(p => p.x + ' ' + p.y).join('L'), fill: 'none', stroke: '#ff6f00', 'stroke-width': 4, 'vector-effect': 'non-scaling-stroke' }, g);
+}
+function globeAsk() {
+  ov.replaceChildren(); clearHL();
+  GL.done = false; GL.tries = 0; GL.pin = null;
+  const p = GL.order[GL.idx % GL.order.length]; GL.p = p;
+  if (!p) { setPanel(globeHeader() + '<div class="qcard"><p class="q">No places found.</p></div>'); wireGlobeHeader(); return; }
+  if (S.globeTask === 'time') return timeAsk(p);
+  const la = r10(p.lat), lo = r10(p.lon); GL.ans = [la, lo];
+  fitLL([clamp(lo - 50, -180, 130), clamp(la - 30, -70, 40), clamp(lo + 50, -130, 180), clamp(la + 30, -40, 80)]);
+  if (S.globeTask === 'read') {
+    globeMark(p, p.n);
+    const c = [la, lo], cand = [];
+    if (la) cand.push([-la, lo]); if (lo) cand.push([la, -lo]);
+    cand.push([la + 10, lo], [la - 10, lo], [la, lo + 10], [la, lo - 10], [la + 20, lo - 10]);
+    if (Math.abs(lo) <= 80 && lo !== la) cand.push([lo, la]);
+    const seen = new Set([c.join()]), opts = [c];
+    for (const o of shuffle(cand)) { if (Math.abs(o[0]) > 80 || Math.abs(o[1]) > 180 || seen.has(o.join())) continue; seen.add(o.join()); opts.push(o); if (opts.length === 4) break; }
+    shuffle(opts);
+    setPanel(globeHeader() + `<div class="qcard"><p class="q">What are the latitude and longitude of <b>${esc(placeName(p))}</b>?</p><p class="hint" style="margin:0">To the nearest 10°. Latitude (north or south of the Equator) comes first.</p></div>
+      <div class="answers" id="answers">${opts.map((o, i) => `<button class="btn sec" data-o="${i}">${fmtLL(o[0], o[1])}</button>`).join('')}</div><div id="fbox"></div>
+      <div class="row"><button class="btn sec" id="skip">Skip</button></div>`);
+    wireGlobeHeader(); $('#skip').onclick = globeNext;
+    const right = opts.findIndex(o => o[0] === la && o[1] === lo);
+    panel.querySelectorAll('#answers [data-o]').forEach(btn => btn.onclick = () => {
+      if (GL.done) return;
+      panel.querySelectorAll('#answers [data-o]').forEach(x => x.classList.add(+x.dataset.o === right ? 'right' : 'wrong'));
+      llGuides(la, lo);
+      globeFinish(+btn.dataset.o === right, `${esc(p.n)} is at about <b>${fmtLL(la, lo)}</b>: ${la ? Math.abs(la) + '° ' + (la > 0 ? 'north' : 'south') + ' of the Equator' : 'on the Equator'} and ${lo ? Math.abs(lo) + '° ' + (lo > 0 ? 'east' : 'west') + ' of the Prime Meridian' : 'on the Prime Meridian'}.`);
+    });
+  } else {
+    setPanel(globeHeader() + `<div class="qcard"><p class="q">Put a pin at</p><div class="big" style="font-size:calc(46px*var(--fs))">${fmtLL(la, lo)}</div><p class="hint" style="margin:0">Find the latitude line first, then the longitude line. Tap where they cross.</p></div>
+      <div id="fbox"></div><div class="row"><button class="btn go" id="check" disabled>Check</button></div>
+      <div class="row"><button class="btn sec" id="skip">Skip</button><button class="btn sec" id="showme">Show me</button></div>`);
+    wireGlobeHeader(); $('#skip').onclick = globeNext; $('#check').onclick = plotCheck; $('#showme').onclick = () => plotReveal();
+  }
+}
+function globeTap(p) {
+  if (!GL || GL.done || S.globeTask !== 'plot') return;
+  if (!robInv(p.x, p.y)) return;
+  GL.pin = p; placePin(p); $('#check').disabled = false;
+}
+function plotCheck() {
+  const ll = robInv(GL.pin.x, GL.pin.y), [la, lo] = GL.ans;
+  const dLa = ll.lat - la, dLo = ((ll.lon - lo + 540) % 360) - 180;
+  GL.tries++;
+  if (Math.abs(dLa) <= 5 && Math.abs(dLo) <= 5) {
+    GL.tries--; $('#check').style.display = 'none'; $('#showme').style.display = 'none';
+    llGuides(la, lo); globeMark(GL.p, GL.p.n);
+    return globeFinish(true, `${fmtLL(la, lo)} is near <b>${esc(placeName(GL.p))}</b>.`);
+  }
+  const ns = Math.abs(dLa) > 5 ? (dLa > 0 ? 'south' : 'north') : '', ew = Math.abs(dLo) > 5 ? (dLo > 0 ? 'west' : 'east') : '';
+  $('#fbox').innerHTML = `<div class="fb bad"><span class="em">${pick(NEARLY)}</span>Your pin is at about ${fmtLL(r10(ll.lat), r10(ll.lon))}. Move it further ${[ns, ew].filter(Boolean).join(' and ')}.</div>`;
+  $('#check').disabled = true;
+  if (GL.tries >= 3) plotReveal();
+}
+function plotReveal() {
+  const [la, lo] = GL.ans; GL.done = true;
+  llGuides(la, lo); globeMark(GL.p, GL.p.n);
+  $('#check').style.display = 'none'; $('#showme').style.display = 'none';
+  GL.tries = 1; globeFinish(false, `Here it is! The orange lines cross at ${fmtLL(la, lo)}, near ${esc(placeName(GL.p))}.`);
+}
+const fmtHour = h => { h = ((h % 24) + 24) % 24; return h === 0 ? '12 midnight' : h === 12 ? '12 noon' : h < 12 ? h + ' am' : (h - 12) + ' pm'; };
+function timeAsk(p) {
+  const base = pick([8, 9, 10, 12, 14, 15]), z = p.z, t = base + z;
+  const day = t >= 24 ? ' (the next day)' : t < 0 ? ' (the day before)' : '';
+  const cand = [base - z, t + 1, t - 1, base, t + 2, t - 3].filter(v => ((v % 24) + 24) % 24 !== ((t % 24) + 24) % 24);
+  const opts = [t]; for (const c of shuffle(cand)) { if (!opts.some(o => ((o % 24) + 24) % 24 === ((c % 24) + 24) % 24)) opts.push(c); if (opts.length === 4) break; }
+  shuffle(opts);
+  const right = opts.indexOf(t);
+  home();
+  const lon = rob(-0.13, 51.5); const lg = cs(ov, lon.x, lon.y, 'hlx'); E('circle', { r: 9, fill: '#1565c0', stroke: '#fff', 'stroke-width': 3 }, lg); E('text', { x: -14, y: 6, 'text-anchor': 'end', 'font-size': 18, class: 'lbl' }, lg).textContent = 'London';
+  globeMark(p, p.n);
+  setPanel(globeHeader() + `<div class="qcard"><p class="q">When it is <b>${fmtHour(base)}</b> in London, what time is it in <b>${esc(placeName(p))}</b>?</p><p class="hint" style="margin:0">Look at the time zone numbers near the bottom of the map. East of London is ahead (+), west is behind (−).</p></div>
+    <div class="answers" id="answers">${opts.map((o, i) => `<button class="btn sec" data-o="${i}">${fmtHour(o)}</button>`).join('')}</div><div id="fbox"></div>
+    <div class="row"><button class="btn sec" id="skip">Skip</button></div>`);
+  wireGlobeHeader(); $('#skip').onclick = globeNext;
+  panel.querySelectorAll('#answers [data-o]').forEach(btn => btn.onclick = () => {
+    if (GL.done) return;
+    panel.querySelectorAll('#answers [data-o]').forEach(x => x.classList.add(+x.dataset.o === right ? 'right' : 'wrong'));
+    cur().tzPaths.filter(e => +e.dataset.z === z).forEach(e => { const c = e.cloneNode(); c.setAttribute('fill', 'rgba(255,193,7,.45)'); c.setAttribute('class', 'hlx'); ov.appendChild(c); });
+    const how = z === 0 ? `${esc(p.n)} is in the same time zone as London, so it is <b>${fmtHour(t)}</b> there too.`
+      : `${esc(p.n)} is in time zone GMT${z > 0 ? '+' + z : '−' + -z}, so it is ${Math.abs(z)} hour${Math.abs(z) > 1 ? 's' : ''} ${z > 0 ? 'ahead of' : 'behind'} London. ${fmtHour(base)} ${z > 0 ? '+' : '−'} ${Math.abs(z)} hours = <b>${fmtHour(t)}${day}</b>.`;
+    globeFinish(+btn.dataset.o === right, how + '<br><small>We are using standard time. In summer, some countries move their clocks forward.</small>');
+  });
+}
+
+/* --- true size: a Mercator map with a shape you can drag towards or away from the Equator */
+const MW = 8000;
+const mercY = lat => { const f = clamp(lat, -85, 85) * Math.PI / 180; return MW / 2 - MW / (2 * Math.PI) * Math.log(Math.tan(Math.PI / 4 + f / 2)); };
+const mercX = lon => (lon + 180) / 360 * MW;
+const mercInv = (x, y) => ({ lon: x / MW * 360 - 180, lat: (2 * Math.atan(Math.exp((MW / 2 - y) * 2 * Math.PI / MW)) - Math.PI / 2) * 180 / Math.PI });
+function robInvClamped(x, y) {
+  const Y = Math.min(1, Math.abs(WH / 2 - y) / (1.3523 * WR));
+  let lat = 90;
+  for (let i = 0; i < 18; i++) if (Y <= ROB[i + 1][2]) { lat = ROB[i][0] + 5 * (Y - ROB[i][2]) / (ROB[i + 1][2] - ROB[i][2]); break; }
+  const i = Math.min(Math.floor(lat / 5), 17), X = ROB[i][1] + (ROB[i + 1][1] - ROB[i][1]) * (lat - ROB[i][0]) / 5;
+  return { lat: y > WH / 2 ? -lat : lat, lon: clamp((x - WW / 2) / (.8487 * WR * X) * 180 / Math.PI, -180, 180) };
+}
+function buildMerc() {
+  const g = E('g'), top = mercY(84), bot = mercY(-80);
+  E('rect', { x: 0, y: top, width: MW, height: bot - top, fill: '#cfe7f5' }, g);
+  const land = E('g', {}, g), parts = [];
+  for (const [code, cont, d] of D.world.parts) {
+    const rings = parsePath(d).map(r => r.map(([x, y]) => robInvClamped(x, y)));
+    const dd = rings.map(r => 'M' + r.map(p => mercX(p.lon).toFixed(1) + ' ' + mercY(p.lat).toFixed(1)).join('L') + 'z').join('');
+    E('path', { d: dd, class: 'land', fill: CONT_COL[cont] || '#ddd' }, land);
+    parts.push({ code, cont, rings });
+  }
+  const grat = E('g', { stroke: '#4f86b8', 'stroke-width': .8, opacity: .6, fill: 'none' }, g);
+  for (let lat = -80; lat <= 80; lat += 20) E('path', { d: `M0 ${mercY(lat)}H${MW}`, 'vector-effect': 'non-scaling-stroke', 'stroke-width': lat === 0 ? 2.4 : .8, stroke: lat === 0 ? '#d32f2f' : null }, grat);
+  const lab = E('g', {}, g);
+  for (let lat = -60; lat <= 80; lat += 20) E('text', { y: -4, x: 6, 'font-size': 13, 'font-weight': 900, fill: '#1f5f99' }, cs(lab, 20, mercY(lat), 'lbl')).textContent = lat === 0 ? 'Equator' : deg(lat, 'N', 'S');
+  const dyn = E('g', { id: 'dyn' }, g);
+  return { g, mparts: parts, dyn, b: { x: 0, y: top, w: MW, h: bot - top }, minK: .3 };
+}
+const SIZE_SHAPES = {
+  GRL: ['Greenland', 2.17], AFRICA: ['Africa', 30.4], GBR: ['United Kingdom', 0.24], RUS: ['Russia', 17.1], BRA: ['Brazil', 8.5],
+  AUS: ['Australia', 7.7], USA: ['United States', 9.8], IND: ['India', 3.3], CHN: ['China', 9.6], ATA: ['Antarctica', 14.2],
+};
+let ghost = null;
+function sizeStart() {
+  if (S.map !== 'merc') showMap('merc');
+  ov.replaceChildren();
+  ghost = null; GL = null;
+  setPanel(globeHeader() + `<div class="qcard"><p class="q">Pick a shape, then <b>drag it</b> around the map.</p>
+    <p class="hint" style="margin:0">This is a Mercator map, like many wall maps and online maps. It stretches places near the North and South Poles, so they look much bigger than they really are. As you drag a shape towards the Equator, it shrinks to its true size compared with the land there.</p></div>
+    <div class="chips">${Object.entries(SIZE_SHAPES).map(([k, [n]]) => `<button class="chip" data-sh="${k}">${n}</button>`).join('')}</div>
+    <div id="fbox"></div>`);
+  wireGlobeHeader();
+  panel.querySelectorAll('[data-sh]').forEach(b => b.onclick = () => { panel.querySelectorAll('[data-sh]').forEach(x => x.classList.toggle('on', x === b)); makeGhost(b.dataset.sh); });
+  makeGhost('GRL');
+  panel.querySelector('[data-sh="GRL"]').classList.add('on');
+}
+const toVec = p => { const a = p.lat * Math.PI / 180, b = p.lon * Math.PI / 180; return [Math.cos(a) * Math.cos(b), Math.cos(a) * Math.sin(b), Math.sin(a)]; };
+const toLL = v => ({ lat: Math.asin(clamp(v[2], -1, 1)) * 180 / Math.PI, lon: Math.atan2(v[1], v[0]) * 180 / Math.PI });
+function makeGhost(key) {
+  const m = cur();
+  const parts = m.mparts.filter(p => key === 'AFRICA' ? p.cont === 'Africa' : p.code === key);
+  const rings = parts.flatMap(p => p.rings).filter(r => r.length > 3);
+  const sum = [0, 0, 0]; let n = 0;
+  for (const r of rings) for (const p of r) { const v = toVec(p); sum[0] += v[0]; sum[1] += v[1]; sum[2] += v[2]; n++; }
+  const c0 = toLL(sum.map(x => x / n));
+  ghost = { key, rings, c0, at: { lat: c0.lat, lon: c0.lon } };
+  drawGhost();
+  const [name, area] = SIZE_SHAPES[key];
+  $('#fbox').innerHTML = `<div class="fact"><b>${esc(name)}</b>Real area: about ${area} million km².${key === 'GRL' ? ' Africa is about 14 times bigger than Greenland, even though they look a similar size on this map!' : key === 'ATA' ? ' Antarctica looks enormous on this map because it is at the South Pole.' : key === 'GBR' ? ' Try dragging the UK north, towards the Arctic, and watch it grow.' : ''}</div>
+    <button class="btn sec" id="ghostHome">Put it back</button>`;
+  $('#ghostHome').onclick = () => { ghost.at = { lat: ghost.c0.lat, lon: ghost.c0.lon }; drawGhost(); };
+  const x = mercX(c0.lon), y = mercY(c0.lat);
+  home();
+}
+function drawGhost() {
+  ov.querySelectorAll('.ghost').forEach(e => e.remove());
+  if (!ghost) return;
+  const a = toVec(ghost.c0), b = toVec(ghost.at);
+  let ax = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const sn = Math.hypot(...ax), cs_ = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const rot = v => {
+    if (sn < 1e-9) return v;
+    const k = ax.map(x => x / sn), th = Math.atan2(sn, cs_), c = Math.cos(th), s = Math.sin(th);
+    const kv = k[0] * v[0] + k[1] * v[1] + k[2] * v[2];
+    const cr = [k[1] * v[2] - k[2] * v[1], k[2] * v[0] - k[0] * v[2], k[0] * v[1] - k[1] * v[0]];
+    return [0, 1, 2].map(i => v[i] * c + cr[i] * s + k[i] * kv * (1 - c));
+  };
+  let d = '';
+  for (const r of ghost.rings) {
+    let prev = null;
+    const pts = r.map(p => { const q = toLL(rot(toVec(p))); if (prev !== null) { while (q.lon - prev > 180) q.lon -= 360; while (q.lon - prev < -180) q.lon += 360; } else { while (q.lon - ghost.at.lon > 180) q.lon -= 360; while (q.lon - ghost.at.lon < -180) q.lon += 360; } prev = q.lon; return q; });
+    d += 'M' + pts.map(p => mercX(p.lon).toFixed(1) + ' ' + mercY(p.lat).toFixed(1)).join('L') + 'z';
+  }
+  E('path', { d, class: 'ghost', fill: 'rgba(229,57,53,.5)', stroke: '#b71c1c', 'stroke-width': 2.5, 'vector-effect': 'non-scaling-stroke', style: 'cursor:grab' }, ov);
+}
+
+/* ------------------------------------------------------------ printable worksheets */
+function printSheet() {
+  const m = cur(); if (!m || S.map === 'merc') return toast('Choose the world, UK or an OS map first');
+  const vb = svg.getAttribute('viewBox').split(' ').map(Number);
+  const clone = svg.cloneNode(true);
+  clone.removeAttribute('id'); clone.setAttribute('class', 'print-map');
+  clone.querySelector('#overlay').replaceChildren();
+  const ovc = clone.querySelector('#overlay');
+  const inView = (x, y) => x > vb[0] + vb[2] * .04 && x < vb[0] + vb[2] * .96 && y > vb[1] + vb[3] * .04 && y < vb[1] + vb[3] * .96;
+  const letters = 'ABCDEFGH';
+  let qs = [], ans = [], title;
+  const markAt = (x, y, t) => { const g = cs(ovc, x, y); E('circle', { r: 13, fill: '#fff', stroke: '#111', 'stroke-width': 2.5 }, g); E('text', { 'text-anchor': 'middle', y: 6, 'font-size': 16, 'font-weight': 900 }, g).textContent = t; };
+  if (m.L) {
+    const L = m.L, lvl = gridLevel();
+    title = `OS map skills: ${L.name}`;
+    const shown = i => { const g = m.poiG.querySelector(`[data-i="${i}"]`); return g && g.style.display !== 'none' && g.style.visibility !== 'hidden' && S.layers.local.symbols; };
+    const vis = osPois().filter(p => inView(p.x, p.y) && shown(p.i));
+    const sq = p => refOf(L, p.x, p.y, 6).join('');
+    const chosen = shuffle(vis.slice()).filter((p, i, a) => a.findIndex(q => q.t === p.t && Math.hypot(q.x - p.x, q.y - p.y) < 300) === i).slice(0, 6);
+    chosen.forEach((p, i) => { markAt(p.x + 26 * V.k, p.y - 22 * V.k, letters[i]); const r = refOf(L, p.x, p.y, lvl); qs.push(`What is at <b>${letters[i]}</b>? ______________________ &nbsp; Its ${lvl}-figure grid reference: ____________`); ans.push(`${letters[i]}: ${POI[p.t]} — ${r.join(' ')}`); });
+    const more = shuffle(vis.filter(p => !chosen.includes(p) && vis.filter(q => sq(q) === sq(p)).length === 1)).slice(0, 4);
+    more.forEach(p => { const r = refOf(L, p.x, p.y, lvl); qs.push(`Which symbol is at grid reference <b>${r.join(' ')}</b>? ______________________`); ans.push(`${r.join(' ')}: ${POI[p.t]}`); });
+    // grid numbers along the edges of the printed map
+    const gl = E('g', {}, ovc);
+    for (let e = Math.ceil((L.e0 + vb[0]) / 1000) * 1000; e < L.e0 + vb[0] + vb[2]; e += 1000) E('text', { 'text-anchor': 'middle', y: -4, 'font-size': 16, 'font-weight': 900, fill: '#1a5fb4' }, cs(gl, e - L.e0, vb[1] + vb[3], 'lbl')).textContent = String(Math.floor(e / 1000) % 100).padStart(2, '0');
+    for (let n = Math.ceil((L.n1 - vb[1] - vb[3]) / 1000) * 1000; n < L.n1 - vb[1]; n += 1000) E('text', { x: 4, y: 6, 'font-size': 16, 'font-weight': 900, fill: '#1a5fb4' }, cs(gl, vb[0], L.n1 - n, 'lbl')).textContent = String(Math.floor(n / 1000) % 100).padStart(2, '0');
+  } else {
+    title = S.map === 'world' ? 'Name the places: world map' : 'Name the places: United Kingdom';
+    clone.querySelectorAll('#dyn, #w-allnames, #uk-names, .wl-lab').forEach(e => e.remove());
+    const kinds = ['point', 'country', 'ukcountry', 'continent'];
+    if (S.map === 'uk' && S.layers.uk.counties) kinds.push('county');
+    if (S.map === 'uk' && S.layers.uk.regions) kinds.push('region');
+    const its = visibleItems().filter(it => kinds.includes(it.k)).map(it => [it, targetPoint(it)]).filter(([, t]) => t && inView(t.x, t.y));
+    const chosen = [];
+    for (const [it, t] of shuffle(its)) { if (chosen.every(([, u]) => Math.hypot(u.x - t.x, u.y - t.y) > 40 * V.k)) chosen.push([it, t]); if (chosen.length === 10) break; }
+    chosen.forEach(([it, t], i) => { markAt(t.x, t.y, String(i + 1)); qs.push(`<b>${i + 1}.</b> ______________________________`); ans.push(`${i + 1}. ${it.n}`); });
+    const bank = shuffle(chosen.map(([it]) => it.n));
+    qs.push(`<div class="bank"><b>Word bank:</b> ${bank.map(esc).join(' · ')}</div>`);
+  }
+  const w = 180, h = Math.min(170, w * vb[3] / vb[2]);
+  clone.setAttribute('width', w + 'mm'); clone.setAttribute('height', h + 'mm');
+  clone.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  const div = document.createElement('div'); div.id = 'print';
+  div.innerHTML = `<div class="ph"><img src="../logo.png" alt=""><div><h1>${esc(title)}</h1><p>Name: ________________________ &nbsp; Date: ______________</p></div></div>`;
+  div.appendChild(clone);
+  div.insertAdjacentHTML('beforeend', `<ol class="pq">${qs.map(q => q.startsWith('<div') ? q : `<li>${q}</li>`).join('')}</ol>
+    <div class="pa"><h2>Answers</h2><ul>${ans.map(a => `<li>${esc(a)}</li>`).join('')}</ul><p class="pf">Map Explorer · Wallscourt Farm Academy · Version ${VERSION}</p></div>`);
+  document.body.appendChild(div);
+  const done = () => { div.remove(); window.removeEventListener('afterprint', done); };
+  window.addEventListener('afterprint', done);
+  setTimeout(() => window.print(), 150);
+}
+
 /* ------------------------------------------------------------ mode switching */
 function startMode() {
   document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === S.mode));
   Q = C = G = null;
   { const m = cur(); if (m && m.L) m.force = null; }
   refreshDyn();
-  ({ explore: exploreStart, find: findStart, compass: compassStart, grid: gridStart })[S.mode]();
+  if (S.map === 'merc' && !(S.mode === 'globe' && S.globeTask === 'size')) showMap('world');
+  restyle();
+  ({ explore: exploreStart, find: findStart, compass: compassStart, grid: gridStart, globe: globeStart })[S.mode]();
 }
 document.querySelectorAll('#modeSeg button').forEach(b => b.onclick = () => { S.mode = b.dataset.mode; save(); startMode(); });
 
@@ -1456,15 +1961,39 @@ $('#mapBtn').onclick = e => openPop(e.currentTarget, `<h3>Choose a map</h3>
 p => p.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { closePop(); showMap(b.dataset.m); startMode(); }));
 $('#layerBtn').onclick = e => {
   const key = mapKind(), L = S.layers[key];
-  const opts = key === 'world' ? [['names', 'Names'], ['colour', 'Colour the continents'], ['lines', 'Equator, tropics and polar circles'], ['grid', 'Lines of latitude and longitude']]
+  const opts = key === 'world' ? [['names', 'Names'], ['colour', 'Colour the continents'], ['lines', 'Equator, tropics and polar circles'], ['grid', 'Lines of latitude and longitude'], ['tz', 'Time zones']]
     : key === 'uk' ? [['names', 'Names'], ['rivers', 'Rivers and canals'], ['regions', 'Regions of England'], ['counties', 'Counties of England']]
-      : [['names', 'Place names and labels'], ['symbols', 'Map symbols']];
+      : [['names', 'Place names and labels'], ['symbols', 'Map symbols'], ['contours', 'Contour lines (height)']];
   openPop(e.currentTarget, `<h3>Show on the map</h3>${opts.map(([k, t]) => `<label class="tog"><input type="checkbox" data-l="${k}" ${L[k] ? 'checked' : ''}>${t}</label>`).join('')}${key === 'local' ? '<button class="opt" id="popKey">🔑 Map key</button>' : ''}`,
     p => {
       p.querySelectorAll('[data-l]').forEach(c => c.onchange = () => { L[c.dataset.l] = c.checked; save(); restyle(); refreshDyn(); });
       const k = p.querySelector('#popKey'); if (k) k.onclick = () => { closePop(); showKey(); };
     });
   const r = e.currentTarget.getBoundingClientRect(), pp = $('#pop'); pp.style.left = (r.right - pp.offsetWidth) + 'px';
+};
+$('#symBtn').onclick = e => {
+  const key = mapKind();
+  if (key === 'local') {
+    const m = cur(), L = S.layers.local, hide = new Set(L.hide || []);
+    const types = [...new Set(m.pois.map(p => p.t))].sort((a, b) => POI_RANK.indexOf(a) - POI_RANK.indexOf(b));
+    openPop(e.currentTarget, `<h3>Map symbols</h3>
+      <label class="tog"><input type="checkbox" id="symAll" ${L.symbols ? 'checked' : ''}><b>Show symbols</b></label>
+      <div class="chips" style="margin:2px 0 6px"><button class="chip" id="symEvery">Show all kinds</button><button class="chip" id="symFew">Fewer (hide pubs, parking, post offices)</button></div>
+      ${types.map(t => `<label class="tog"><input type="checkbox" data-st="${t}" ${hide.has(t) ? '' : 'checked'}><svg width="44" height="30" viewBox="-30 -15 60 30"><use href="#sym-${t}"/></svg>${POI[t]}</label>`).join('')}`, p => {
+      const apply = () => { save(); restyle(); };
+      p.querySelector('#symAll').onchange = ev => { L.symbols = ev.target.checked; apply(); };
+      p.querySelectorAll('[data-st]').forEach(c => c.onchange = () => { const h = new Set(L.hide || []); c.checked ? h.delete(c.dataset.st) : h.add(c.dataset.st); L.hide = [...h]; apply(); });
+      p.querySelector('#symEvery').onclick = () => { L.hide = []; L.symbols = true; p.querySelectorAll('[data-st]').forEach(c => c.checked = true); p.querySelector('#symAll').checked = true; apply(); };
+      p.querySelector('#symFew').onclick = () => { L.hide = ['pub', 'parking', 'po']; L.symbols = true; p.querySelectorAll('[data-st]').forEach(c => c.checked = !L.hide.includes(c.dataset.st)); p.querySelector('#symAll').checked = true; apply(); };
+    });
+  } else {
+    const L = S.layers[key];
+    openPop(e.currentTarget, `<h3>Show on the map</h3>
+      <label class="tog"><input type="checkbox" data-l="markers" ${L.markers !== false ? 'checked' : ''}>Place markers (cities and landmarks)</label>
+      <label class="tog"><input type="checkbox" data-l="names" ${L.names ? 'checked' : ''}>Names</label>`,
+    p => p.querySelectorAll('[data-l]').forEach(c => c.onchange = () => { L[c.dataset.l] = c.checked; save(); restyle(); refreshDyn(); }));
+  }
+  const r = e.currentTarget.getBoundingClientRect(), pp = $('#pop'); pp.style.left = Math.max(10, r.right - pp.offsetWidth) + 'px';
 };
 $('#setBtn').onclick = () => openModal(`<h2>Settings</h2>
   <div class="setrow"><span>Questions in a set</span><div class="chips">${[5, 10, 15, 20, 0].map(n => `<button class="chip ${S.count === n ? 'on' : ''}" data-c="${n}">${n || '∞'}</button>`).join('')}</div></div>
@@ -1565,6 +2094,7 @@ updateTop(); drawTeams();
 new ResizeObserver(() => resize()).observe($('#mapWrap'));
 resize();
 if (!['world', 'uk'].includes(S.map) && !D.local.some(l => 'local:' + l.id === S.map)) S.map = 'world';
+if (!['explore', 'find', 'grid', 'compass', 'globe'].includes(S.mode)) S.mode = 'explore';
 showMap(S.map);
 startMode();
 if (S.year === null) yearModal(true);
