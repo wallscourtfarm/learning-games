@@ -1,0 +1,1570 @@
+/* Map Explorer — Wallscourt Farm Academy
+ * World, UK and OS-style local maps for Years 1-6 geography.
+ * Content and year groups follow the CLF Geographers curriculum (July 2026).
+ * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
+ */
+'use strict';
+const VERSION = '10.10.26a';
+const D = window.MAP_DATA;
+const NS = 'http://www.w3.org/2000/svg';
+const $ = s => document.querySelector(s);
+
+/* ------------------------------------------------------------ settings */
+const STORE = 'wfa_map_explorer_v1';
+const DEFAULTS = {
+  year: null, map: 'world', mode: 'explore', revision: true, autoZoom: true, count: 10, big: false,
+  teams: 0, scores: [0, 0, 0, 0, 0, 0], gridLevel: 0, gridTask: 'give', panelOpen: true,
+  layers: {
+    world: { names: true, colour: true, lines: true, grid: false },
+    uk: { names: true, regions: false, counties: false, rivers: true },
+    local: { names: true, symbols: true },
+  },
+};
+let S = (() => {
+  try {
+    const s = JSON.parse(localStorage.getItem(STORE) || 'null');
+    if (s) return Object.assign({}, DEFAULTS, s, { layers: Object.assign({}, DEFAULTS.layers, s.layers || {}) });
+  } catch (e) { /* storage blocked */ }
+  return JSON.parse(JSON.stringify(DEFAULTS));
+})();
+function save() { try { localStorage.setItem(STORE, JSON.stringify(S)); } catch (e) { /* ignore */ } }
+const yr = () => S.year || 0;                      // 0 = all years
+const fourPoint = () => yr() === 1 || yr() === 2;
+const gridLevel = () => S.gridLevel || (yr() === 3 ? 4 : 6);
+
+/* ------------------------------------------------------------ helpers */
+function E(tag, attrs, parent) {
+  const n = document.createElementNS(NS, tag);
+  if (attrs) for (const k in attrs) if (attrs[k] != null) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function H(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; }
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function cs(parent, x, y, cls) {           // a group that stays the same size on screen
+  const g = E('g', { class: 'cs ' + (cls || '') }, parent);
+  g.style.transform = `translate(${x}px,${y}px) scale(var(--k))`;
+  return g;
+}
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; }
+const pick = a => a[Math.random() * a.length | 0];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function toast(msg, ms = 2200) {
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, ms);
+}
+function parsePath(d) {                     // our compact "M x y l dx dy ..." paths -> polylines
+  const out = []; let cur = null, cmd = '', x = 0, y = 0, nums = [];
+  const toks = d.match(/[Mlz]|-?\d+(?:\.\d+)?/g) || [];
+  for (const t of toks) {
+    if (t === 'M' || t === 'l' || t === 'z') {
+      if (t === 'z' && cur && cur.length) cur.push(cur[0]);
+      cmd = t; nums = []; continue;
+    }
+    nums.push(+t);
+    if (nums.length === 2) {
+      if (cmd === 'M') { x = nums[0]; y = nums[1]; cur = [[x, y]]; out.push(cur); cmd = 'l'; }
+      else { x += nums[0]; y += nums[1]; cur.push([x, y]); }
+      nums = [];
+    }
+  }
+  return out;
+}
+function nearestOnLines(lines, p) {
+  let best = null, bd = Infinity;
+  for (const L of lines) for (let i = 0; i < L.length - 1; i++) {
+    const [ax, ay] = L[i], [bx, by] = L[i + 1];
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    const t = l2 ? clamp(((p.x - ax) * dx + (p.y - ay) * dy) / l2, 0, 1) : 0;
+    const qx = ax + t * dx, qy = ay + t * dy, d = Math.hypot(p.x - qx, p.y - qy);
+    if (d < bd) { bd = d; best = { x: qx, y: qy, d }; }
+  }
+  if (!best && lines[0] && lines[0][0]) best = { x: lines[0][0][0], y: lines[0][0][1], d: Math.hypot(p.x - lines[0][0][0], p.y - lines[0][0][1]) };
+  return best;
+}
+const DIR8 = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+const DIR8S = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+function bearing(a, b) { return (Math.atan2(b.x - a.x, -(b.y - a.y)) * 180 / Math.PI + 360) % 360; }
+function dirName(a, b, four) {
+  const br = bearing(a, b);
+  if (four) return DIR8[(Math.round(br / 90) % 4) * 2];
+  return DIR8[Math.round(br / 45) % 8];
+}
+
+/* ------------------------------------------------------------ Robinson projection (matches build) */
+const ROB = [[0, 1, 0], [5, .9986, .062], [10, .9954, .124], [15, .99, .186], [20, .9822, .248], [25, .973, .31], [30, .96, .372], [35, .9427, .434], [40, .9216, .4958], [45, .8962, .5571], [50, .8679, .6176], [55, .835, .6769], [60, .7986, .7346], [65, .7597, .7903], [70, .7186, .8435], [75, .6732, .8936], [80, .6213, .9394], [85, .5722, .9761], [90, .5322, 1]];
+const WR = D.world.R, WW = D.world.w, WH = D.world.h;
+function rob(lon, lat) {
+  const a = Math.min(Math.abs(lat), 90), i = Math.min(Math.floor(a / 5), 17), t = (a - ROB[i][0]) / 5;
+  const X = ROB[i][1] + (ROB[i + 1][1] - ROB[i][1]) * t, Y = ROB[i][2] + (ROB[i + 1][2] - ROB[i][2]) * t;
+  return { x: WW / 2 + .8487 * WR * X * lon * Math.PI / 180, y: WH / 2 - 1.3523 * WR * Y * Math.sign(lat || 0) };
+}
+function robInv(x, y) {
+  const Y = Math.abs(WH / 2 - y) / (1.3523 * WR);
+  if (Y > 1) return null;
+  let lat = 90;
+  for (let i = 0; i < 18; i++) if (Y <= ROB[i + 1][2]) { const t = (Y - ROB[i][2]) / (ROB[i + 1][2] - ROB[i][2]); lat = ROB[i][0] + 5 * t; break; }
+  const a = lat, i = Math.min(Math.floor(a / 5), 17), t = (a - ROB[i][0]) / 5;
+  const X = ROB[i][1] + (ROB[i + 1][1] - ROB[i][1]) * t;
+  const lon = (x - WW / 2) / (.8487 * WR * X) * 180 / Math.PI;
+  if (Math.abs(lon) > 180) return null;
+  return { lat: y > WH / 2 ? -lat : lat, lon };
+}
+function km(a, b) {                           // great-circle distance between {lat,lon}
+  const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.asin(Math.sqrt(h));
+}
+
+/* ------------------------------------------------------------ view (pan / zoom) */
+const svg = $('#map'), layersG = $('#layers'), ov = $('#overlay');
+const V = { cx: 0, cy: 0, k: 1, W: 1, H: 1, b: { x: 0, y: 0, w: 1, h: 1 }, minK: .05 };
+const views = {};
+function fitK(w, h) { return Math.max(w / V.W, h / V.H); }
+function maxK() { return fitK(V.b.w, V.b.h) * 1.15; }
+function clampView() {
+  V.k = clamp(V.k, V.minK, maxK());
+  V.cx = clamp(V.cx, V.b.x, V.b.x + V.b.w);
+  V.cy = clamp(V.cy, V.b.y, V.b.y + V.b.h);
+}
+function applyView() {
+  clampView();
+  const w = V.W * V.k, h = V.H * V.k;
+  svg.setAttribute('viewBox', `${V.cx - w / 2} ${V.cy - h / 2} ${w} ${h}`);
+  svg.style.setProperty('--k', V.k);
+  views[S.map] = { cx: V.cx, cy: V.cy, k: V.k };
+  onViewChange();
+}
+function resize() {
+  const r = svg.getBoundingClientRect(); V.W = Math.max(r.width, 1); V.H = Math.max(r.height, 1);
+  const c = $('#ink'); c.width = r.width * devicePixelRatio; c.height = r.height * devicePixelRatio; redrawInk();
+  applyView();
+}
+function toMap(cx, cy) {
+  const r = svg.getBoundingClientRect();
+  return { x: V.cx + (cx - r.left - V.W / 2) * V.k, y: V.cy + (cy - r.top - V.H / 2) * V.k };
+}
+function zoomAt(cx, cy, f) {
+  const r = svg.getBoundingClientRect(), p = toMap(cx, cy);
+  V.k = clamp(V.k * f, V.minK, maxK());
+  V.cx = p.x - (cx - r.left - V.W / 2) * V.k; V.cy = p.y - (cy - r.top - V.H / 2) * V.k;
+  applyView();
+}
+let anim = 0;
+function goTo(cx, cy, k, ms = 600) {
+  cancelAnimationFrame(anim);
+  const a = { cx: V.cx, cy: V.cy, k: V.k }, t0 = performance.now();
+  k = clamp(k, V.minK, maxK());
+  if (ms <= 0) { V.cx = cx; V.cy = cy; V.k = k; applyView(); return; }
+  const step = now => {
+    const t = Math.min(1, (now - t0) / ms), e = t < .5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+    V.cx = a.cx + (cx - a.cx) * e; V.cy = a.cy + (cy - a.cy) * e;
+    V.k = Math.exp(Math.log(a.k) + (Math.log(k) - Math.log(a.k)) * e);
+    applyView();
+    if (t < 1) anim = requestAnimationFrame(step);
+  };
+  anim = requestAnimationFrame(step);
+}
+function fitBox(x, y, w, h, pad = 1.2, ms) { goTo(x + w / 2, y + h / 2, fitK(Math.max(w, 1), Math.max(h, 1)) * pad, ms); }
+function home(ms) { fitBox(V.b.x, V.b.y, V.b.w, V.b.h, 1.02, ms); }
+
+// pointer handling: drag to pan, pinch / wheel to zoom, tap to interact
+const ptrs = new Map(); let drag = null, pinch = null;
+svg.addEventListener('pointerdown', e => {
+  svg.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  cancelAnimationFrame(anim);
+  if (ptrs.size === 1) drag = { x0: e.clientX, y0: e.clientY, cx: V.cx, cy: V.cy, moved: false };
+  else if (ptrs.size === 2) {
+    const [a, b] = [...ptrs.values()];
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), k: V.k, p: toMap(mid.x, mid.y) };
+    if (drag) drag.moved = true;
+  }
+});
+svg.addEventListener('pointermove', e => {
+  if (!ptrs.has(e.pointerId)) return;
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size >= 2 && pinch) {
+    const [a, b] = [...ptrs.values()], r = svg.getBoundingClientRect();
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    V.k = clamp(pinch.k * pinch.d / Math.max(10, Math.hypot(a.x - b.x, a.y - b.y)), V.minK, maxK());
+    V.cx = pinch.p.x - (mid.x - r.left - V.W / 2) * V.k; V.cy = pinch.p.y - (mid.y - r.top - V.H / 2) * V.k;
+    applyView();
+  } else if (drag) {
+    const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+    if (!drag.moved && Math.hypot(dx, dy) > 12) drag.moved = true;
+    if (drag.moved) { V.cx = drag.cx - dx * V.k; V.cy = drag.cy - dy * V.k; applyView(); }
+  }
+});
+function endPtr(e) {
+  if (!ptrs.has(e.pointerId)) return;
+  ptrs.delete(e.pointerId);
+  if (ptrs.size < 2) pinch = null;
+  if (ptrs.size === 0) {
+    if (drag && !drag.moved && e.type === 'pointerup') onTap(e.clientX, e.clientY);
+    drag = null;
+  } else if (ptrs.size === 1 && drag) {
+    const [p] = [...ptrs.values()]; drag = { x0: p.x, y0: p.y, cx: V.cx, cy: V.cy, moved: true };
+  }
+}
+svg.addEventListener('pointerup', endPtr);
+svg.addEventListener('pointercancel', endPtr);
+svg.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.clientX, e.clientY, Math.exp(e.deltaY * .0016)); }, { passive: false });
+$('#zIn').onclick = () => { const r = svg.getBoundingClientRect(); zoomAt(r.left + V.W / 2, r.top + V.H / 2, 1 / 1.6); };
+$('#zOut').onclick = () => { const r = svg.getBoundingClientRect(); zoomAt(r.left + V.W / 2, r.top + V.H / 2, 1.6); };
+$('#zHome').onclick = () => home();
+
+/* ------------------------------------------------------------ shared symbols */
+const POI = {
+  worship: 'Place of worship', school: 'School', univ: 'University', pub: 'Pub (public house)', po: 'Post office',
+  parking: 'Parking', hospital: 'Hospital', bus: 'Bus station', fire: 'Fire station', police: 'Police station',
+  station: 'Railway station', viewpoint: 'Viewpoint', museum: 'Museum', info: 'Information centre', picnic: 'Picnic site',
+  golf: 'Golf course', tower: 'Tower', antiquity: 'Ancient site',
+};
+const POI_SHORT = { worship: 'place of worship', school: 'school', univ: 'university', pub: 'pub', po: 'post office', parking: 'car park', hospital: 'hospital', bus: 'bus station', fire: 'fire station', police: 'police station', station: 'railway station', viewpoint: 'viewpoint', museum: 'museum', info: 'information centre', picnic: 'picnic site', golf: 'golf course', tower: 'tower', antiquity: 'ancient site' };
+function buildDefs() {
+  const defs = $('#defs');
+  const txt = (id, t, w) => {
+    const g = E('g', { id: 'sym-' + id }, defs);
+    E('rect', { x: -w / 2, y: -11, width: w, height: 22, rx: 4, fill: '#fff', opacity: .85 }, g);
+    E('text', { 'text-anchor': 'middle', y: 7, 'font-size': 18, 'font-weight': 900, fill: '#111', 'font-family': 'Arial, sans-serif' }, g).textContent = t;
+  };
+  txt('school', 'Sch', 38); txt('pub', 'PH', 30); txt('po', 'PO', 30); txt('hospital', 'Hospl', 50);
+  txt('fire', 'Fire Sta', 64); txt('police', 'Pol Sta', 62); txt('univ', 'Univ', 44);
+  let g = E('g', { id: 'sym-worship' }, defs);
+  E('circle', { r: 12, fill: '#fff', opacity: .85 }, g);
+  E('path', { d: 'M-2.5-11h5v6.5h6.5v5h-6.5v11h-5v-11h-6.5v-5h6.5z', fill: '#111' }, g);
+  const blue = (id, inner) => { const s = E('g', { id: 'sym-' + id }, defs); E('rect', { x: -12, y: -12, width: 24, height: 24, rx: 5, fill: '#1565c0', stroke: '#fff', 'stroke-width': 2 }, s); inner(s); };
+  blue('parking', s => { E('text', { 'text-anchor': 'middle', y: 8, 'font-size': 20, 'font-weight': 900, fill: '#fff', 'font-family': 'Arial' }, s).textContent = 'P'; });
+  blue('bus', s => { E('rect', { x: -8, y: -7, width: 16, height: 12, rx: 2, fill: '#fff' }, s); E('rect', { x: -6, y: -5, width: 12, height: 4, fill: '#1565c0' }, s); E('circle', { cx: -4, cy: 7, r: 2, fill: '#fff' }, s); E('circle', { cx: 4, cy: 7, r: 2, fill: '#fff' }, s); });
+  blue('museum', s => { E('path', { d: 'M-9-2L0-9L9-2z', fill: '#fff' }, s); for (const x of [-7, -2, 3]) E('rect', { x, y: -1, width: 3, height: 8, fill: '#fff' }, s); E('rect', { x: -9, y: 7, width: 18, height: 2, fill: '#fff' }, s); });
+  blue('info', s => { E('circle', { cy: -6, r: 2.4, fill: '#fff' }, s); E('rect', { x: -2, y: -2, width: 4, height: 11, fill: '#fff' }, s); });
+  blue('picnic', s => { E('path', { d: 'M-9-3h18M-5-3l-4 11M5-3l4 11M-10 3h20', stroke: '#fff', 'stroke-width': 2.4, fill: 'none' }, s); });
+  blue('golf', s => { E('path', { d: 'M-3 9V-9l9 4-9 4', stroke: '#fff', 'stroke-width': 2.2, fill: '#fff' }, s); });
+  g = E('g', { id: 'sym-viewpoint' }, defs);
+  E('path', { d: 'M-13 5A13 13 0 0 1 13 5z', fill: '#1565c0', stroke: '#fff', 'stroke-width': 1.5 }, g);
+  for (const a of [-60, -30, 0, 30, 60]) { const r = a * Math.PI / 180; E('line', { x1: 0, y1: 5, x2: 13 * Math.sin(r), y2: 5 - 13 * Math.cos(r), stroke: '#fff', 'stroke-width': 1.6 }, g); }
+  g = E('g', { id: 'sym-station' }, defs);
+  E('circle', { r: 9, fill: '#d32f2f', stroke: '#111', 'stroke-width': 2.5 }, g);
+  g = E('g', { id: 'sym-tower' }, defs);
+  E('path', { d: 'M-6 11V-6h-2v-5h4v3h2v-3h4v3h2v-3h4v5h-2v17z', fill: '#111', stroke: '#fff', 'stroke-width': 1.2 }, g);
+  g = E('g', { id: 'sym-antiquity' }, defs);
+  E('circle', { r: 10, fill: '#fff', stroke: '#6d4c41', 'stroke-width': 2.5, opacity: .9 }, g);
+  E('path', { d: 'M-5-5l10 10M5-5l-10 10', stroke: '#6d4c41', 'stroke-width': 2.5 }, g);
+  // pin used for answers
+  g = E('g', { id: 'sym-pin' }, defs);
+  E('path', { d: 'M0 0C-4-10-16-16-16-30A16 16 0 1 1 16-30C16-16 4-10 0 0z', fill: '#e53935', stroke: '#fff', 'stroke-width': 3 }, g);
+  E('circle', { cy: -30, r: 6, fill: '#fff' }, g);
+  // map patterns for the OS-style maps
+  const pat = (id, w, h, inner) => { const p = E('pattern', { id, width: w, height: h, patternUnits: 'userSpaceOnUse' }, defs); inner(p); };
+  pat('pWood', 46, 40, p => {
+    E('rect', { width: 46, height: 40, fill: '#bfe0a6' }, p);
+    for (const [x, y] of [[11, 14], [34, 34]]) { E('circle', { cx: x, cy: y - 4, r: 5, fill: 'none', stroke: '#3f8f3a', 'stroke-width': 1.6 }, p); E('line', { x1: x, y1: y + 1, x2: x, y2: y + 5, stroke: '#3f8f3a', 'stroke-width': 1.6 }, p); }
+  });
+  pat('pScrub', 30, 30, p => { E('rect', { width: 30, height: 30, fill: '#e6f1d6' }, p); E('circle', { cx: 8, cy: 8, r: 2.2, fill: '#6aa84f' }, p); E('circle', { cx: 23, cy: 22, r: 2.2, fill: '#6aa84f' }, p); });
+  pat('pCem', 34, 34, p => { E('rect', { width: 34, height: 34, fill: '#dde9d4' }, p); E('path', { d: 'M17 9v12M12 13h10', stroke: '#5b6b55', 'stroke-width': 1.6 }, p); });
+  pat('pMud', 24, 24, p => { E('rect', { width: 24, height: 24, fill: '#e9e1c8' }, p); E('circle', { cx: 6, cy: 6, r: 1.4, fill: '#9c8a5a' }, p); E('circle', { cx: 18, cy: 17, r: 1.4, fill: '#9c8a5a' }, p); });
+}
+
+/* ------------------------------------------------------------ items */
+const ITEMS = D.items;
+const byId = Object.fromEntries(ITEMS.map(i => [i.id, i]));
+const KIND_TXT = {
+  country: 'a country', ukcountry: 'a country in the UK', continent: 'a continent', ocean: 'an ocean or sea', sea: 'a sea or ocean',
+  group: 'a group of countries', latline: 'an imaginary line', lonline: 'an imaginary line', pole: 'a point on the Earth',
+  hemi: 'half of the Earth', region: 'a region of England', county: 'a county', river: 'a river or canal', line: 'a long feature', point: 'a place',
+};
+function kindText(it) {
+  if (it.k === 'point') return it.cap ? 'a capital city' : it.phys ? 'a physical feature' : it.id === 'school' ? 'our school' : /city|ton$|ham$|ool$|eds$|ield$|stle$/.test(it.n) || ['bristol', 'exeter', 'bath', 'manchester', 'birmingham', 'liverpool', 'leeds', 'sheffield', 'newcastle', 'mumbai', 'newyork', 'rio', 'singapore', 'sydney'].includes(it.id) ? 'a city' : 'a landmark';
+  if (it.k === 'line') return it.phys ? 'a mountain range or hills' : 'a landmark';
+  return KIND_TXT[it.k] || 'a place';
+}
+function inYear(it) {
+  if (!it.y || !it.y.length) return false;
+  const y = yr(); if (!y) return true;
+  return it.y.some(v => S.revision ? v <= y : v === y);
+}
+const mapKind = () => S.map.startsWith('local') ? 'local' : S.map;
+const visibleItems = () => ITEMS.filter(it => it.m === mapKind() && inYear(it));
+
+/* ------------------------------------------------------------ map builders */
+const built = {};
+const CONT_COL = { Africa: '#f5d48c', Asia: '#f2b9a6', Europe: '#bcdb93', 'North America': '#efc2d8', 'South America': '#c8b9e6', Oceania: '#9fd8cf', Antarctica: '#e4edf2', Islands: '#d8d8d0' };
+const UKC_COL = { England: '#f6e6b4', Scotland: '#cde3b4', Wales: '#f3c9b8', 'Northern Ireland': '#c9dbef' };
+const CONT_LABEL = { Africa: [8, 18], Asia: [48, 92], Europe: [53, 18], 'North America': [48, -102], 'South America': [-14, -60], Oceania: [-25, 134], Antarctica: [-82, 40] };
+const WORLD_VIEWS = { World: null, Europe: [-25, 34, 45, 71], Africa: [-20, -36, 55, 38], Asia: [25, -12, 150, 78], 'North America': [-170, 7, -50, 83], 'South America': [-85, -57, -32, 14], Oceania: [110, -50, 180, 0] };
+const bngToUk = (e, n) => ({ x: (e - D.uk.e0) / D.uk.s, y: (D.uk.n1 - n) / D.uk.s });
+const UK_VIEWS = { 'Whole UK': null, 'South West': [80000, 0, 430000, 270000], 'South East': [380000, 70000, 660000, 270000], Wales: [160000, 160000, 360000, 400000], 'North of England': [290000, 360000, 480000, 620000], Scotland: [0, 520000, 470000, 1000000] };
+
+function buildWorld() {
+  const g = E('g'), W = D.world;
+  const outline = [];
+  for (let lat = 90; lat >= -90; lat -= 5) { const p = rob(180, lat); outline.push(p); }
+  for (let lat = -90; lat <= 90; lat += 5) { const p = rob(-180, lat); outline.push(p); }
+  E('path', { d: 'M' + outline.map(p => p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join('L') + 'z', fill: '#cfe7f5', stroke: '#9cc6de', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, g);
+  const grat = E('g', { id: 'w-grat', stroke: '#9cc6de', 'stroke-width': .8, 'vector-effect': 'non-scaling-stroke', fill: 'none' }, g);
+  for (let lat = -75; lat <= 75; lat += 15) { const a = rob(-180, lat), b = rob(180, lat); E('path', { d: `M${a.x} ${a.y}H${b.x}`, 'vector-effect': 'non-scaling-stroke' }, grat); }
+  for (let lon = -180; lon <= 180; lon += 15) { const pts = []; for (let lat = -90; lat <= 90; lat += 5) pts.push(rob(lon, lat)); E('path', { d: 'M' + pts.map(p => p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join('L'), 'vector-effect': 'non-scaling-stroke' }, grat); }
+  const land = E('g', { id: 'w-land' }, g);
+  const parts = [];
+  for (const [code, cont, d] of W.parts) {
+    const p = E('path', { d, class: 'land', 'data-code': code, 'data-cont': cont }, land);
+    parts.push(p);
+  }
+  E('path', { d: W.lakes, fill: '#cfe7f5', stroke: '#8a8a7a', 'stroke-width': .6, 'vector-effect': 'non-scaling-stroke' }, g);
+  const lines = E('g', { id: 'w-lines' }, g);
+  const ln = (lat, col, dash, name) => {
+    const a = rob(-180, lat), b = rob(180, lat);
+    E('path', { d: `M${a.x} ${a.y}H${b.x}`, stroke: col, 'stroke-width': 2.6, 'stroke-dasharray': dash, 'vector-effect': 'non-scaling-stroke', fill: 'none' }, lines);
+    const lp = rob(-168, lat); const lg = cs(lines, lp.x, lp.y - 0, 'lbl wl-lab'); E('text', { y: -7, 'font-size': 15, fill: col, 'font-style': 'italic' }, lg).textContent = name;
+  };
+  ln(0, '#d32f2f', null, 'Equator'); ln(23.44, '#ef6c00', '8 6', 'Tropic of Cancer'); ln(-23.44, '#ef6c00', '8 6', 'Tropic of Capricorn');
+  ln(66.56, '#1e88e5', '8 6', 'Arctic Circle'); ln(-66.56, '#1e88e5', '8 6', 'Antarctic Circle');
+  const pm = []; for (let lat = -90; lat <= 90; lat += 5) pm.push(rob(0, lat));
+  E('path', { d: 'M' + pm.map(p => p.x + ' ' + p.y).join('L'), stroke: '#2e7d32', 'stroke-width': 2.2, 'stroke-dasharray': '3 5', 'vector-effect': 'non-scaling-stroke', fill: 'none' }, lines);
+  const pml = rob(0, -50); E('text', { y: 0, 'font-size': 15, fill: '#2e7d32', 'font-style': 'italic' }, cs(lines, pml.x + 6, pml.y, 'lbl wl-lab')).textContent = 'Prime Meridian';
+  const names = E('g', { id: 'w-allnames', class: 'lbl' }, g);
+  const dyn = E('g', { id: 'dyn' }, g);
+  const res = { g, parts, b: { x: 0, y: 0, w: WW, h: WH }, minK: .25, dyn, names, sized: false };
+  res.countryW = {};
+  return res;
+}
+function styleWorld(m) {
+  const L = S.layers.world;
+  for (const p of m.parts) p.setAttribute('fill', L.colour ? (CONT_COL[p.dataset.cont] || '#ddd') : '#f1ece0');
+  m.g.querySelector('#w-grat').style.display = L.grid ? '' : 'none';
+  m.g.querySelector('#w-lines').style.display = L.lines ? '' : 'none';
+}
+
+function buildUK() {
+  const g = E('g'), U = D.uk;
+  E('rect', { x: 0, y: 0, width: U.w, height: U.h, fill: '#cfe7f5' }, g);
+  for (const c of U.context) E('path', { d: c.d, fill: '#ebeae4', stroke: '#a3a39a', 'stroke-width': .7, 'vector-effect': 'non-scaling-stroke', 'data-n': c.n }, g);
+  const ctry = U.countries.map(c => E('path', { d: c.d, class: 'ukc land', fill: UKC_COL[c.n], 'data-n': c.n }, g));
+  const regG = E('g', { id: 'uk-reg' }, g);
+  const regs = U.regions.map(r => E('path', { d: r.d, class: 'ukr', fill: 'transparent', stroke: '#7b4fa0', 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke', 'data-n': r.n }, regG));
+  const ctyG = E('g', { id: 'uk-cty' }, g);
+  const ctys = U.counties.map(r => E('path', { d: r.d, class: 'ukcty', fill: 'transparent', stroke: '#8d6e63', 'stroke-width': 1.2, 'vector-effect': 'non-scaling-stroke', 'data-n': r.n }, ctyG));
+  const rivG = E('g', { id: 'uk-riv' }, g);
+  const rivers = {};
+  for (const k in U.rivers) rivers[k] = E('path', { d: U.rivers[k], class: 'feat-line', stroke: k === 'guc' ? '#0d47a1' : '#1e88e5', 'stroke-width': k === 'guc' ? 2.2 : 2.6, 'stroke-dasharray': k === 'guc' ? '6 3' : null, 'data-r': k }, rivG);
+  const names = E('g', { id: 'uk-names', class: 'lbl' }, g);
+  const dyn = E('g', { id: 'dyn' }, g);
+  return { g, ctry, regs, ctys, rivers, names, dyn, b: { x: 0, y: 0, w: U.w, h: U.h }, minK: .06 };
+}
+function styleUK(m) {
+  const L = S.layers.uk;
+  m.g.querySelector('#uk-reg').style.visibility = L.regions ? '' : 'hidden';
+  m.g.querySelector('#uk-cty').style.visibility = L.counties ? '' : 'hidden';
+  m.g.querySelector('#uk-riv').style.display = L.rivers ? '' : 'none';
+}
+
+function buildLocal(id) {
+  const Lm = D.local.find(l => l.id === id), W = Lm.e1 - Lm.e0, Hh = Lm.n1 - Lm.n0;
+  const g = E('g');
+  E('rect', { x: -400, y: -400, width: W + 800, height: Hh + 800, fill: '#eef3f6' }, g);
+  E('rect', { x: 0, y: 0, width: W, height: Hh, fill: '#fbfaf3' }, g);
+  const clip = E('clipPath', { id: 'clip-' + id }, g); E('rect', { x: 0, y: 0, width: W, height: Hh }, clip);
+  const body = E('g', { 'clip-path': `url(#clip-${id})` }, g);
+  const A = Lm.areas, area = (k, attrs) => { if (A[k]) E('path', Object.assign({ d: A[k] }, attrs), body); };
+  area('farm', { fill: '#f6f3e2' });
+  area('urban', { fill: '#f4e2d1' });
+  area('park', { fill: '#dcefc8' });
+  area('allot', { fill: '#e4eecd', stroke: '#9cb87c', 'stroke-width': 1 });
+  area('golf', { fill: '#d4ecbd' });
+  area('pitch', { fill: '#cbe8b3', stroke: '#7aa95c', 'stroke-width': 1.5 });
+  area('cemetery', { fill: 'url(#pCem)' });
+  area('scrub', { fill: 'url(#pScrub)' });
+  area('wood', { fill: 'url(#pWood)' });
+  area('rock', { fill: '#e2ddd5' });
+  area('mud', { fill: 'url(#pMud)' });
+  const line = (d, attrs) => { if (d) E('path', Object.assign({ d, fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, attrs), body); };
+  line(Lm.stream, { stroke: '#2f8fd8', 'stroke-width': 3 });
+  line(Lm.canal, { stroke: '#2f8fd8', 'stroke-width': 9 });
+  line(Lm.river, { stroke: '#2f8fd8', 'stroke-width': 7 });
+  area('water', { fill: '#a9d8f5', stroke: '#2f8fd8', 'stroke-width': 2 });
+  line(Lm.cliff, { stroke: '#6d4c41', 'stroke-width': 12, 'stroke-dasharray': '2 6', 'stroke-linecap': 'butt' });
+  const R = Lm.roads;
+  const RW = { mway: 28, a: 20, b: 16, minor: 12, street: 9 };
+  const RC = { mway: '#3b78c4', a: '#e0473f', b: '#f39c2c', minor: '#fff15a', street: '#ffffff' };
+  line(R.track, { stroke: '#8a7a64', 'stroke-width': 3, 'stroke-dasharray': '10 8', 'stroke-linecap': 'butt' });
+  line(R.path, { stroke: '#555', 'stroke-width': 2.6, 'stroke-dasharray': '9 7', 'stroke-linecap': 'butt' });
+  for (const c of ['street', 'minor', 'b', 'a', 'mway']) line(R[c], { stroke: '#4a4a4a', 'stroke-width': RW[c] + 4 });
+  for (const c of ['street', 'minor', 'b', 'a', 'mway']) line(R[c], { stroke: RC[c], 'stroke-width': RW[c] });
+  line(Lm.raildis, { stroke: '#9e9e9e', 'stroke-width': 3, 'stroke-dasharray': '12 8' });
+  line(Lm.rail, { stroke: '#222', 'stroke-width': 7 });
+  line(Lm.rail, { stroke: '#fff', 'stroke-width': 3, 'stroke-dasharray': '16 16', 'stroke-linecap': 'butt' });
+  // grid
+  const grid = E('g', { id: 'l-grid' }, g), tenths = E('g', { id: 'l-tenths', style: 'display:none' }, g);
+  for (let e = Math.ceil(Lm.e0 / 100) * 100; e <= Lm.e1; e += 100) {
+    const x = e - Lm.e0, major = e % 1000 === 0;
+    E('line', { x1: x, y1: 0, x2: x, y2: Hh, stroke: '#2c7fd6', 'stroke-width': major ? 1.6 : .8, opacity: major ? .95 : .45, 'vector-effect': 'non-scaling-stroke' }, major ? grid : tenths);
+  }
+  for (let n = Math.ceil(Lm.n0 / 100) * 100; n <= Lm.n1; n += 100) {
+    const y = Lm.n1 - n, major = n % 1000 === 0;
+    E('line', { x1: 0, y1: y, x2: W, y2: y, stroke: '#2c7fd6', 'stroke-width': major ? 1.6 : .8, opacity: major ? .95 : .45, 'vector-effect': 'non-scaling-stroke' }, major ? grid : tenths);
+  }
+  E('rect', { x: 0, y: 0, width: W, height: Hh, fill: 'none', stroke: '#1a3a5a', 'stroke-width': 3, 'vector-effect': 'non-scaling-stroke' }, g);
+  // labels
+  const labs = E('g', { id: 'l-names' }, g);
+  for (const p of Lm.places) {
+    const size = p.p === 'village' || p.p === 'suburb' || p.p === 'town' ? 19 : 15;
+    E('text', { 'text-anchor': 'middle', 'font-size': size, 'font-weight': 900, fill: '#222', class: 'lbl', 'letter-spacing': size > 16 ? '1' : '0' }, cs(labs, p.x, p.y, 'lbl')).textContent = p.p === 'village' || p.p === 'suburb' || p.p === 'town' ? p.t.toUpperCase() : p.t;
+  }
+  for (const n of Lm.names) {
+    const col = n.c === 'water' ? '#1565c0' : '#2e6b2e';
+    E('text', { 'text-anchor': 'middle', 'font-size': 15, 'font-style': 'italic', 'font-weight': 800, fill: col }, cs(labs, n.x, n.y, 'lbl')).textContent = n.t;
+  }
+  for (const r of Lm.refs) {
+    const gg = cs(labs, r.x, r.y);
+    const w = r.t.length * 9 + 10;
+    E('rect', { x: -w / 2, y: -11, width: w, height: 20, rx: 3, fill: r.t[0] === 'M' ? '#3b78c4' : r.t[0] === 'A' ? '#2e7d32' : '#fff', stroke: '#333', 'stroke-width': 1 }, gg);
+    E('text', { 'text-anchor': 'middle', y: 4, 'font-size': 14, 'font-weight': 900, fill: r.t[0] === 'B' ? '#222' : '#fff' }, gg).textContent = r.t;
+  }
+  const poiG = E('g', { id: 'l-pois' }, g);
+  Lm.pois.forEach((p, i) => {
+    const gg = cs(poiG, p.x, p.y, 'poi');
+    gg.dataset.i = i;
+    E('use', { href: '#sym-' + p.t }, gg);
+    if (p.ours) {
+      E('path', { d: 'M0-34l5 10 11 1.6-8 7.8 1.9 11L0 1.2-9.9 6.4-8-4.6-16-12.4-5-14z', fill: '#ffd54a', stroke: '#b07d00', 'stroke-width': 1.5, transform: 'translate(0,-12) scale(.9)' }, gg);
+      E('text', { y: 30, 'text-anchor': 'middle', 'font-size': 17, 'font-weight': 900, fill: '#0f6e9c', class: 'lbl' }, gg).textContent = 'Wallscourt Farm Academy';
+    }
+  });
+  const dyn = E('g', { id: 'dyn' }, g);
+  return { g, L: Lm, pois: Lm.pois, poiG, labs, grid, tenths, dyn, b: { x: 0, y: 0, w: W, h: Hh }, minK: .12 };
+}
+function styleLocal(m) {
+  const L = S.layers.local;
+  m.labs.style.display = L.names ? '' : 'none';
+  m.poiG.style.display = L.symbols ? '' : 'none';
+}
+
+function cur() { return built[S.map]; }
+function ensureMap(id) {
+  if (built[id]) return built[id];
+  let m;
+  if (id === 'world') m = buildWorld();
+  else if (id === 'uk') m = buildUK();
+  else m = buildLocal(id.split(':')[1]);
+  built[id] = m; return m;
+}
+function showMap(id, keepView) {
+  S.map = id; save();
+  const m = ensureMap(id);
+  layersG.replaceChildren(m.g);
+  ov.replaceChildren();
+  V.b = m.b; V.minK = m.minK;
+  restyle();
+  if (id === 'world' && !m.sized) {     // measure each country once, for zoom-dependent names
+    m.sized = true;
+    const w = {};
+    for (const p of m.parts) { const bb = p.getBBox(); const c = p.dataset.code; if (!w[c] || bb.width > w[c].w) w[c] = { w: bb.width }; }
+    m.countryW = w;
+  }
+  $('#mapTxt').textContent = mapLabel(id);
+  document.body.classList.toggle('has-rulers', id.startsWith('local'));
+  $('#rulerB').hidden = $('#rulerL').hidden = !id.startsWith('local');
+  buildViewBar();
+  const v = views[id];
+  if (keepView && v) { V.cx = v.cx; V.cy = v.cy; V.k = v.k; applyView(); }
+  else home(0);
+  setAttrib();
+  refreshDyn();
+}
+function restyle() {
+  const m = cur(); if (!m) return;
+  if (S.map === 'world') styleWorld(m); else if (S.map === 'uk') styleUK(m); else styleLocal(m);
+}
+function mapLabel(id) {
+  return id === 'world' ? 'World' : id === 'uk' ? 'United Kingdom' : (id.endsWith('school') ? 'OS: Our school' : 'OS: Avon Gorge');
+}
+function setAttrib() {
+  const a = S.map === 'world' ? 'Map data: Natural Earth' :
+    S.map === 'uk' ? 'Contains OS data © Crown copyright and database right 2024 · Source: Office for National Statistics (OGL) · Natural Earth' :
+      'Map data © OpenStreetMap contributors · Drawn in the style of an Ordnance Survey map · Grid: British National Grid (square ST)';
+  $('#attrib').textContent = a + ' · Version ' + VERSION;
+}
+function buildViewBar() {
+  const bar = $('#viewBar'); bar.replaceChildren();
+  const add = (t, f) => { const b = H(`<button>${esc(t)}</button>`); b.onclick = f; bar.appendChild(b); };
+  if (S.map === 'world') {
+    for (const [n, bb] of Object.entries(WORLD_VIEWS)) add(n, () => bb ? fitLL(bb) : home());
+  } else if (S.map === 'uk') {
+    for (const [n, bb] of Object.entries(UK_VIEWS)) add(n, () => bb ? fitBNG(bb) : home());
+  } else {
+    const m = cur();
+    add('Whole map', () => home());
+    const ours = m.pois.find(p => p.ours);
+    if (ours) add('Our school', () => fitBox(ours.x - 700, ours.y - 700, 1400, 1400));
+    for (const [n, [e, nn]] of Object.entries(m.L.views || {})) add(n, () => fitBox(e - m.L.e0 - 700, m.L.n1 - nn - 700, 1400, 1400));
+  }
+}
+function fitLL(bb, ms) {
+  const [w, s, e, n] = bb; const pts = [rob(w, n), rob(e, n), rob(w, s), rob(e, s), rob((w + e) / 2, n), rob((w + e) / 2, s)];
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  fitBox(Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1.05, ms);
+}
+function fitBNG(bb, ms) { const a = bngToUk(bb[0], bb[3]), b = bngToUk(bb[2], bb[1]); fitBox(a.x, a.y, b.x - a.x, b.y - a.y, 1.05, ms); }
+
+/* ------------------------------------------------------------ dynamic layer: markers & labels */
+function markerColour(it) { return it.id === 'school' ? '#1798d3' : it.cap ? '#d32f2f' : it.phys ? '#2e7d32' : '#5e35b1'; }
+function drawMarker(parent, it, opts = {}) {
+  const [x, y] = it.xy;
+  const g = cs(parent, x, y, 'mk' + (it.cap || it.id === 'school' ? ' capm' : ''));
+  g.dataset.id = it.id;
+  E('circle', { r: 26, fill: 'transparent' }, g);
+  if (it.phys) E('path', { d: 'M0-13L12 9H-12z', fill: markerColour(it), stroke: '#fff', 'stroke-width': 2.5, class: 'dot' }, g);
+  else if (it.id === 'school') E('path', { d: 'M0-14l4 9 10 1-7.5 7 2 10L0 8-8.5 13l2-10L-14-4l10-1z', fill: '#1798d3', stroke: '#fff', 'stroke-width': 2.5 }, g);
+  else if (it.cap) E('rect', { x: -9, y: -9, width: 18, height: 18, fill: markerColour(it), stroke: '#fff', 'stroke-width': 2.5, transform: 'rotate(45)' }, g);
+  else E('circle', { r: 9, fill: markerColour(it), class: 'dot' }, g);
+  if (opts.label) E('text', { x: 15, y: 6, 'font-size': 18 }, g).textContent = it.n;
+  return g;
+}
+function drawItemLine(parent, it, label) {
+  const pts = it.pts;
+  const g = E('g', { 'data-id': it.id, class: 'mkline' }, parent);
+  E('path', { d: 'M' + pts.map(p => p.join(' ')).join('L'), class: 'feat-line', stroke: it.phys ? '#8d5524' : '#6d4c41', 'stroke-width': it.phys ? 6 : 4, 'stroke-dasharray': it.phys ? '1 9' : '10 5', opacity: .9 }, g);
+  if (label) { const mid = pts[Math.floor(pts.length / 2)]; E('text', { x: 10, y: -8, 'font-size': 17, 'font-style': 'italic' }, cs(g, mid[0], mid[1], 'lbl')).textContent = it.n; }
+  return g;
+}
+function refreshDyn() {
+  const m = cur(); if (!m) return;
+  m.dyn.replaceChildren();
+  if (m.names) m.names.replaceChildren();
+  const quiz = S.mode !== 'explore';
+  if (S.map === 'world') m.g.querySelectorAll('.wl-lab').forEach(e => e.style.display = quiz ? 'none' : '');
+  const names = S.mode === 'explore' && (S.map === 'world' ? S.layers.world.names : S.map === 'uk' ? S.layers.uk.names : S.layers.local.names);
+  if (S.map.startsWith('local')) return;
+  const its = visibleItems();
+  if (!quiz) {
+    for (const it of its) {
+      if (it.k === 'point') drawMarker(m.dyn, it, { label: names });
+      else if (it.k === 'line') drawItemLine(m.dyn, it, names);
+    }
+  }
+  if (!names) return;
+  if (S.map === 'world') {
+    for (const [c, ll] of Object.entries(CONT_LABEL)) { const p = rob(ll[1], ll[0]); E('text', { class: 'pri', 'text-anchor': 'middle', 'font-size': 24, 'font-weight': 900, fill: '#3b3b3b', 'letter-spacing': 2, opacity: .8 }, cs(m.names, p.x, p.y, 'lbl')).textContent = c.toUpperCase(); }
+    const seen = new Set();
+    for (const [n, lat, lon] of D.world.anchors) {
+      if (seen.has(n)) continue; seen.add(n);
+      const p = rob(lon, lat); E('text', { 'text-anchor': 'middle', 'font-size': 19, 'font-style': 'italic', 'font-weight': 800, fill: '#1565c0' }, cs(m.names, p.x, p.y, 'lbl')).textContent = n;
+    }
+    m.cnames = [];
+    const cur_ = new Set(its.filter(i => i.k === 'country').map(i => i.ref));
+    for (const [code, c] of Object.entries(D.world.countries)) {
+      if (!c.l) continue;
+      const t = E('text', { 'text-anchor': 'middle', 'font-size': cur_.has(code) ? 17 : 14, 'font-weight': cur_.has(code) ? 900 : 700, fill: cur_.has(code) ? '#111' : '#444' }, cs(m.names, c.l[0], c.l[1], 'lbl'));
+      t.textContent = c.n; m.cnames.push({ t: t.parentNode, code, cur: cur_.has(code) });
+    }
+    zoomNames();
+  } else if (S.map === 'uk') {
+    for (const c of D.uk.countries) E('text', { class: 'pri', 'text-anchor': 'middle', 'font-size': 22, 'font-weight': 900, fill: '#333', 'letter-spacing': 1.5 }, cs(m.names, c.l[0], c.l[1] + (c.n === 'England' ? -60 : 0), 'lbl')).textContent = c.n.toUpperCase();
+    const seen = new Set();
+    for (const [n, x, y] of D.uk.anchors) { if (seen.has(n)) continue; seen.add(n); E('text', { 'text-anchor': 'middle', 'font-size': 18, 'font-style': 'italic', 'font-weight': 800, fill: '#1565c0' }, cs(m.names, x, y, 'lbl')).textContent = n; }
+    if (S.layers.uk.regions) for (const r of D.uk.regions) E('text', { 'text-anchor': 'middle', 'font-size': 15, 'font-weight': 900, fill: '#6a3f8f' }, cs(m.names, r.l[0], r.l[1] + 30, 'lbl')).textContent = r.n;
+    if (S.layers.uk.counties) {
+      m.ctyNames = [];
+      for (const r of D.uk.counties) { const t = cs(m.names, r.l[0], r.l[1], 'lbl'); E('text', { 'text-anchor': 'middle', 'font-size': 13, 'font-weight': 800, fill: '#6d4c41' }, t).textContent = r.n; m.ctyNames.push(t); }
+    }
+    if (S.layers.uk.rivers) for (const it of ITEMS.filter(i => i.k === 'river' && inYear(i))) {
+      const lines = parsePath(D.uk.rivers[it.ref]); const L = lines.reduce((a, b) => b.length > a.length ? b : a, []);
+      const mid = L[Math.floor(L.length / 2)]; if (mid) E('text', { 'font-size': 15, 'font-style': 'italic', 'font-weight': 800, fill: '#0d47a1', x: 8 }, cs(m.names, mid[0], mid[1], 'lbl')).textContent = it.n;
+    }
+    zoomNames();
+  }
+}
+const POI_RANK = ['station', 'museum', 'hospital', 'univ', 'worship', 'school', 'tower', 'viewpoint', 'antiquity', 'info', 'golf', 'bus', 'fire', 'police', 'picnic', 'po', 'pub', 'parking'];
+function poiRank(p) { return p.ours ? -1 : (POI_RANK.indexOf(p.t) + 1 || 99); }
+function forcePoi(...idx) { const m = cur(); if (m && m.L) { m.force = new Set(idx); declutter(); } }
+let declT = 0;
+function declutter() {                       // hide labels that would overlap, most important first
+  cancelAnimationFrame(declT);
+  declT = requestAnimationFrame(() => {
+    const m = cur(); if (!m || !m.dyn) return;
+    if (m.L) {                                 // OS-style map: thin symbols by importance, then labels
+      const over = (r, list, pad) => list.some(o => r.left < o.right - pad && r.right > o.left + pad && r.top < o.bottom - pad && r.bottom > o.top + pad);
+      const taken = [];
+      if (S.layers.local.symbols) {
+        if (!m.poiOrder) m.poiOrder = [...m.poiG.children].sort((a, b) => poiRank(m.pois[a.dataset.i]) - poiRank(m.pois[b.dataset.i]));
+        const force = m.force || new Set();
+        m.poiOrder.forEach(g => g.style.visibility = '');
+        const rects = m.poiOrder.map(g => g.querySelector('use').getBoundingClientRect());
+        m.poiOrder.forEach((g, i) => { if (force.has(+g.dataset.i)) taken.push(rects[i]); });
+        m.poiOrder.forEach((g, i) => {
+          if (force.has(+g.dataset.i)) return;
+          if (over(rects[i], taken, 3)) g.style.visibility = 'hidden'; else taken.push(rects[i]);
+        });
+      }
+      if (!S.layers.local.names) return;
+      const labs = [...m.labs.children];
+      labs.forEach(g => g.style.visibility = '');
+      labs.map(g => [g, g.getBoundingClientRect()]).forEach(([g, r]) => {
+        if (!r.width) return;
+        const hit = taken.some(o => r.left < o.right - 2 && r.right > o.left + 2 && r.top < o.bottom - 2 && r.bottom > o.top + 2);
+        if (hit) g.style.visibility = 'hidden'; else taken.push(r);
+      });
+      return;
+    }
+    const groups = [
+      [...m.dyn.querySelectorAll('.capm text')],
+      [...(m.names ? m.names.querySelectorAll('text.pri') : [])],
+      [...m.dyn.querySelectorAll('.mk:not(.capm) text, .mkline text')],
+      [...(m.names ? m.names.querySelectorAll('text:not(.pri)') : [])].filter(t => t.parentNode.style.display !== 'none'),
+    ];
+    const all = groups.flat();
+    all.forEach(t => t.style.visibility = '');
+    const taken = [...m.dyn.querySelectorAll('.mk .dot, .mk rect, .mk path')].map(e => e.getBoundingClientRect());
+    const rects = all.map(t => t.getBoundingClientRect());
+    all.forEach((t, i) => {
+      const r = rects[i];
+      if (!r.width) return;
+      const hit = taken.some(o => r.left < o.right - 1 && r.right > o.left + 1 && r.top < o.bottom - 1 && r.bottom > o.top + 1);
+      if (hit) t.style.visibility = 'hidden'; else taken.push(r);
+    });
+  });
+}
+function zoomNames() {
+  const m = cur(); if (!m) return;
+  declutter();
+  if (S.map === 'world' && m.cnames) {
+    for (const c of m.cnames) { const w = (m.countryW[c.code] || { w: 0 }).w / V.k; c.t.style.display = (c.cur ? w > 14 || V.k < 1.4 : w > 70) ? '' : 'none'; }
+  }
+  if (S.map === 'uk' && m.ctyNames) for (const t of m.ctyNames) t.style.display = V.k < .9 ? '' : 'none';
+}
+
+/* ------------------------------------------------------------ view change hooks: rulers etc. */
+function onViewChange() {
+  zoomNames();
+  const m = cur();
+  if (m && m.L) {
+    m.tenths.style.display = V.k < 2.8 ? '' : 'none';
+    drawRulers(m);
+  }
+}
+function drawRulers(m) {
+  const L = m.L, rb = $('#rulerB'), rl = $('#rulerL'), r = svg.getBoundingClientRect();
+  const x0 = V.cx - V.W / 2 * V.k, y0 = V.cy - V.H / 2 * V.k;
+  let hb = '', hl = '';
+  const showT = V.k < 2.8;
+  for (let e = Math.ceil((L.e0 + Math.max(0, x0)) / 100) * 100; e <= Math.min(L.e1, L.e0 + x0 + V.W * V.k); e += 100) {
+    const sx = (e - L.e0 - x0) / V.k;
+    if (sx < 56 || sx > V.W - 10) continue;
+    if (e % 1000 === 0) hb += `<span style="left:${sx}px">${String(Math.floor(e / 1000) % 100).padStart(2, '0')}</span>`;
+    else if (showT) hb += `<span class="t" style="left:${sx}px">${(e / 100) % 10}</span>`;
+  }
+  for (let n = Math.ceil(L.n0 / 100) * 100; n <= L.n1; n += 100) {
+    const sy = (L.n1 - n - y0) / V.k;
+    if (sy < 10 || sy > V.H - 46) continue;
+    if (n % 1000 === 0) hl += `<span style="top:${sy}px">${String(Math.floor(n / 1000) % 100).padStart(2, '0')}</span>`;
+    else if (showT) hl += `<span class="t" style="top:${sy}px">${(n / 100) % 10}</span>`;
+  }
+  rb.innerHTML = hb; rl.innerHTML = hl;
+}
+
+/* ------------------------------------------------------------ hit testing */
+const DPt = (x, y) => new DOMPoint(x, y);
+function inPaths(paths, p, slackPx = 0) {
+  const pt = DPt(p.x, p.y);
+  for (const el of paths) {
+    if (el.isPointInFill(pt)) return true;
+    if (slackPx) {                         // small countries: accept a near miss
+      const bb = el.getBBox(), s = slackPx * V.k;
+      if (bb.width / V.k < 30 && bb.height / V.k < 30 && p.x > bb.x - s && p.x < bb.x + bb.width + s && p.y > bb.y - s && p.y < bb.y + bb.height + s) return true;
+    }
+  }
+  return false;
+}
+function worldLandAt(p) { const pt = DPt(p.x, p.y); return cur().parts.find(el => el.isPointInFill(pt)) || null; }
+function worldOceanAt(p) {
+  const ll = robInv(p.x, p.y); if (!ll) return null;
+  if (ll.lat < -60) return 'Southern Ocean';
+  let best = null, bd = Infinity;
+  for (const [n, lat, lon] of D.world.anchors) { const d = km(ll, { lat, lon }); if (d < bd) { bd = d; best = n; } }
+  return best;
+}
+function ukLandAt(p) {
+  const m = built.uk, pt = DPt(p.x, p.y);
+  return m.ctry.find(el => el.isPointInFill(pt)) || [...m.g.querySelectorAll('path[data-n]')].find(el => !el.classList.contains('ukr') && !el.classList.contains('ukcty') && el.isPointInFill(pt)) || null;
+}
+function ukSeaAt(p) {
+  let best = null, bd = Infinity;
+  for (const [n, x, y] of D.uk.anchors) { const d = Math.hypot(p.x - x, p.y - y); if (d < bd) { bd = d; best = n; } }
+  return best;
+}
+function distKm(it, a, b) {                // a, b in map units on the item's map
+  if (it.m === 'world') { const A = robInv(a.x, a.y), B = robInv(b.x, b.y); return A && B ? km(A, B) : Infinity; }
+  return Math.hypot(a.x - b.x, a.y - b.y) * D.uk.s / 1000;
+}
+function itemLines(it) { return it.k === 'river' ? (it._lines ||= parsePath(D.uk.rivers[it.ref])) : [it.pts]; }
+function isHit(it, p) {
+  const m = cur();
+  switch (it.k) {
+    case 'country': return inPaths(m.parts.filter(e => e.dataset.code === it.ref), p, 14);
+    case 'group': return inPaths(m.parts.filter(e => it.refs.includes(e.dataset.code)), p, 14);
+    case 'continent': return inPaths(m.parts.filter(e => e.dataset.cont === it.ref), p);
+    case 'ocean': return !worldLandAt(p) && worldOceanAt(p) === it.ref;
+    case 'latline': { const ll = robInv(p.x, p.y); return !!ll && Math.abs(ll.lat - it.lat) < 3.5; }
+    case 'lonline': { const ll = robInv(p.x, p.y); return !!ll && Math.abs(ll.lon - it.lon) < 4; }
+    case 'pole': { const ll = robInv(p.x, p.y); return !!ll && (it.lat > 0 ? ll.lat > 78 : ll.lat < -76); }
+    case 'hemi': { const ll = robInv(p.x, p.y); if (!ll) return false; return { N: ll.lat > 0, S: ll.lat < 0, E: ll.lon > 0, W: ll.lon < 0 }[it.ref]; }
+    case 'ukcountry': return inPaths(m.ctry.filter(e => e.dataset.n === it.ref), p);
+    case 'region': return inPaths(m.regs.filter(e => e.dataset.n === it.ref), p);
+    case 'county': return inPaths(m.ctys.filter(e => e.dataset.n === it.ref), p, 10);
+    case 'sea': return !ukLandAt(p) && ukSeaAt(p) === it.ref;
+    case 'point': { const t = { x: it.xy[0], y: it.xy[1] }; return distKm(it, p, t) <= it.tol || Math.hypot(p.x - t.x, p.y - t.y) / V.k < 30; }
+    case 'line': case 'river': { const q = nearestOnLines(itemLines(it), p); return !!q && (distKm(it, p, q) <= (it.tol || 10) || q.d / V.k < 26); }
+  }
+  return false;
+}
+function targetPoint(it, from) {             // a sensible point on the target, for hints and arrows
+  const m = cur();
+  const bbC = els => { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const e of els) { const b = e.getBBox(); if (b.width * b.height < 1) continue; x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + b.width); y1 = Math.max(y1, b.y + b.height); } return { x: (x0 + x1) / 2, y: (y0 + y1) / 2, box: [x0, y0, x1 - x0, y1 - y0] }; };
+  switch (it.k) {
+    case 'point': return { x: it.xy[0], y: it.xy[1], box: [it.xy[0] - 1, it.xy[1] - 1, 2, 2] };
+    case 'line': case 'river': { const L = itemLines(it), q = nearestOnLines(L, from || { x: L[0][0][0], y: L[0][0][1] }); const all = L.flat(); const xs = all.map(a => a[0]), ys = all.map(a => a[1]); return { x: q.x, y: q.y, box: [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)] }; }
+    case 'country': { const c = D.world.countries[it.ref]; const b = bbC(m.parts.filter(e => e.dataset.code === it.ref)); return c && c.l ? { x: c.l[0], y: c.l[1], box: b.box } : b; }
+    case 'group': return bbC(m.parts.filter(e => it.refs.includes(e.dataset.code)));
+    case 'continent': { const ll = CONT_LABEL[it.ref], p = rob(ll[1], ll[0]); const b = bbC(m.parts.filter(e => e.dataset.cont === it.ref)); return { x: p.x, y: p.y, box: b.box }; }
+    case 'ocean': case 'sea': {
+      let best = null, bd = Infinity;
+      const list = it.k === 'ocean' ? D.world.anchors.map(([n, lat, lon]) => [n, rob(lon, lat)]) : D.uk.anchors.map(([n, x, y]) => [n, { x, y }]);
+      for (const [n, q] of list) if (n === it.ref) { const d = from ? Math.hypot(q.x - from.x, q.y - from.y) : 0; if (d < bd) { bd = d; best = q; } }
+      return { x: best.x, y: best.y, box: [best.x - 300, best.y - 300, 600, 600] };
+    }
+    case 'latline': { const y = rob(0, it.lat).y; return { x: from ? from.x : WW / 2, y, box: [0, y - 200, WW, 400] }; }
+    case 'lonline': { const p = rob(0, from ? (robInv(from.x, from.y) || { lat: 0 }).lat : 0); return { x: p.x, y: p.y, box: [WW / 2 - 300, 0, 600, WH] }; }
+    case 'pole': { const p = rob(from ? clamp((robInv(from.x, from.y) || { lon: 0 }).lon, -170, 170) : 0, it.lat > 0 ? 88 : -88); return { x: p.x, y: p.y, box: [0, it.lat > 0 ? 0 : WH - 400, WW, 400] }; }
+    case 'hemi': { const p = { N: rob(0, 45), S: rob(0, -45), E: rob(90, 0), W: rob(-90, 0) }[it.ref]; return { x: p.x, y: p.y, box: [0, 0, WW, WH] }; }
+    case 'ukcountry': { const c = D.uk.countries.find(c => c.n === it.ref); return { x: c.l[0], y: c.l[1], box: bbC(m.ctry.filter(e => e.dataset.n === it.ref)).box }; }
+    case 'region': { const c = D.uk.regions.find(c => c.n === it.ref); return { x: c.l[0], y: c.l[1], box: bbC(m.regs.filter(e => e.dataset.n === it.ref)).box }; }
+    case 'county': { const c = D.uk.counties.find(c => c.n === it.ref); return { x: c.l[0], y: c.l[1], box: bbC(m.ctys.filter(e => e.dataset.n === it.ref)).box }; }
+  }
+  return null;
+}
+function highlightItem(it, cls = 'hl') {
+  const m = cur(); clearHL(cls);
+  const add = els => els.forEach(e => e.classList.add(cls));
+  if (it.k === 'country') add(m.parts.filter(e => e.dataset.code === it.ref));
+  else if (it.k === 'group') add(m.parts.filter(e => it.refs.includes(e.dataset.code)));
+  else if (it.k === 'continent') add(m.parts.filter(e => e.dataset.cont === it.ref));
+  else if (it.k === 'ukcountry') add(m.ctry.filter(e => e.dataset.n === it.ref));
+  else if (it.k === 'region') { $('#uk-reg').style.visibility = ''; add(m.regs.filter(e => e.dataset.n === it.ref)); }
+  else if (it.k === 'county') { $('#uk-cty').style.visibility = ''; add(m.ctys.filter(e => e.dataset.n === it.ref)); }
+  else {
+    const g = E('g', { class: 'hlx' }, ov);
+    if (it.k === 'point') { drawMarker(g, it, { label: true }); const pg = cs(g, it.xy[0], it.xy[1]); E('circle', { class: 'pulse', r: 16 }, pg); }
+    else if (it.k === 'line' || it.k === 'river') {
+      for (const L of itemLines(it)) E('path', { d: 'M' + L.map(p => p.join(' ')).join('L'), class: 'feat-line blink', stroke: '#ffb300', 'stroke-width': 9 }, g);
+      const t = targetPoint(it); E('text', { x: 12, y: -10, 'font-size': 20 }, cs(g, t.x, t.y, 'lbl')).textContent = it.n;
+    } else if (it.k === 'latline' || it.k === 'lonline') {
+      const pts = []; if (it.k === 'latline') { pts.push(rob(-180, it.lat), rob(180, it.lat)); } else for (let lat = -90; lat <= 90; lat += 5) pts.push(rob(it.lon, lat));
+      E('path', { d: 'M' + pts.map(p => p.x + ' ' + p.y).join('L'), class: 'feat-line blink', stroke: '#ffb300', 'stroke-width': 9 }, g);
+    } else if (it.k === 'hemi') {
+      const pts = [];
+      if (it.ref === 'N' || it.ref === 'S') { const s = it.ref === 'N' ? 1 : -1; for (let lon = -180; lon <= 180; lon += 10) pts.push(rob(lon, 0)); for (let lat = 0; lat <= 90; lat += 5) pts.push(rob(180, s * lat)); for (let lat = 90; lat >= 0; lat -= 5) pts.push(rob(-180, s * lat)); }
+      else { const s = it.ref === 'E' ? 1 : -1; for (let lat = -90; lat <= 90; lat += 5) pts.push(rob(0, lat)); for (let lat = 90; lat >= -90; lat -= 5) pts.push(rob(180 * s, lat)); }
+      E('path', { d: 'M' + pts.map(p => p.x + ' ' + p.y).join('L') + 'z', fill: '#ffd54a', opacity: .45 }, g);
+    } else if (it.k === 'pole') { const t = targetPoint(it); const pg = cs(g, t.x, t.y); E('circle', { class: 'pulse', r: 16 }, pg); E('circle', { r: 10, fill: '#ffb300', stroke: '#fff', 'stroke-width': 3 }, pg); }
+    else if (it.k === 'ocean' || it.k === 'sea') {
+      const anchors = it.k === 'ocean' ? D.world.anchors.filter(a => a[0] === it.ref).map(a => rob(a[2], a[1])) : D.uk.anchors.filter(a => a[0] === it.ref).map(a => ({ x: a[1], y: a[2] }));
+      const a0 = anchors[0]; const lg = cs(g, a0.x, a0.y);
+      E('circle', { class: 'pulse', r: 16 }, lg); E('text', { 'text-anchor': 'middle', y: 8, 'font-size': 26, 'font-weight': 900, fill: '#0d47a1', class: 'lbl' }, lg).textContent = it.n;
+    }
+  }
+}
+function clearHL(cls) {
+  for (const c of cls ? [cls] : ['hl', 'sel']) document.querySelectorAll('.' + c).forEach(e => e.classList.remove(c));
+  ov.querySelectorAll('.hlx').forEach(e => e.remove());
+  const m = built.uk; if (m && S.map === 'uk') styleUK(m);
+}
+
+const THE = /^(Equator|Tropic|Prime|Arctic (Circle|Ocean)|Antarctic Circle|North Pole|South Pole|North Sea|Irish Sea|English Channel|(Northern|Southern|Eastern|Western) hemisphere|Southern (Ocean|Uplands)|River|Grand|Peak|Lake|Severn|Somerset Levels|Cotswold|Black|Grampian|Scottish|Mendip|Brecon|White|Angel|Eden|San Andreas|Atlas|Appalachian|British|Royal|Clifton|Avon Gorge|Alps|Andes|Himalayas|Pennines|Netherlands|United|Czech|Mediterranean|Pacific|Atlantic|Indian|South West|South East|North West|North East|East|West Midlands)/;
+const cap1 = s => s[0].toUpperCase() + s.slice(1);
+function theName(it) { const n = it.n || it; return n.startsWith('Our ') ? 'our ' + n.slice(4) : THE.test(n) ? 'the ' + n : n; }
+
+/* ------------------------------------------------------------ panel helpers */
+const panel = $('#panelBody');
+function scrollEnd() { requestAnimationFrame(() => { panel.scrollTop = panel.scrollHeight; }); }
+function setPanel(html) { panel.innerHTML = html; panel.scrollTop = 0; return panel; }
+function factHTML(f) { return f ? `<div class="fact"><b>Did you know?</b>${esc(f)}</div>` : ''; }
+const PRAISE = ['Brilliant!', 'Spot on!', 'Super geography!', 'Fantastic!', 'Great map skills!', 'Well done!', 'Superb!'];
+const NEARLY = ['Not quite!', 'So close!', 'Good try!', 'Nearly!'];
+function teamAwardHTML() {
+  if (!S.teams) return '';
+  return `<div><p class="ptitle">Give a point to</p><div class="chips">${teamList().map((t, i) => `<button class="chip" data-award="${i}" style="background:${t.c};color:#fff">${t.n}</button>`).join('')}</div></div>`;
+}
+function wireAward(root) { root.querySelectorAll('[data-award]').forEach(b => b.onclick = () => { S.scores[+b.dataset.award]++; save(); drawTeams(); root.querySelectorAll('[data-award]').forEach(x => x.disabled = true); b.textContent += ' ✓'; }); }
+function progressHTML(Q) { return Q.n === Infinity ? `<div class="prog"><span>Question ${Q.idx + 1}</span><span>⭐ ${Q.score}</span></div>` : `<div class="prog"><span>Question ${Q.idx + 1} of ${Q.n}</span><span>⭐ ${Q.score}</span></div>`; }
+function endHTML(Q, again) {
+  const pct = Q.score / Math.max(1, Q.n);
+  const msg = pct >= .9 ? 'Outstanding geographers!' : pct >= .7 ? 'Fantastic work!' : pct >= .5 ? 'Great effort — keep exploring!' : 'Good practice — let’s try some more!';
+  return `<div class="qcard" style="text-align:center"><div style="font-size:64px">🏆</div><div class="big">${Q.score} out of ${Q.n}</div><p class="q">${msg}</p></div><button class="btn" id="again">${again || 'Play again'}</button>`;
+}
+
+/* ------------------------------------------------------------ tap dispatch */
+function onTap(cx, cy) {
+  if (tool) return;
+  const p = toMap(cx, cy);
+  if (S.mode === 'explore') exploreTap(p, cx, cy);
+  else if (S.mode === 'find') findTap(p);
+  else if (S.mode === 'grid') gridTap(p, cx, cy);
+}
+
+/* ------------------------------------------------------------ EXPLORE */
+function exploreStart() {
+  ov.replaceChildren(); clearHL();
+  if (S.map.startsWith('local')) {
+    setPanel(`<p class="ptitle">Explore</p><div class="qcard"><p class="q">Tap a symbol to find out what it is.</p><p class="hint">Tap anywhere else to see its grid square.</p></div>
+      <button class="btn sec" id="keyBtn">🔑 Show the key</button>
+      <p class="hint">Drag to move the map. Use ＋ and － to zoom in and out. Blue lines are grid lines, 1 km apart.</p>`);
+    $('#keyBtn').onclick = showKey;
+  } else {
+    const its = visibleItems();
+    setPanel(`<p class="ptitle">Explore</p><div class="qcard"><p class="q">Tap anything on the map to find out about it.</p><p class="hint">${S.map === 'world' ? 'Countries, oceans, cities and landmarks' : 'Countries, seas, cities, rivers and landmarks'} for ${yr() ? 'Year ' + yr() : 'all years'}: ${its.length} places to explore.</p></div>
+      ${legendHTML()}
+      <p class="hint">Drag to move the map. Pinch, scroll or use ＋ and － to zoom.</p>`);
+  }
+}
+function legendHTML() {
+  const row = (svgInner, t) => `<div style="display:flex;align-items:center;gap:12px;font-weight:800;font-size:calc(18px*var(--fs))"><svg width="34" height="34" viewBox="-17 -17 34 34">${svgInner}</svg>${t}</div>`;
+  return `<div style="display:flex;flex-direction:column;gap:6px">${row('<rect x="-9" y="-9" width="18" height="18" fill="#d32f2f" stroke="#fff" stroke-width="2.5" transform="rotate(45)"/>', 'Capital city')}${row('<circle r="9" fill="#5e35b1" stroke="#fff" stroke-width="2.5"/>', 'City or landmark')}${row('<path d="M0-13L12 9H-12z" fill="#2e7d32" stroke="#fff" stroke-width="2.5"/>', 'Physical feature')}${S.map === 'uk' ? row('<path d="M-14 0H14" stroke="#1e88e5" stroke-width="4"/>', 'River') : ''}</div>`;
+}
+function exploreTap(p, cx, cy) {
+  clearHL(); ov.querySelectorAll('.tapdot').forEach(e => e.remove());
+  if (S.map.startsWith('local')) return localExplore(p);
+  // markers first
+  const hit = document.elementsFromPoint(cx, cy).map(e => e.closest('[data-id]')).find(Boolean);
+  if (hit) { const it = byId[hit.dataset.id]; showItemCard(it); highlightItem(it, 'sel'); return; }
+  const m = cur();
+  // lines (mountain ranges, rivers) near the tap
+  const lineItems = visibleItems().filter(i => i.k === 'line' || (i.k === 'river' && S.layers.uk.rivers));
+  for (const it of lineItems) { const q = nearestOnLines(itemLines(it), p); if (q && q.d / V.k < 18) { showItemCard(it); highlightItem(it, 'sel'); return; } }
+  if (S.map === 'world') {
+    const part = worldLandAt(p);
+    if (part) {
+      const code = part.dataset.code, c = D.world.countries[code];
+      const it = ITEMS.find(i => i.m === 'world' && i.k === 'country' && i.ref === code);
+      m.parts.filter(e => e.dataset.code === code).forEach(e => e.classList.add('sel'));
+      const cont = part.dataset.cont;
+      showCard(c.n, code === 'RUS' ? 'A country in Europe and Asia' : code === 'GBR' ? 'Our country — in Europe' : 'A country in ' + (cont === 'Islands' ? 'the ocean' : cont), [['Continent', code === 'RUS' ? 'Europe and Asia' : cont], ['Capital city', c.cap || '—']], it && it.f);
+      return;
+    }
+    const ll = robInv(p.x, p.y); if (!ll) return;
+    const o = worldOceanAt(p); const it = ITEMS.find(i => i.m === 'world' && i.k === 'ocean' && i.ref === o);
+    showCard(o, o.includes('Sea') ? 'A sea' : 'An ocean', [['Hemisphere', (ll.lat >= 0 ? 'Northern' : 'Southern') + ' and ' + (ll.lon >= 0 ? 'eastern' : 'western')]], it && it.f);
+    if (it) highlightItem(it, 'sel');
+    return;
+  }
+  // UK
+  const pt = DPt(p.x, p.y);
+  const tryLayer = (els, label, kind) => {
+    const e = els.find(x => x.isPointInFill(pt)); if (!e) return false;
+    const n = e.dataset.n; const it = ITEMS.find(i => i.m === 'uk' && i.k === kind && i.ref === n);
+    e.classList.add('sel');
+    const country = m.ctry.find(x => x.isPointInFill(pt));
+    showCard(kind === 'county' ? n.replace('Bristol', 'City of Bristol') : n, label, country ? [['Country', country.dataset.n]] : [], it && it.f);
+    return true;
+  };
+  if (S.layers.uk.counties && tryLayer(m.ctys, 'A county in England', 'county')) return;
+  if (S.layers.uk.regions && tryLayer(m.regs, 'A region of England', 'region')) return;
+  if (tryLayer(m.ctry, 'A country in the United Kingdom', 'ukcountry')) return;
+  const land = ukLandAt(p);
+  if (land) { showCard(land.dataset.n, land.dataset.n === 'Isle of Man' ? 'An island in the Irish Sea (not part of the UK)' : 'A country near the United Kingdom', [], ''); return; }
+  const sea = ukSeaAt(p); const it = ITEMS.find(i => i.m === 'uk' && i.k === 'sea' && i.ref === sea);
+  showCard(sea, sea.includes('Ocean') ? 'An ocean' : sea.includes('Channel') ? 'A stretch of sea' : 'A sea', [], it && it.f);
+  if (it) highlightItem(it, 'sel');
+}
+function showItemCard(it) {
+  const rows = [];
+  if (it.m === 'world' && it.ll) { const ll = Array.isArray(it.ll) ? it.ll : null; if (ll) rows.push(['Hemisphere', (ll[0] >= 0 ? 'Northern' : 'Southern') + ' and ' + (ll[1] >= 0 ? 'eastern' : 'western')]); }
+  rows.push(['Year group', it.y.length ? 'Year ' + it.y.join(', ') : '—']);
+  showCard(it.n, kindText(it)[0].toUpperCase() + kindText(it).slice(1), rows, it.f);
+}
+function showCard(title, sub, rows, fact) {
+  setPanel(`<div class="info"><p class="ptitle">You tapped…</p><h2>${esc(title)}</h2><div class="sub">${esc(sub)}</div>
+    ${rows.length ? `<dl>${rows.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>` : ''}</div>${factHTML(fact)}
+    <button class="btn sec" id="backExplore">Back</button>`);
+  $('#backExplore').onclick = () => { clearHL(); exploreStart(); };
+}
+function refOf(L, x, y, level) {
+  const e = L.e0 + x, n = L.n1 - y;
+  if (level === 4) return [String(Math.floor(e / 1000) % 100).padStart(2, '0'), String(Math.floor(n / 1000) % 100).padStart(2, '0')];
+  return [String(Math.floor(e / 100) % 1000).padStart(3, '0'), String(Math.floor(n / 100) % 1000).padStart(3, '0')];
+}
+function localExplore(p) {
+  const m = cur(), L = m.L;
+  if (p.x < 0 || p.y < 0 || p.x > m.b.w || p.y > m.b.h) return;
+  let best = null, bd = 28 * V.k;
+  if (S.layers.local.symbols) m.pois.forEach((q, i) => { const d = Math.hypot(q.x - p.x, q.y - p.y); if (d < bd) { bd = d; best = i; } });
+  const g = E('g', { class: 'tapdot hlx' }, ov);
+  if (best != null) {
+    const q = m.pois[best]; forcePoi(best);
+    const r4 = refOf(L, q.x, q.y, 4), r6 = refOf(L, q.x, q.y, 6);
+    E('circle', { class: 'pulse', r: 16 }, cs(g, q.x, q.y));
+    const show6 = yr() === 0 || yr() >= 4;
+    setPanel(`<div class="info"><p class="ptitle">You tapped…</p>
+      <div style="display:flex;align-items:center;gap:14px"><svg width="70" height="56" viewBox="-35 -28 70 56"><use href="#sym-${q.t}" transform="scale(1.6)"/></svg><h2>${esc(POI[q.t])}</h2></div>
+      ${q.n ? `<div class="sub">${esc(q.n)}</div>` : ''}
+      <dl><dt>4-figure grid reference</dt><dd style="font-size:32px">${r4.join(' ')}</dd>${show6 ? `<dt>6-figure grid reference</dt><dd style="font-size:32px">${r6.join(' ')}</dd>` : ''}</dl></div>
+      <p class="hint">Remember: along the corridor (eastings) first, then up the stairs (northings).</p>
+      <button class="btn sec" id="backExplore">Back</button>`);
+  } else {
+    const r4 = refOf(L, p.x, p.y, 4);
+    const x0 = Math.floor((L.e0 + p.x) / 1000) * 1000 - L.e0, y0 = L.n1 - (Math.floor((L.n1 - p.y) / 1000) * 1000 + 1000);
+    E('rect', { x: x0, y: y0, width: 1000, height: 1000, fill: '#ffd54a', opacity: .35, stroke: '#e6a100', 'stroke-width': 3, 'vector-effect': 'non-scaling-stroke' }, g);
+    setPanel(`<div class="info"><p class="ptitle">Grid square</p><h2 style="font-size:56px">${r4.join(' ')}</h2>
+      <div class="sub">Eastings ${r4[0]} (along), northings ${r4[1]} (up)</div></div>
+      <p class="hint">A grid square is named by the lines at its bottom-left corner.</p>
+      <button class="btn sec" id="backExplore">Back</button>`);
+  }
+  $('#backExplore').onclick = () => { ov.replaceChildren(); exploreStart(); };
+}
+function showKey() {
+  const m = cur(); const present = [...new Set(m.pois.map(p => p.t))];
+  const sym = t => `<svg viewBox="-28 -18 56 36"><use href="#sym-${t}"/></svg>`;
+  const ln = (attrs, extra = '') => `<svg viewBox="0 0 56 36"><path d="M4 18H52" ${attrs}/>${extra}</svg>`;
+  const ar = fill => `<svg viewBox="0 0 56 36"><rect x="6" y="6" width="44" height="24" rx="3" fill="${fill}" stroke="#888"/></svg>`;
+  const rows = [
+    [ln('stroke="#4a4a4a" stroke-width="12"', '<path d="M4 18H52" stroke="#3b78c4" stroke-width="8"/>'), 'Motorway'],
+    [ln('stroke="#4a4a4a" stroke-width="11"', '<path d="M4 18H52" stroke="#e0473f" stroke-width="7"/>'), 'Main road (A road)'],
+    [ln('stroke="#4a4a4a" stroke-width="10"', '<path d="M4 18H52" stroke="#f39c2c" stroke-width="6"/>'), 'B road'],
+    [ln('stroke="#4a4a4a" stroke-width="9"', '<path d="M4 18H52" stroke="#fff15a" stroke-width="5"/>'), 'Minor road'],
+    [ln('stroke="#4a4a4a" stroke-width="8"', '<path d="M4 18H52" stroke="#fff" stroke-width="4"/>'), 'Street'],
+    [ln('stroke="#555" stroke-width="2.5" stroke-dasharray="6 4"'), 'Path or footpath'],
+    [ln('stroke="#222" stroke-width="6"', '<path d="M4 18H52" stroke="#fff" stroke-width="2.4" stroke-dasharray="7 7"/>'), 'Railway'],
+    [ln('stroke="#2f8fd8" stroke-width="4"'), 'River or stream'],
+    [ar('#a9d8f5'), 'Water'], [ar('url(#pWood)'), 'Woodland'], [ar('#dcefc8'), 'Park or open space'], [ar('#f4e2d1'), 'Built-up area (houses and buildings)'],
+    [ln('stroke="#2c7fd6" stroke-width="2"'), 'Grid line (1 km apart)'],
+  ];
+  if (m.L.cliff) rows.push([ln('stroke="#6d4c41" stroke-width="10" stroke-dasharray="2 5"'), 'Cliff']);
+  setPanel(`<p class="ptitle">Map key</p><div class="key">${present.map(t => sym(t) + `<div>${POI[t]}</div>`).join('')}${rows.map(r => r[0] + `<div>${r[1]}</div>`).join('')}</div>
+    <button class="btn sec" id="backExplore">Back</button>`);
+  $('#backExplore').onclick = () => startMode();
+}
+
+/* ------------------------------------------------------------ FIND IT */
+let Q = null;
+const QUIZ_KINDS = { world: ['country', 'continent', 'ocean', 'group', 'point', 'line', 'latline', 'lonline', 'pole', 'hemi'], uk: ['ukcountry', 'region', 'county', 'sea', 'river', 'point', 'line'] };
+function findStart() {
+  ov.replaceChildren(); clearHL();
+  if (S.map.startsWith('local')) {
+    setPanel(`<p class="ptitle">Find it!</p><div class="qcard"><p class="q">Find it! uses the world map and the UK map.</p><p class="hint">On the OS maps, try Grid refs or Compass.</p></div>
+      <button class="btn" id="toW">🌍 World map</button><button class="btn" id="toU">🇬🇧 UK map</button>`);
+    $('#toW').onclick = () => { showMap('world'); startMode(); }; $('#toU').onclick = () => { showMap('uk'); startMode(); };
+    return;
+  }
+  const pool = visibleItems().filter(i => QUIZ_KINDS[S.map].includes(i.k));
+  if (!pool.length) {
+    setPanel(`<p class="ptitle">Find it!</p><div class="qcard"><p class="q">There are no ${S.map === 'world' ? 'world' : 'UK'} places for ${yr() ? 'Year ' + yr() : 'this year'} yet.</p></div><button class="btn" id="toOther">Try the ${S.map === 'world' ? 'UK' : 'world'} map</button>`);
+    $('#toOther').onclick = () => { showMap(S.map === 'world' ? 'uk' : 'world'); startMode(); };
+    return;
+  }
+  const order = shuffle(pool.slice());
+  Q = { order, idx: 0, n: S.count ? Math.min(S.count, order.length) : Infinity, score: 0 };
+  if (Q.n === Infinity) Q.order = order;
+  findAsk();
+}
+function findItem() { return Q.order[Q.idx % Q.order.length]; }
+function findAsk() {
+  ov.replaceChildren(); clearHL();
+  Q.pin = null; Q.done = false; Q.tries = 0;
+  const it = findItem();
+  if (it.k === 'county') $('#uk-cty').style.visibility = '';
+  if (it.k === 'region') $('#uk-reg').style.visibility = '';
+  setPanel(`<p class="ptitle">Find it!</p>${progressHTML(Q)}
+    <div class="qcard"><p class="q">Can you find…</p><div class="big">${esc(it.n)}</div><div class="kind">It is ${esc(kindText(it))}.</div></div>
+    <div id="fbox"></div>
+    <div class="row"><button class="btn go" id="check" disabled>Check</button></div>
+    <div class="row"><button class="btn sec" id="skip">Skip</button><button class="btn sec" id="showme">Show me</button></div>
+    <p class="hint" id="tapHint">Tap the map to put a pin where you think it is. Move the pin by tapping again.</p>`);
+  $('#check').onclick = findCheck; $('#skip').onclick = findNext; $('#showme').onclick = () => findReveal(false);
+  if (S.autoZoom) autoZoomFor(it); else home();
+}
+function autoZoomFor(it) {
+  if (it.m === 'world') {
+    const t = targetPoint(it); if (!t) return home();
+    const ll = robInv(t.x, t.y);
+    const smallKinds = ['country', 'point', 'group', 'line'];
+    if (ll && smallKinds.includes(it.k) && (!t.box || t.box[2] < 1400)) {
+      let best = null, ba = Infinity;
+      for (const [n, bb] of Object.entries(WORLD_VIEWS)) if (bb && ll.lon >= bb[0] && ll.lon <= bb[2] && ll.lat >= bb[1] && ll.lat <= bb[3]) { const a = (bb[2] - bb[0]) * (bb[3] - bb[1]); if (a < ba) { ba = a; best = bb; } }
+      if (best) return fitLL(best);
+    }
+    return home();
+  }
+  const t = targetPoint(it); if (!t) return home();
+  const E_ = t.x * D.uk.s + D.uk.e0, N_ = D.uk.n1 - t.y * D.uk.s;
+  if (['county', 'point', 'line', 'river'].includes(it.k) && !(it.k === 'river' && t.box[2] > 700)) {
+    for (const n of ['South West', 'South East', 'Wales', 'North of England']) { const bb = UK_VIEWS[n]; if (E_ >= bb[0] && E_ <= bb[2] && N_ >= bb[1] && N_ <= bb[3] && (it.k === 'county' || it.tol < 30 || it.k === 'river')) return fitBNG(bb); }
+  }
+  home();
+}
+function placePin(p) {
+  ov.querySelectorAll('.pin').forEach(e => e.remove());
+  const g = cs(ov, p.x, p.y, 'pin'); E('use', { href: '#sym-pin' }, g);
+}
+function findTap(p) {
+  if (!Q || Q.done) return;
+  Q.pin = p; placePin(p);
+  const c = $('#check'); if (c) c.disabled = false;
+  const h = $('#tapHint'); if (h) h.textContent = 'Happy with your pin? Press Check.';
+}
+function findCheck() {
+  if (!Q.pin) return;
+  const it = findItem(), ok = isHit(it, Q.pin);
+  Q.tries++;
+  const fb = $('#fbox');
+  if (ok) {
+    Q.done = true; if (Q.tries === 1) Q.score++;
+    highlightItem(it);
+    fb.innerHTML = `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>That's ${esc(theName(it))}.</div>${factHTML(it.f)}${teamAwardHTML()}`;
+    wireAward(fb);
+    findButtonsNext();
+    scrollEnd();
+  } else {
+    const t = targetPoint(it, Q.pin);
+    let msg;
+    if (it.k === 'hemi') msg = `The ${it.n.toLowerCase()} is ${{ N: 'north of the Equator', S: 'south of the Equator', E: 'east of the Prime Meridian', W: 'west of the Prime Meridian' }[it.ref]}.`;
+    else if (t) msg = `${esc(cap1(theName(it)))} is further ${dirName(Q.pin, t, fourPoint())}.`;
+    else msg = 'Have another look.';
+    if (it.k === 'ocean' || it.k === 'sea') { const onLand = it.k === 'ocean' ? worldLandAt(Q.pin) : ukLandAt(Q.pin); if (onLand) msg = 'That pin is on land. ' + msg; }
+    fb.innerHTML = `<div class="fb bad"><span class="em">${pick(NEARLY)}</span>${msg} Tap the map to move your pin.</div>`;
+    $('#check').disabled = true;
+    if (Q.tries >= 3) findReveal(true);
+  }
+}
+function findReveal(afterTries) {
+  const it = findItem(); Q.done = true;
+  highlightItem(it);
+  const t = targetPoint(it, Q.pin);
+  if (Q.pin && t) {
+    drawArrow(Q.pin, t);
+    const b = t.box || [t.x, t.y, 1, 1];
+    const x0 = Math.min(Q.pin.x, b[0]), y0 = Math.min(Q.pin.y, b[1]), x1 = Math.max(Q.pin.x, b[0] + b[2]), y1 = Math.max(Q.pin.y, b[1] + b[3]);
+    if (!['hemi', 'latline', 'lonline'].includes(it.k)) fitBox(x0, y0, x1 - x0, y1 - y0, 1.4);
+  } else if (t && t.box && !['hemi'].includes(it.k)) fitBox(t.box[0], t.box[1], t.box[2], t.box[3], 1.6);
+  scrollEnd();
+  $('#fbox').innerHTML = `<div class="fb bad"><span class="em">Here it is!</span>${esc(cap1(theName(it)))} is shown in yellow.</div>${factHTML(it.f)}`;
+  findButtonsNext();
+}
+function findButtonsNext() {
+  const last = Q.n !== Infinity && Q.idx + 1 >= Q.n;
+  const c = $('#check'); c.disabled = false; c.textContent = last ? 'Finish' : 'Next ➜'; c.className = 'btn'; c.onclick = findNext;
+  $('#skip').parentNode.style.display = 'none';
+  $('#tapHint').textContent = '';
+}
+function findNext() {
+  Q.idx++;
+  if (Q.n !== Infinity && Q.idx >= Q.n) {
+    ov.replaceChildren(); clearHL();
+    setPanel(`<p class="ptitle">Find it!</p>${endHTML(Q)}`); $('#again').onclick = findStart; return;
+  }
+  findAsk();
+}
+function drawArrow(a, b, col = '#e53935', parent = ov) {
+  const g = E('g', { class: 'hlx arrow' }, parent);
+  const ang = Math.atan2(b.y - a.y, b.x - a.x);
+  E('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: col, 'stroke-width': 5, 'stroke-dasharray': '12 8', 'vector-effect': 'non-scaling-stroke' }, g);
+  const hg = cs(g, b.x, b.y); E('path', { d: 'M0 0L-22-11L-22 11z', fill: col, transform: `rotate(${ang * 180 / Math.PI})` }, hg);
+  return g;
+}
+
+/* ------------------------------------------------------------ COMPASS */
+let C = null;
+function compassCandidates() {
+  if (S.map.startsWith('local')) {
+    const m = cur(); return m.pois.map((p, i) => ({ x: p.x, y: p.y, n: p.ours ? 'our school' : 'the ' + POI_SHORT[p.t], t: p.t, i }));
+  }
+  const its = visibleItems();
+  const pts = its.filter(i => i.k === 'point').map(i => ({ x: i.xy[0], y: i.xy[1], n: i.n, it: i }));
+  if (pts.length < 6) {
+    if (S.map === 'world') for (const i of its.filter(i => i.k === 'country')) { const c = D.world.countries[i.ref]; if (c && c.l) pts.push({ x: c.l[0], y: c.l[1], n: i.n, it: i }); }
+    else for (const i of its.filter(i => ['ukcountry', 'county', 'region'].includes(i.k))) { const t = targetPoint(i); if (t) pts.push({ x: t.x, y: t.y, n: i.n, it: i }); }
+  }
+  if (S.map === 'world' && pts.length < 6) for (const i of its.filter(i => i.k === 'continent')) { const ll = CONT_LABEL[i.ref], p = rob(ll[1], ll[0]); pts.push({ x: p.x, y: p.y, n: i.n, it: i }); }
+  return pts;
+}
+function compassStart() {
+  ov.replaceChildren(); clearHL();
+  const pts = compassCandidates();
+  if (pts.length < 3) {
+    setPanel(`<p class="ptitle">Compass</p><div class="qcard"><p class="q">Not enough places on this map for ${yr() ? 'Year ' + yr() : 'this year'}.</p></div><button class="btn" id="toU">Try the UK map</button>`);
+    $('#toU').onclick = () => { showMap('uk'); startMode(); }; return;
+  }
+  C = { pts, idx: 0, n: S.count || Infinity, score: 0 };
+  compassAsk();
+}
+function compassPair() {
+  const pts = C.pts, four = fourPoint(), tol = four ? 14 : 10;
+  const diag = Math.hypot(V.b.w, V.b.h);
+  const local = S.map.startsWith('local');
+  for (let tries = 0; tries < 600; tries++) {
+    const a = pick(pts), b = pick(pts);
+    if (a === b || a.n === b.n) continue;
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (local ? (d < 500 || d > 3200) : (d < diag * .05 || d > diag * .55)) continue;
+    if (local && pts.filter(p => p.n === b.n && Math.hypot(p.x - a.x, p.y - a.y) < d * 1.2).length > 1 && tries < 400) continue;
+    const br = bearing(a, b), step = four ? 90 : 45, k = Math.round(br / step) % (360 / step);
+    const off = Math.abs(((br - k * step) + 540) % 360 - 180);
+    if (off > tol) continue;
+    return { a, b, ans: four ? k * 2 : k };
+  }
+  return null;
+}
+function compassAsk() {
+  ov.replaceChildren(); clearHL();
+  const pr = compassPair();
+  if (!pr) { setPanel(`<p class="ptitle">Compass</p><div class="qcard"><p class="q">Zoom out a little and try again.</p></div><button class="btn" id="again">Try again</button>`); $('#again').onclick = compassStart; return; }
+  C.cur = pr; C.done = false;
+  if (pr.a.i != null) forcePoi(pr.a.i, pr.b.i);
+  const { a, b } = pr;
+  const mk = (p, letter, col) => { const g = cs(ov, p.x, p.y, 'hlx'); E('circle', { class: 'pulse', r: 16 }, g); E('circle', { r: 17, fill: col, stroke: '#fff', 'stroke-width': 3 }, g); E('text', { 'text-anchor': 'middle', y: 7, 'font-size': 20, 'font-weight': 900, fill: '#fff' }, g).textContent = letter; E('text', { x: 24, y: 7, 'font-size': 19, class: 'lbl' }, g).textContent = p.n.replace(/^the /, ''); };
+  mk(a, 'A', '#2e7d32'); mk(b, 'B', '#c62828');
+  const pad = S.map.startsWith('local') ? 500 : Math.hypot(V.b.w, V.b.h) * .04;
+  fitBox(Math.min(a.x, b.x) - pad, Math.min(a.y, b.y) - pad, Math.abs(a.x - b.x) + 2 * pad, Math.abs(a.y - b.y) + 2 * pad, 1.25);
+  const four = fourPoint();
+  const q = S.map.startsWith('local') ? `Start at <b>A</b> (${esc(a.n)}). Which direction is <b>B</b> (${esc(b.n)})?` : `Which direction is <b>${esc(theName(b.n))}</b> from <b>${esc(theName(a.n))}</b>?`;
+  const positions = DIR8S.map((d, i) => { const r = i * 45 * Math.PI / 180; return { d, i, x: 140 + 102 * Math.sin(r), y: 140 - 102 * Math.cos(r) }; });
+  setPanel(`<p class="ptitle">Compass</p>${progressHTML({ idx: C.idx, n: C.n, score: C.score })}
+    <div class="qcard"><p class="q" style="font-size:calc(25px*var(--fs))">${q}</p></div>
+    <div class="rose">${positions.filter(p => !four || p.i % 2 === 0).map(p => `<button data-d="${p.i}" class="${p.i % 2 ? 'sm' : ''}" style="left:${p.x}px;top:${p.y}px">${p.d}</button>`).join('')}</div>
+    <div id="fbox"></div>
+    <div class="row"><button class="btn sec" id="skip">Skip</button></div>`);
+  panel.querySelectorAll('.rose button').forEach(btn => btn.onclick = () => compassAnswer(+btn.dataset.d, btn));
+  $('#skip').onclick = compassNext;
+}
+function compassAnswer(d, btn) {
+  if (C.done) return;
+  const { a, b, ans } = C.cur;
+  C.done = true;
+  const ok = d === ans;
+  if (ok) C.score++;
+  btn.classList.add('sel');
+  panel.querySelector(`.rose button[data-d="${ans}"]`).classList.add('right');
+  drawArrow(a, b, ok ? '#2e9e4f' : '#e53935');
+  const word = DIR8[ans];
+  const bn = esc(cap1(theName(b.n))), an = esc(theName(a.n));
+  $('#fbox').innerHTML = ok ? `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>${bn} is <b>${word}</b> of ${an}.</div>${teamAwardHTML()}`
+    : `<div class="fb bad"><span class="em">${pick(NEARLY)}</span>${bn} is <b>${word}</b> of ${an}. Follow the arrow from A to B.</div>`;
+  wireAward($('#fbox'));
+  const last = C.n !== Infinity && C.idx + 1 >= C.n;
+  const s = $('#skip'); s.textContent = last ? 'Finish' : 'Next ➜'; s.className = 'btn';
+  scrollEnd();
+}
+function compassNext() {
+  C.idx++;
+  if (C.n !== Infinity && C.idx >= C.n) { ov.replaceChildren(); setPanel(`<p class="ptitle">Compass</p>${endHTML({ score: C.score, n: C.n })}`); $('#again').onclick = compassStart; return; }
+  compassAsk();
+}
+
+/* ------------------------------------------------------------ GRID REFERENCES */
+let G = null;
+function gridStart() {
+  ov.replaceChildren(); clearHL();
+  if (!S.map.startsWith('local')) {
+    setPanel(`<p class="ptitle">Grid references</p><div class="qcard"><p class="q">Grid references are practised on our OS-style maps.</p><p class="hint">They use the real Ordnance Survey grid, so they match paper OS maps.</p></div>
+      ${D.local.map(l => `<button class="btn" data-local="${l.id}">🗺️ ${esc(l.name)}</button>`).join('')}`);
+    panel.querySelectorAll('[data-local]').forEach(b => b.onclick = () => { showMap('local:' + b.dataset.local); startMode(); });
+    return;
+  }
+  const lvl = gridLevel();
+  const pois = cur().pois.map((p, i) => Object.assign({ i }, p)).filter(p => {
+    const e = cur().L.e0 + p.x, n = cur().L.n1 - p.y;
+    if (p.x < 300 || p.y < 300 || p.x > cur().b.w - 300 || p.y > cur().b.h - 300) return false;
+    if (lvl === 6) { const a = e % 100, b = n % 100; return a > 14 && a < 86 && b > 14 && b < 86; }
+    const a = e % 1000, b = n % 1000; return a > 70 && a < 930 && b > 70 && b < 930;
+  });
+  G = { idx: 0, n: S.count || Infinity, score: 0, pois, lvl, task: S.gridTask };
+  gridAsk();
+}
+function gridHeader() {
+  const lvl = gridLevel();
+  const pr = G ? `<span style="float:right;text-transform:none">${G.n === Infinity ? 'Q' + (G.idx + 1) : (G.idx + 1) + ' of ' + G.n} · ⭐ ${G.score}</span>` : '';
+  return `<p class="ptitle">Grid references${pr}</p>
+    <div class="chips"><button class="chip on" id="taskPick">${GRID_TASKS[S.gridTask]} ▾</button>${S.gridTask !== 'symbols' ? `<button class="chip on" id="lvlPick">${lvl}-figure ▾</button>` : ''}</div>`;
+}
+const GRID_TASKS = { give: 'Give the reference', find: 'Find the place', symbols: 'Map symbols' };
+function wireGridHeader() {
+  $('#taskPick').onclick = e => openPop(e.currentTarget, `<h3>Activity</h3>${Object.entries(GRID_TASKS).map(([k, t]) => `<button class="opt ${S.gridTask === k ? 'on' : ''}" data-task="${k}">${t}</button>`).join('')}`,
+    p => p.querySelectorAll('[data-task]').forEach(b => b.onclick = () => { closePop(); S.gridTask = b.dataset.task; save(); gridStart(); }));
+  const lp = $('#lvlPick');
+  if (lp) lp.onclick = e => openPop(e.currentTarget, `<h3>Grid references</h3>${[4, 6].map(l => `<button class="opt ${gridLevel() === l ? 'on' : ''}" data-lvl="${l}">${l}-figure<small>${l === 4 ? 'Year 3' : 'Years 4-6'}</small></button>`).join('')}`,
+    p => p.querySelectorAll('[data-lvl]').forEach(b => b.onclick = () => { closePop(); S.gridLevel = +b.dataset.lvl; save(); gridStart(); }));
+}
+function gridAsk() {
+  ov.replaceChildren();
+  const m = cur(), L = m.L;
+  G.done = false; G.tries = 0; G.entry = ''; G.pin = null;
+  if (!G.pois.length) { setPanel(gridHeader() + '<div class="qcard"><p class="q">No places to ask about here.</p></div>'); wireGridHeader(); return; }
+  if (S.gridTask === 'symbols') return symbolAsk();
+  const p = pick(G.pois); G.p = p;
+  const ref = refOf(L, p.x, p.y, G.lvl); G.ref = ref;
+  forcePoi(p.i);
+  const span = G.lvl === 6 ? 1500 : 2600;
+  if (S.gridTask === 'give') {
+    const g = cs(ov, p.x, p.y, 'hlx'); E('circle', { class: 'pulse', r: 16 }, g); E('circle', { r: 24, fill: 'none', stroke: '#ff3d00', 'stroke-width': 4 }, g);
+    // keep the place off-centre so children have to use the grid, not the middle of the screen
+    fitBox(p.x - span / 2 + (Math.random() - .5) * span * .3, p.y - span / 2 + (Math.random() - .5) * span * .3, span, span, 1.05);
+    setPanel(gridHeader() + `
+      <div class="qcard"><p class="q">What is the ${G.lvl}-figure grid reference of the ${p.ours ? 'school (our school!)' : esc(POI_SHORT[p.t])}?</p></div>
+      <div class="refbox" id="refbox"></div>
+      <div class="ref-legend"><span class="e">Eastings (along)</span><span class="n">Northings (up)</span></div>
+      <div class="keypad" id="pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(n => `<button data-k="${n}">${n}</button>`).join('')}<button data-k="back">⌫</button><button data-k="ok" id="check" class="ok" disabled>Check</button></div>
+      <div id="fbox"></div>
+      <div class="row"><button class="btn sec" id="skip">Skip</button><button class="btn sec" id="showme">Show me how</button></div>`);
+    wireGridHeader();
+    drawRefBox();
+    panel.querySelectorAll('[data-k]').forEach(b => b.onclick = () => keyIn(b.dataset.k));
+  } else {
+    fitBox(m.b.x + (Math.random() * .3) * m.b.w, m.b.y + (Math.random() * .3) * m.b.h, m.b.w * .7, m.b.h * .7, 1);
+    if (G.lvl === 6) { const cx = Math.floor((L.e0 + p.x) / 1000) * 1000 - L.e0 + 500, cy = L.n1 - Math.floor((L.n1 - p.y) / 1000) * 1000 - 500; const off = () => (Math.random() - .5) * 1200; fitBox(cx - 1300 + off(), cy - 1300 + off(), 2600, 2600, 1); }
+    setPanel(gridHeader() + `
+      <div class="qcard"><p class="q">Find this grid reference:</p><div class="big" style="font-size:calc(54px*var(--fs));letter-spacing:4px"><span style="color:#b0351f">${ref[0]}</span> <span style="color:#1a5fb4">${ref[1]}</span></div>
+      <p class="hint">${G.lvl === 6 ? 'Tap the exact spot. Zoom in to see the tenths.' : 'Tap inside the grid square.'}</p></div>
+      <div id="fbox"></div>
+      <div class="row"><button class="btn go" id="check" disabled>Check</button></div>
+      <div class="row"><button class="btn sec" id="skip">Skip</button><button class="btn sec" id="showme">Show me how</button></div>`);
+    wireGridHeader();
+    $('#check').onclick = gridCheckFind;
+  }
+  $('#skip').onclick = gridNext;
+  $('#showme').onclick = () => { G.done = true; explainRef(G.p, G.lvl); };
+}
+function drawRefBox() {
+  const n = G.lvl, half = n / 2, box = $('#refbox'); if (!box) return;
+  let h = '';
+  for (let i = 0; i < n; i++) { if (i === half) h += '<i></i>'; h += `<span class="${i < half ? 'e' : 'n'} ${i === G.entry.length ? 'cur' : ''}">${G.entry[i] || ''}</span>`; }
+  box.innerHTML = h;
+  const c = $('#check'); if (c && !G.done) c.disabled = G.entry.length !== n;
+}
+function keyIn(k) {
+  if (G.done || S.gridTask !== 'give') return;
+  if (k === 'ok') { if (G.entry.length === G.lvl) gridCheckGive(); return; }
+  if (k === 'back') G.entry = G.entry.slice(0, -1);
+  else if (k === 'clr') G.entry = '';
+  else if (G.entry.length < G.lvl) G.entry += k;
+  drawRefBox();
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closePop(); closeModal(); }
+  if (S.mode === 'grid' && G && S.gridTask === 'give' && $('#modal').hidden) {
+    if (/^[0-9]$/.test(e.key)) keyIn(e.key);
+    else if (e.key === 'Backspace') keyIn('back');
+    else if (e.key === 'Enter' && $('#check') && !$('#check').disabled) $('#check').click();
+  }
+});
+function gridCheckGive() {
+  const want = G.ref.join(''), got = G.entry, h = G.lvl / 2;
+  G.tries++;
+  const fb = $('#fbox');
+  if (got === want) {
+    G.done = true; if (G.tries === 1) G.score++;
+    fb.innerHTML = `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>${want.slice(0, h)} ${want.slice(h)} is right.</div>${teamAwardHTML()}`;
+    wireAward(fb); gridNextButtons();
+  } else {
+    const eOK = got.slice(0, h) === want.slice(0, h), nOK = got.slice(h) === want.slice(h);
+    const swapped = got.slice(0, h) === want.slice(h) && got.slice(h) === want.slice(0, h);
+    const msg = swapped ? 'You have the right numbers, but the wrong way round. Along the corridor first, then up the stairs!'
+      : eOK ? 'Your eastings (along) are right. Check your northings (up).'
+        : nOK ? 'Your northings (up) are right. Check your eastings (along).'
+          : 'Check both parts. Start with the line to the left of the place, then the line below it.';
+    G.entry = ''; drawRefBox();
+    if (G.tries >= 3) { G.done = true; $('#pad').style.display = 'none'; fb.innerHTML = `<div class="fb bad">${msg}</div>`; explainRef(G.p, G.lvl); return; }
+    $('#pad').style.display = 'none';
+    fb.innerHTML = `<div class="fb bad"><span class="em">${pick(NEARLY)}</span>${msg}</div><button class="btn" id="tryAgain">Try again</button>`;
+    $('#tryAgain').onclick = () => { fb.innerHTML = ''; $('#pad').style.display = ''; };
+  }
+}
+function gridTap(p) {
+  if (!G || G.done || S.gridTask !== 'find') return;
+  if (p.x < 0 || p.y < 0 || p.x > cur().b.w || p.y > cur().b.h) return;
+  G.pin = p; placePin(p); $('#check').disabled = false;
+}
+function gridCheckFind() {
+  if (!G.pin) return;
+  const L = cur().L, got = refOf(L, G.pin.x, G.pin.y, G.lvl), want = G.ref;
+  G.tries++;
+  const fb = $('#fbox'), p = G.p;
+  if (got.join('') === want.join('')) {
+    G.done = true; if (G.tries === 1) G.score++;
+    const g = cs(ov, p.x, p.y, 'hlx'); E('circle', { class: 'pulse', r: 16 }, g); E('circle', { r: 24, fill: 'none', stroke: '#2e9e4f', 'stroke-width': 4 }, g);
+    fb.innerHTML = `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>You found it! There is a ${p.ours ? 'school — our school' : esc(POI_SHORT[p.t])} there.</div>${teamAwardHTML()}`;
+    wireAward(fb); gridNextButtons();
+  } else {
+    const msg = got[0] !== want[0] && got[1] !== want[1] ? `You tapped ${got.join(' ')}. Find ${want[0]} along the bottom first, then ${want[1]} up the side.`
+      : got[0] !== want[0] ? `Your northings are right. Check the eastings: you tapped ${got[0]}, we need ${want[0]}.`
+        : `Your eastings are right. Check the northings: you tapped ${got[1]}, we need ${want[1]}.`;
+    fb.innerHTML = `<div class="fb bad"><span class="em">${pick(NEARLY)}</span>${msg}</div>`;
+    $('#check').disabled = true;
+    if (G.tries >= 3) { G.done = true; explainRef(p, G.lvl); }
+  }
+}
+function gridNextButtons() {
+  if ($('#nextBtn')) return;
+  const last = G.n !== Infinity && G.idx + 1 >= G.n;
+  const pad = $('#pad'); if (pad) pad.style.display = 'none';
+  const c = $('#check'); if (c && !pad) c.style.display = 'none';
+  const b = H(`<button class="btn" id="nextBtn">${last ? 'Finish' : 'Next ➜'}</button>`); b.onclick = gridNext;
+  $('#fbox').appendChild(b);
+  scrollEnd();
+}
+function gridNext() {
+  G.idx++;
+  if (G.n !== Infinity && G.idx >= G.n) { ov.replaceChildren(); setPanel(gridHeader() + endHTML({ score: G.score, n: G.n })); wireGridHeader(); $('#again').onclick = gridStart; return; }
+  gridAsk();
+}
+function explainRef(p, lvl) {
+  // "Along the corridor, up the stairs" walkthrough on the map
+  const m = cur(), L = m.L;
+  ov.querySelectorAll('.explain').forEach(e => e.remove());
+  const g = E('g', { class: 'hlx explain' }, ov);
+  const E_ = L.e0 + p.x, N_ = L.n1 - p.y;
+  const sqE = Math.floor(E_ / 1000) * 1000, sqN = Math.floor(N_ / 1000) * 1000;
+  const x0 = sqE - L.e0, y0 = L.n1 - sqN;            // bottom-left corner of the square (map units)
+  const r4 = refOf(L, p.x, p.y, 4), r6 = refOf(L, p.x, p.y, 6);
+  const steps = [];
+  const fb = $('#fbox');
+  let box = null;
+  if (fb) { fb.querySelectorAll('.howto').forEach(e => e.remove()); box = H('<div class="fact howto"><b>How to find it</b></div>'); fb.prepend(box); const ta = $('#tryAgain'); if (ta) ta.remove(); }
+  const say = h => { steps.push(h); if (box) box.appendChild(H(`<div style="margin-top:6px">${h}</div>`)); };
+  const lab = (x, y, t, col, dx = 0, dy = 0) => { const lg = cs(g, x, y); E('text', { x: dx, y: dy, 'font-size': 24, 'font-weight': 900, fill: col, 'text-anchor': 'middle', class: 'lbl' }, lg).textContent = t; };
+  const pt = cs(g, p.x, p.y); E('circle', { class: 'pulse', r: 16 }, pt); E('circle', { r: 24, fill: 'none', stroke: '#ff3d00', 'stroke-width': 4 }, pt);
+  fitBox(x0 - 1100, y0 - 1900, 3200, 2800, 1.05);
+  const T = [];
+  const at = (ms, f) => T.push(setTimeout(() => { if (ov.contains(g)) f(); }, ms));
+  at(700, () => {
+    E('line', { x1: x0 - 1000, y1: y0 + 60, x2: x0, y2: y0 + 60, stroke: '#b0351f', 'stroke-width': 6, 'vector-effect': 'non-scaling-stroke', class: 'blink' }, g);
+    E('line', { x1: x0, y1: y0 + 300, x2: x0, y2: y0 - 1000, stroke: '#b0351f', 'stroke-width': 6, 'vector-effect': 'non-scaling-stroke' }, g);
+    lab(x0, y0 + 60, r4[0], '#b0351f', 0, 34);
+    say(`<b style="color:#b0351f">1. Along the corridor:</b> the line on the left of the square is <b>${r4[0]}</b>.`);
+  });
+  at(2400, () => {
+    E('line', { x1: x0 - 40, y1: y0 + 900, x2: x0 - 40, y2: y0, stroke: '#1a5fb4', 'stroke-width': 6, 'vector-effect': 'non-scaling-stroke', class: 'blink' }, g);
+    E('line', { x1: x0 - 300, y1: y0, x2: x0 + 1000, y2: y0, stroke: '#1a5fb4', 'stroke-width': 6, 'vector-effect': 'non-scaling-stroke' }, g);
+    lab(x0, y0, r4[1], '#1a5fb4', -34, 8);
+    say(`<b style="color:#1a5fb4">2. Up the stairs:</b> the line along the bottom of the square is <b>${r4[1]}</b>.`);
+  });
+  at(4100, () => {
+    E('rect', { x: x0, y: y0 - 1000, width: 1000, height: 1000, fill: '#ffd54a', opacity: .3, stroke: '#e6a100', 'stroke-width': 3, 'vector-effect': 'non-scaling-stroke' }, g);
+    say(`<b>3.</b> So the 4-figure grid reference is <b style="font-size:1.3em">${r4[0]} ${r4[1]}</b>.`);
+    if (lvl === 4) say('<b>Top tip:</b> always go along the corridor before you go up the stairs!');
+  });
+  if (lvl === 6) {
+    at(6000, () => {
+      fitBox(x0 - 250, y0 - 1150, 1500, 1500, 1.05);
+      const tg = E('g', {}, g);
+      for (let i = 1; i < 10; i++) {
+        E('line', { x1: x0 + i * 100, y1: y0, x2: x0 + i * 100, y2: y0 + 40, stroke: '#b0351f', 'stroke-width': 3, 'vector-effect': 'non-scaling-stroke' }, tg);
+        E('line', { x1: x0, y1: y0 - i * 100, x2: x0 - 40, y2: y0 - i * 100, stroke: '#1a5fb4', 'stroke-width': 3, 'vector-effect': 'non-scaling-stroke' }, tg);
+      }
+      for (let i = 0; i < 10; i++) { lab(x0 + i * 100 + 50, y0, String(i), '#b0351f', 0, 30); lab(x0, y0 - i * 100 - 50, String(i), '#1a5fb4', -26, 8); }
+      say('<b>4.</b> Now split the square into tenths, numbered 0 to 9.');
+    });
+    at(8000, () => {
+      const te = Math.floor((E_ - sqE) / 100);
+      E('rect', { x: x0 + te * 100, y: y0 - 1000, width: 100, height: 1000, fill: '#b0351f', opacity: .18 }, g);
+      say(`<b style="color:#b0351f">5.</b> Count tenths along: <b>${te}</b>. Eastings = <b>${r6[0]}</b>.`);
+    });
+    at(9800, () => {
+      const tn = Math.floor((N_ - sqN) / 100);
+      E('rect', { x: x0, y: y0 - tn * 100 - 100, width: 1000, height: 100, fill: '#1a5fb4', opacity: .18 }, g);
+      say(`<b style="color:#1a5fb4">6.</b> Count tenths up: <b>${tn}</b>. Northings = <b>${r6[1]}</b>.`);
+    });
+    at(11500, () => {
+      const te = Math.floor((E_ - sqE) / 100), tn = Math.floor((N_ - sqN) / 100);
+      E('rect', { x: x0 + te * 100, y: y0 - tn * 100 - 100, width: 100, height: 100, fill: '#ffd54a', opacity: .7, stroke: '#e6a100', 'stroke-width': 3, 'vector-effect': 'non-scaling-stroke' }, g);
+      say(`<b>7.</b> The 6-figure grid reference is <b style="font-size:1.3em">${r6[0]} ${r6[1]}</b>.`);
+    });
+  }
+  if ($('#fbox')) setTimeout(gridNextButtons, 0);
+}
+function symbolAsk() {
+  const m = cur();
+  const types = [...new Set(m.pois.map(p => p.t))];
+  const t = pick(types), choices = m.pois.filter(p => p.t === t), p = pick(choices);
+  G.p = p; forcePoi(m.pois.indexOf(p));
+  const opts = shuffle([t, ...shuffle(types.filter(x => x !== t)).slice(0, 3)]);
+  const g = cs(ov, p.x, p.y, 'hlx'); E('circle', { class: 'pulse', r: 16 }, g); E('circle', { r: 26, fill: 'none', stroke: '#ff3d00', 'stroke-width': 4 }, g);
+  fitBox(p.x - 600, p.y - 600, 1200, 1200, 1);
+  setPanel(gridHeader() + `
+    <div class="qcard" style="text-align:center"><p class="q">What does this symbol mean?</p>
+    <svg width="150" height="100" viewBox="-45 -30 90 60"><use href="#sym-${t}" transform="scale(2)"/></svg></div>
+    <div class="answers">${opts.map(o => `<button class="btn sec" data-o="${o}">${POI[o]}</button>`).join('')}</div>
+    <div id="fbox"></div>
+    <div class="row"><button class="btn sec" id="skip">Skip</button></div>`);
+  wireGridHeader();
+  panel.querySelectorAll('[data-o]').forEach(b => b.onclick = () => {
+    if (G.done) return; G.done = true;
+    const ok = b.dataset.o === t; if (ok) G.score++;
+    panel.querySelectorAll('[data-o]').forEach(x => x.classList.add(x.dataset.o === t ? 'right' : 'wrong'));
+    $('#fbox').innerHTML = ok ? `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>That symbol means ${POI[t].toLowerCase()}.</div>${teamAwardHTML()}` : `<div class="fb bad"><span class="em">${pick(NEARLY)}</span>That symbol means ${POI[t].toLowerCase()}.</div>`;
+    wireAward($('#fbox'));
+    const last = G.n !== Infinity && G.idx + 1 >= G.n; const s = $('#skip'); s.textContent = last ? 'Finish' : 'Next ➜'; s.className = 'btn';
+  });
+  $('#skip').onclick = gridNext;
+}
+
+/* ------------------------------------------------------------ mode switching */
+function startMode() {
+  document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === S.mode));
+  Q = C = G = null;
+  { const m = cur(); if (m && m.L) m.force = null; }
+  refreshDyn();
+  ({ explore: exploreStart, find: findStart, compass: compassStart, grid: gridStart })[S.mode]();
+}
+document.querySelectorAll('#modeSeg button').forEach(b => b.onclick = () => { S.mode = b.dataset.mode; save(); startMode(); });
+
+/* ------------------------------------------------------------ popovers, modals */
+function openPop(anchor, html, wire) {
+  const p = $('#pop'); p.innerHTML = html; p.hidden = false;
+  const r = anchor.getBoundingClientRect();
+  p.style.left = Math.min(r.left, innerWidth - p.offsetWidth - 10) + 'px';
+  p.style.top = (r.bottom + 8) + 'px';
+  if (r.bottom + 8 + p.offsetHeight > innerHeight) { p.style.top = Math.max(10, r.top - p.offsetHeight - 8) + 'px'; }
+  wire && wire(p);
+  setTimeout(() => document.addEventListener('pointerdown', popAway), 0);
+}
+function popAway(e) { if (!$('#pop').contains(e.target)) closePop(); }
+function closePop() { $('#pop').hidden = true; document.removeEventListener('pointerdown', popAway); }
+function openModal(html, wire) { $('#modalBody').innerHTML = html; $('#modal').hidden = false; wire && wire($('#modalBody')); }
+function closeModal() { $('#modal').hidden = true; }
+$('#modal').addEventListener('pointerdown', e => { if (e.target.id === 'modal' && S.year !== null) closeModal(); });
+
+const YEAR_NOTES = { 1: 'UK countries & capitals', 2: 'Continents, oceans, regions', 3: 'Europe, South West, 4-figure', 4: 'South America, lines, 6-figure', 5: 'World cities, waterways', 6: 'Mountains, volcanoes, highlands', 0: 'Everything' };
+function yearModal(first) {
+  openModal(`<h2>${first ? 'Welcome to Map Explorer!' : 'Choose a year group'}</h2><p>Places and questions match the CLF geography curriculum for each year.</p>
+    <div class="yeargrid">${[1, 2, 3, 4, 5, 6, 0].map(y => `<button data-y="${y}" class="${S.year === y ? 'on' : ''}">${y ? 'Year ' + y : 'All years'}<small>${YEAR_NOTES[y]}</small></button>`).join('')}</div>
+    <div class="setrow" style="border:0"><span>Include earlier years as revision</span><div class="chips"><button class="chip ${S.revision ? 'on' : ''}" data-rev="1">Yes</button><button class="chip ${!S.revision ? 'on' : ''}" data-rev="0">No</button></div></div>`,
+  b => {
+    b.querySelectorAll('[data-rev]').forEach(x => x.onclick = () => { S.revision = x.dataset.rev === '1'; save(); b.querySelectorAll('[data-rev]').forEach(y => y.classList.toggle('on', y === x)); });
+    b.querySelectorAll('[data-y]').forEach(x => x.onclick = () => {
+      S.year = +x.dataset.y; save(); updateTop(); closeModal();
+      if (first) { const def = S.year === 1 ? 'uk' : S.year === 2 ? 'world' : S.map; if (def !== S.map) showMap(def); }
+      startMode();
+    });
+  });
+}
+function updateTop() { $('#yearTxt').textContent = S.year ? 'Year ' + S.year : 'All years'; }
+$('#yearBtn').onclick = () => yearModal(false);
+$('#mapBtn').onclick = e => openPop(e.currentTarget, `<h3>Choose a map</h3>
+  <button class="opt ${S.map === 'world' ? 'on' : ''}" data-m="world">🌍 World</button>
+  <button class="opt ${S.map === 'uk' ? 'on' : ''}" data-m="uk">🇬🇧 United Kingdom</button>
+  ${D.local.map(l => `<button class="opt ${S.map === 'local:' + l.id ? 'on' : ''}" data-m="local:${l.id}">🗺️ ${esc(l.name)}<small>OS-style map</small></button>`).join('')}`,
+p => p.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { closePop(); showMap(b.dataset.m); startMode(); }));
+$('#layerBtn').onclick = e => {
+  const key = mapKind(), L = S.layers[key];
+  const opts = key === 'world' ? [['names', 'Names'], ['colour', 'Colour the continents'], ['lines', 'Equator, tropics and polar circles'], ['grid', 'Lines of latitude and longitude']]
+    : key === 'uk' ? [['names', 'Names'], ['rivers', 'Rivers and canals'], ['regions', 'Regions of England'], ['counties', 'Counties of England']]
+      : [['names', 'Place names and labels'], ['symbols', 'Map symbols']];
+  openPop(e.currentTarget, `<h3>Show on the map</h3>${opts.map(([k, t]) => `<label class="tog"><input type="checkbox" data-l="${k}" ${L[k] ? 'checked' : ''}>${t}</label>`).join('')}${key === 'local' ? '<button class="opt" id="popKey">🔑 Map key</button>' : ''}`,
+    p => {
+      p.querySelectorAll('[data-l]').forEach(c => c.onchange = () => { L[c.dataset.l] = c.checked; save(); restyle(); refreshDyn(); });
+      const k = p.querySelector('#popKey'); if (k) k.onclick = () => { closePop(); showKey(); };
+    });
+  const r = e.currentTarget.getBoundingClientRect(), pp = $('#pop'); pp.style.left = (r.right - pp.offsetWidth) + 'px';
+};
+$('#setBtn').onclick = () => openModal(`<h2>Settings</h2>
+  <div class="setrow"><span>Questions in a set</span><div class="chips">${[5, 10, 15, 20, 0].map(n => `<button class="chip ${S.count === n ? 'on' : ''}" data-c="${n}">${n || '∞'}</button>`).join('')}</div></div>
+  <div class="setrow"><span>Include earlier years as revision</span><div class="chips"><button class="chip ${S.revision ? 'on' : ''}" data-rev="1">Yes</button><button class="chip ${!S.revision ? 'on' : ''}" data-rev="0">No</button></div></div>
+  <div class="setrow"><span>Zoom to the right area for each question</span><div class="chips"><button class="chip ${S.autoZoom ? 'on' : ''}" data-az="1">Yes</button><button class="chip ${!S.autoZoom ? 'on' : ''}" data-az="0">No</button></div></div>
+  <div class="setrow"><span>Extra-large text</span><div class="chips"><button class="chip ${S.big ? 'on' : ''}" data-big="1">Yes</button><button class="chip ${!S.big ? 'on' : ''}" data-big="0">No</button></div></div>
+  <div class="setrow"><span>Grid references</span><div class="chips">${[[0, 'By year'], [4, '4-figure'], [6, '6-figure']].map(([v, t]) => `<button class="chip ${S.gridLevel === v ? 'on' : ''}" data-gl="${v}">${t}</button>`).join('')}</div></div>
+  <p style="margin-top:18px;font-size:15px">Map Explorer · Version ${VERSION}. No pupil information is stored. Settings are saved on this computer only.<br>
+  World map: Natural Earth. UK map: contains OS data © Crown copyright and database right 2024; Office for National Statistics (Open Government Licence). OS-style maps: © OpenStreetMap contributors, drawn in the style of Ordnance Survey maps using the British National Grid.</p>
+  <button class="btn" id="closeSet">Done</button>`, b => {
+  const grp = (attr, f) => b.querySelectorAll(`[${attr}]`).forEach(x => x.onclick = () => { f(x.getAttribute(attr)); save(); b.querySelectorAll(`[${attr}]`).forEach(y => y.classList.toggle('on', y === x)); });
+  grp('data-c', v => S.count = +v);
+  grp('data-rev', v => S.revision = v === '1');
+  grp('data-az', v => S.autoZoom = v === '1');
+  grp('data-big', v => { S.big = v === '1'; document.body.classList.toggle('big', S.big); });
+  grp('data-gl', v => S.gridLevel = +v);
+  b.querySelector('#closeSet').onclick = () => { closeModal(); startMode(); };
+});
+
+/* ------------------------------------------------------------ teams */
+const TEAM_COL = [['Red', '#e53935'], ['Blue', '#1e88e5'], ['Green', '#2e9e4f'], ['Yellow', '#e6a100'], ['Purple', '#8e24aa'], ['Orange', '#f4511e']];
+const teamList = () => TEAM_COL.slice(0, S.teams).map(([n, c]) => ({ n, c }));
+function drawTeams() {
+  const st = $('#teamStrip');
+  st.hidden = !S.teams;
+  st.innerHTML = teamList().map((t, i) => `<div class="team" style="--c:${t.c}">${t.n}<b>${S.scores[i]}</b><button data-m="${i}">−</button><button data-p="${i}">＋</button></div>`).join('');
+  st.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { S.scores[+b.dataset.p]++; save(); drawTeams(); });
+  st.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { S.scores[+b.dataset.m] = Math.max(0, S.scores[+b.dataset.m] - 1); save(); drawTeams(); });
+  $('#teamsBtn').classList.toggle('on', !!S.teams);
+  requestAnimationFrame(resize);
+}
+$('#teamsBtn').onclick = () => openModal(`<h2>Teams</h2><p>Play in teams and give points for correct answers.</p>
+  <div class="setrow"><span>Number of teams</span><div class="chips">${[0, 2, 3, 4, 5, 6].map(n => `<button class="chip ${S.teams === n ? 'on' : ''}" data-t="${n}">${n || 'Off'}</button>`).join('')}</div></div>
+  <div class="row" style="margin-top:18px"><button class="btn sec" id="resetScores">Reset scores</button><button class="btn" id="closeT">Done</button></div>`, b => {
+  b.querySelectorAll('[data-t]').forEach(x => x.onclick = () => { S.teams = +x.dataset.t; save(); drawTeams(); b.querySelectorAll('[data-t]').forEach(y => y.classList.toggle('on', y === x)); });
+  b.querySelector('#resetScores').onclick = () => { S.scores = [0, 0, 0, 0, 0, 0]; save(); drawTeams(); toast('Scores reset'); };
+  b.querySelector('#closeT').onclick = closeModal;
+});
+
+/* ------------------------------------------------------------ pen and spotlight */
+let tool = null, inkCol = '#e53935', strokes = [], spot = null;
+const ink = $('#ink'), ictx = ink.getContext('2d');
+function redrawInk() {
+  const dpr = devicePixelRatio; ictx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ictx.clearRect(0, 0, ink.width, ink.height);
+  if (spot) {
+    ictx.fillStyle = 'rgba(0,0,0,.62)'; ictx.fillRect(0, 0, ink.width, ink.height);
+    ictx.globalCompositeOperation = 'destination-out'; ictx.beginPath(); ictx.arc(spot.x, spot.y, spot.r, 0, 7); ictx.fill(); ictx.globalCompositeOperation = 'source-over';
+  }
+  for (const s of strokes) {
+    ictx.strokeStyle = s.c; ictx.lineWidth = 7; ictx.lineCap = ictx.lineJoin = 'round';
+    ictx.beginPath(); s.p.forEach(([x, y], i) => i ? ictx.lineTo(x, y) : ictx.moveTo(x, y)); ictx.stroke();
+  }
+}
+function setTool(t) {
+  tool = tool === t ? null : t;
+  ink.classList.toggle('active', !!tool);
+  $('#penBtn').classList.toggle('on', tool === 'pen');
+  $('#spotBtn').classList.toggle('on', tool === 'spot');
+  $('#inkBar').hidden = !tool;
+  $('#inkBar').querySelectorAll('.sw').forEach(b => b.style.display = tool === 'pen' ? '' : 'none');
+  $('#inkClear').style.display = tool === 'pen' ? '' : 'none';
+  if (tool === 'spot' && !spot) { const r = ink.getBoundingClientRect(); spot = { x: r.width / 2, y: r.height / 2, r: Math.min(r.width, r.height) * .2 }; }
+  if (tool !== 'spot') spot = null;
+  redrawInk();
+}
+$('#penBtn').onclick = () => setTool('pen');
+$('#spotBtn').onclick = () => setTool('spot');
+$('#inkDone').onclick = () => setTool(tool);
+$('#inkClear').onclick = () => { strokes = []; redrawInk(); };
+$('#inkBar').querySelectorAll('.sw').forEach(b => b.onclick = () => { inkCol = b.dataset.ink; $('#inkBar').querySelectorAll('.sw').forEach(x => x.classList.toggle('on', x === b)); });
+$('#inkBar').querySelector('.sw').classList.add('on');
+let inkDrag = null;
+ink.addEventListener('pointerdown', e => {
+  ink.setPointerCapture(e.pointerId);
+  const r = ink.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  if (tool === 'pen') { inkDrag = { c: inkCol, p: [[x, y]] }; strokes.push(inkDrag); }
+  else if (tool === 'spot') { inkDrag = { x0: x, y0: y, sx: spot.x, sy: spot.y }; spot.x = x; spot.y = y; }
+  redrawInk();
+});
+ink.addEventListener('pointermove', e => {
+  if (!inkDrag) return;
+  const r = ink.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  if (tool === 'pen') inkDrag.p.push([x, y]); else if (tool === 'spot') { spot.x = x; spot.y = y; }
+  redrawInk();
+});
+ink.addEventListener('pointerup', () => { inkDrag = null; });
+ink.addEventListener('wheel', e => { if (tool === 'spot') { e.preventDefault(); spot.r = clamp(spot.r * Math.exp(-e.deltaY * .002), 60, 600); redrawInk(); } }, { passive: false });
+
+/* ------------------------------------------------------------ panel toggle */
+$('#panelToggle').onclick = () => { S.panelOpen = !S.panelOpen; save(); $('#panel').classList.toggle('closed', !S.panelOpen); setTimeout(resize, 220); };
+
+/* ------------------------------------------------------------ start */
+buildDefs();
+document.body.classList.toggle('big', S.big);
+$('#panel').classList.toggle('closed', !S.panelOpen);
+updateTop(); drawTeams();
+new ResizeObserver(() => resize()).observe($('#mapWrap'));
+resize();
+if (!['world', 'uk'].includes(S.map) && !D.local.some(l => 'local:' + l.id === S.map)) S.map = 'world';
+showMap(S.map);
+startMode();
+if (S.year === null) yearModal(true);
