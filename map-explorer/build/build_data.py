@@ -170,7 +170,10 @@ def build_world():
                 conts.add(pc)
         lp = rob_geom(largest).representative_point()
         cap = caps.get(code, [])
+        iso2 = (p.get('ISO_A2_EH') or '').lower()
         countries[code] = dict(n=name, c=cont if cont != 'Seven seas (open ocean)' else 'Islands', cap=' / '.join(cap[:2]), l=[round(lp.x), round(lp.y)])
+        if len(iso2) == 2 and iso2 not in ('eh', 'aq'):      # flags: skip disputed / unofficial ones
+            countries[code]['f'] = iso2
         if code == 'RUS':
             countries[code]['c'] = 'Europe and Asia'
     lakes = []
@@ -184,7 +187,23 @@ def build_world():
         for lat, lon in pts:
             anchors.append([name, lat, lon])
     caplist = [[n, countries[c]['n'] if c in countries else c, la, lo] for n, c, la, lo in caplist]
-    return dict(w=WW, h=round(WH, 1), R=R, countries=countries, parts=parts, lakes=''.join(lakes), anchors=anchors, caps=caplist)
+    # tectonic plate boundaries (Bird 2002, via github.com/fraxen/tectonicplates, ODC-BY)
+    plates = []
+    pf = os.path.join(RAW, 'PB2002_boundaries.json')
+    if os.path.exists(pf):
+        for f in load('PB2002_boundaries.json')['features']:
+            cs = f['geometry']['coordinates']
+            segs = [cs] if f['geometry']['type'] == 'LineString' else cs
+            for seg in segs:
+                run = []
+                for lon, lat in seg:
+                    if run and abs(lon - run[-1][0]) > 180:
+                        if len(run) > 1: plates.append(run)
+                        run = []
+                    run.append((lon, lat))
+                if len(run) > 1: plates.append(run)
+    pd = ''.join(geom_d(rob_geom(LineString(r)).simplify(1.2), 1) for r in plates)
+    return dict(w=WW, h=round(WH, 1), R=R, countries=countries, parts=parts, lakes=''.join(lakes), anchors=anchors, caps=caplist, plates=pd)
 
 
 # ================================================================ UK
@@ -248,7 +267,7 @@ def build_uk():
     rivers = {}
     for k, ways in rv.items():
         g = merge([bng_geom(LineString(w)) for w in ways if len(w) > 1])
-        g = g.simplify(150)
+        g = g.simplify(40)
         rivers[k] = geom_d(uk_unit(g))
     out['rivers'] = rivers
     anchors = []

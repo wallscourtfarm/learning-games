@@ -169,6 +169,10 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 }
 .chip.on { background: var(--blue); color: #fff; box-shadow: none; }
 
+.flag { display: block; width: auto; border: 1px solid #c9d3da; border-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,.15); margin: 6px 0 8px; background: #fff; }
+.qcard .flag { margin: 8px auto; }
+.fb .flag { display: inline-block; margin: 8px 0 0; }
+
 /* keypad */
 .refbox { display: flex; justify-content: center; gap: 6px; align-items: center; }
 .refbox span {
@@ -240,6 +244,8 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 }
 
 /* ---------- map styling ---------- */
+/* only the marker itself is tappable, never its name, so countries and counties under labels still work */
+#map text, .mk text, .mkline text { pointer-events: none; }
 #w-gratlab .minor { display: none; }
 #map.zoomed #w-gratlab .minor { display: inline; }
 .cs { transform-box: view-box; }

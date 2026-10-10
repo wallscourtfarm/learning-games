@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '10.10.26g';
+const VERSION = '10.10.26i';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -15,7 +15,7 @@ const DEFAULTS = {
   year: null, map: 'world', mode: 'explore', revision: true, autoZoom: true, count: 10, big: false,
   teams: 0, scores: [0, 0, 0, 0, 0, 0], gridLevel: 0, gridTask: 'give', globeTask: 'read', panelOpen: true,
   layers: {
-    world: { names: true, colour: true, lines: true, grid: false, markers: true, tz: false },
+    world: { names: true, colour: true, lines: true, grid: false, markers: true, tz: false, climate: false, plates: false },
     uk: { names: true, regions: false, counties: false, rivers: true, markers: true },
     local: { names: true, symbols: true, contours: true, tenths: true, hide: [] },
   },
@@ -91,17 +91,57 @@ function dirName(a, b, four) {
   return DIR8[Math.round(br / 45) % 8];
 }
 
-/* ------------------------------------------------------------ Gall-Peters projection (matches build) */
-// Equal-area: every country is shown at its true size compared with the others.
-// (Functions keep their old names, rob/robInv, so the rest of the app is unchanged.)
-const WR = D.world.R, WW = D.world.w, WH = D.world.h, C45 = Math.cos(Math.PI / 4);
-function rob(lon, lat) {
-  return { x: WW / 2 + WR * lon * Math.PI / 180 * C45, y: WH / 2 - WR * Math.sin(clamp(lat, -90, 90) * Math.PI / 180) / C45 };
-}
-function robInv(x, y) {
-  const s = (WH / 2 - y) * C45 / WR, lon = (x - WW / 2) / (WR * C45) * 180 / Math.PI;
+/* ------------------------------------------------------------ world map projections */
+// Gall-Peters (default, matches the build): equal-area, so every country is shown at its true size.
+// Mercator (switchable): the map children usually see online and on many wall maps; it makes
+// places near the poles look far too big. Functions keep their old names, rob/robInv.
+const WR = D.world.R, WW = D.world.w, GH = D.world.h, C45 = Math.cos(Math.PI / 4);
+const MR = WW / (2 * Math.PI), MLAT = 84, MH = 2 * MR * Math.log(Math.tan(Math.PI / 4 + MLAT * Math.PI / 360));
+let PROJ = 'gp', WH = GH;
+function gpF(lon, lat) { return { x: WW / 2 + WR * lon * Math.PI / 180 * C45, y: GH / 2 - WR * Math.sin(clamp(lat, -90, 90) * Math.PI / 180) / C45 }; }
+function gpInv(x, y) {
+  const s = (GH / 2 - y) * C45 / WR, lon = (x - WW / 2) / (WR * C45) * 180 / Math.PI;
   if (Math.abs(s) > 1 || Math.abs(lon) > 180) return null;
   return { lat: Math.asin(s) * 180 / Math.PI, lon };
+}
+function mcF(lon, lat) { const f = clamp(lat, -MLAT, MLAT) * Math.PI / 180; return { x: WW / 2 + MR * lon * Math.PI / 180, y: MH / 2 - MR * Math.log(Math.tan(Math.PI / 4 + f / 2)) }; }
+function mcInv(x, y) {
+  const lon = (x - WW / 2) / MR * 180 / Math.PI, lat = (2 * Math.atan(Math.exp((MH / 2 - y) / MR)) - Math.PI / 2) * 180 / Math.PI;
+  if (Math.abs(lon) > 180 || Math.abs(lat) > MLAT + .01) return null;
+  return { lat, lon };
+}
+function rob(lon, lat) { return PROJ === 'merc' ? mcF(lon, lat) : gpF(lon, lat); }
+function robInv(x, y) { return PROJ === 'merc' ? mcInv(x, y) : gpInv(x, y); }
+function fromGP(x, y) {                       // stored data is in Gall-Peters units; convert to the current projection
+  if (PROJ === 'gp') return [x, y];
+  const sn = clamp((GH / 2 - y) * C45 / WR, -1, 1), lon = clamp((x - WW / 2) / (WR * C45) * 180 / Math.PI, -180, 180);
+  const p = rob(lon, Math.asin(sn) * 180 / Math.PI); return [p.x, p.y];
+}
+function reprojD(d) {
+  if (PROJ === 'gp') return d;
+  return parsePath(d).map(r => 'M' + r.map(([x, y]) => fromGP(x, y).map(v => v.toFixed(1)).join(' ')).join('L') + 'z').join('');
+}
+function reprojLines(d) {
+  if (PROJ === 'gp') return d;
+  return parsePath(d).map(r => 'M' + r.map(([x, y]) => fromGP(x, y).map(v => v.toFixed(1)).join(' ')).join('L')).join('');
+}
+function reprojItems() {
+  for (const it of ITEMS) if (it.m === 'world') {
+    if (!it._gp) it._gp = { xy: it.xy, pts: it.pts };
+    if (it._gp.xy) it.xy = fromGP(...it._gp.xy);
+    if (it._gp.pts) it.pts = it._gp.pts.map(q => fromGP(...q));
+  }
+  for (const c of Object.values(D.world.countries)) if (c.l) { if (!c._l) c._l = c.l; c.l = fromGP(...c._l); }
+}
+function setProj(p) {
+  if (p === PROJ || S.map !== 'world') return;
+  const ll = robInv(V.cx, V.cy) || { lat: 20, lon: 0 }, rel = V.k / fitK(V.b.w, V.b.h);
+  PROJ = p; WH = p === 'merc' ? MH : GH;
+  reprojItems();
+  showMap('world');
+  const q = rob(ll.lon, ll.lat); goTo(q.x, q.y, rel * fitK(V.b.w, V.b.h), 0);
+  startMode();
+  toast(p === 'merc' ? 'Mercator map: look how big Greenland, Russia and Antarctica have become!' : 'Gall-Peters map: every country at its true size', 3200);
 }
 function km(a, b) {                           // great-circle distance between {lat,lon}
   const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
@@ -294,7 +334,7 @@ const KIND_TXT = {
   hemi: 'half of the Earth', region: 'a region of England', county: 'a county', river: 'a river or canal', line: 'a long feature', point: 'a place',
 };
 function kindText(it) {
-  if (it.k === 'point') return it.cap ? 'a capital city' : it.phys ? 'a physical feature' : it.id === 'school' ? 'our school, WFA' : /city|ton$|ham$|ool$|eds$|ield$|stle$/.test(it.n) || ['bristol', 'exeter', 'bath', 'manchester', 'birmingham', 'liverpool', 'leeds', 'sheffield', 'newcastle', 'mumbai', 'newyork', 'rio', 'singapore', 'sydney'].includes(it.id) ? 'a city' : 'a landmark';
+  if (it.k === 'point') return it.cap ? 'a capital city' : it.phys ? 'a physical feature' : it.res ? 'a place where natural resources are dug from the ground' : it.id === 'school' ? 'our school, WFA' : /city|ton$|ham$|ool$|eds$|ield$|stle$/.test(it.n) || ['bristol', 'exeter', 'bath', 'manchester', 'birmingham', 'liverpool', 'leeds', 'sheffield', 'newcastle', 'mumbai', 'newyork', 'rio', 'singapore', 'sydney'].includes(it.id) ? 'a city' : 'a landmark';
   if (it.k === 'line') return it.phys ? 'a mountain range or hills' : 'a landmark';
   return KIND_TXT[it.k] || 'a place';
 }
@@ -324,20 +364,30 @@ function buildWorld() {
   const land = E('g', { id: 'w-land' }, g);
   const parts = [];
   for (const [code, cont, d] of W.parts) {
-    const p = E('path', { d, class: 'land', 'data-code': code, 'data-cont': cont }, land);
+    const p = E('path', { d: reprojD(d), class: 'land', 'data-code': code, 'data-cont': cont }, land);
     parts.push(p);
   }
-  E('path', { d: W.lakes, fill: '#cfe7f5', stroke: '#8a8a7a', 'stroke-width': .6, 'vector-effect': 'non-scaling-stroke' }, g);
+  E('path', { d: reprojD(W.lakes), fill: '#cfe7f5', stroke: '#8a8a7a', 'stroke-width': .6, 'vector-effect': 'non-scaling-stroke' }, g);
   // time zones (standard time, Natural Earth)
   const tz = E('g', { id: 'w-tz', 'pointer-events': 'none' }, g);
-  const tzPaths = D.tz.map(z => E('path', { d: z.d, fill: Math.abs(Math.round(z.z)) % 2 ? 'rgba(40,70,160,.16)' : 'rgba(255,255,255,0)', stroke: '#5c6fa8', 'stroke-width': .9, 'stroke-dasharray': '4 3', 'vector-effect': 'non-scaling-stroke', 'data-z': z.z }, tz));
+  const tzPaths = D.tz.map(z => E('path', { d: reprojD(z.d), fill: Math.abs(Math.round(z.z)) % 2 ? 'rgba(40,70,160,.16)' : 'rgba(255,255,255,0)', stroke: '#5c6fa8', 'stroke-width': .9, 'stroke-dasharray': '4 3', 'vector-effect': 'non-scaling-stroke', 'data-z': z.z }, tz));
   for (let z = -12; z <= 14; z++) {
     const p = rob(clamp(z * 15, -176, 176), -57);
     E('text', { 'text-anchor': 'middle', 'font-size': 14, 'font-weight': 900, fill: '#26408b' }, cs(tz, p.x, p.y, 'lbl')).textContent = z === 0 ? 'GMT' : (z > 0 ? '+' + z : '−' + -z);
   }
+  // climate zones (bands between the tropics and the polar circles)
+  const clim = E('g', { id: 'w-climate', 'pointer-events': 'none' }, g);
+  const band = (a, b, fill) => { const p1 = rob(-180, a), p2 = rob(180, b); E('rect', { x: p1.x, y: Math.min(p1.y, p2.y), width: p2.x - p1.x, height: Math.abs(p2.y - p1.y), fill }, clim); };
+  band(-23.44, 23.44, 'rgba(255,112,67,.22)'); band(23.44, 66.56, 'rgba(102,187,106,.18)'); band(-66.56, -23.44, 'rgba(102,187,106,.18)');
+  band(66.56, 90, 'rgba(66,165,245,.25)'); band(-90, -66.56, 'rgba(66,165,245,.25)');
+  for (const [lat, t, col] of [[8, 'TROPICAL', '#bf360c'], [45, 'TEMPERATE', '#2e7d32'], [-45, 'TEMPERATE', '#2e7d32'], [76, 'POLAR', '#1565c0'], [-75, 'POLAR', '#1565c0']]) {
+    const q = rob(-150, lat); E('text', { 'font-size': 17, 'font-weight': 900, fill: col, 'letter-spacing': 2 }, cs(clim, q.x, q.y, 'lbl')).textContent = t;
+  }
+  // tectonic plate boundaries
+  if (D.world.plates) E('path', { id: 'w-plates', d: reprojLines(D.world.plates), fill: 'none', stroke: '#c62828', 'stroke-width': 2.4, 'stroke-linejoin': 'round', 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'none' }, g);
   // lines of latitude and longitude, every 10 degrees, drawn over the land
   const grat = E('g', { id: 'w-grat', stroke: '#4f86b8', 'stroke-width': .8, opacity: .75, fill: 'none' }, g);
-  for (let lat = -80; lat <= 80; lat += 10) { const a = rob(-180, lat), b = rob(180, lat); E('path', { d: `M${a.x} ${a.y}H${b.x}`, 'vector-effect': 'non-scaling-stroke' }, grat); }
+  for (let lat = -80; lat <= 80; lat += 10) { if (PROJ === 'merc' && Math.abs(lat) > MLAT) continue; const a = rob(-180, lat), b = rob(180, lat); E('path', { d: `M${a.x} ${a.y}H${b.x}`, 'vector-effect': 'non-scaling-stroke' }, grat); }
   for (let lon = -180; lon <= 180; lon += 10) { const pts = []; for (let lat = -90; lat <= 90; lat += 5) pts.push(rob(lon, lat)); E('path', { d: 'M' + pts.map(p => p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join('L'), 'vector-effect': 'non-scaling-stroke' }, grat); }
   const glab = E('g', { id: 'w-gratlab' }, g);
   const deg = (v, pos, neg) => v === 0 ? '0°' : Math.abs(v) + '°' + (v > 0 ? pos : neg);
@@ -371,6 +421,8 @@ function styleWorld(m) {
   m.g.querySelector('#w-grat').style.display = grid ? '' : 'none';
   m.g.querySelector('#w-gratlab').style.display = grid ? '' : 'none';
   m.g.querySelector('#w-tz').style.visibility = tzOn ? '' : 'hidden';
+  m.g.querySelector('#w-climate').style.display = L.climate ? '' : 'none';
+  const pl = m.g.querySelector('#w-plates'); if (pl) pl.style.display = L.plates ? '' : 'none';
   m.g.querySelector('#w-lines').style.display = L.lines ? '' : 'none';
 }
 
@@ -489,15 +541,16 @@ function styleLocal(m) {
   declutter();
 }
 
-function cur() { return built[S.map]; }
+const cacheKey = id => id === 'world' ? 'world:' + PROJ : id;
+function cur() { return built[cacheKey(S.map)]; }
 function ensureMap(id) {
-  if (built[id]) return built[id];
+  if (built[cacheKey(id)]) return built[cacheKey(id)];
   let m;
   if (id === 'world') m = buildWorld();
   else if (id === 'merc') m = buildMerc();
   else if (id === 'uk') m = buildUK();
   else m = buildLocal(id.split(':')[1]);
-  built[id] = m; return m;
+  built[cacheKey(id)] = m; return m;
 }
 function showMap(id, keepView) {
   S.map = id; if (id !== 'merc') save();
@@ -518,6 +571,8 @@ function showMap(id, keepView) {
   if (!id.startsWith('local')) $('#zoomBar').style.left = '';
   $('#symBtn').textContent = id.startsWith('local') ? '📍 Symbols' : '📍 Places';
   $('#symBtn').hidden = $('#layerBtn').hidden = id === 'merc';
+  $('#projBtn').hidden = id !== 'world';
+  $('#projBtn').textContent = PROJ === 'merc' ? '🗺️ Mercator ▾' : '🌍 Gall-Peters ▾';
   buildViewBar();
   const v = views[id];
   if (keepView && v) { V.cx = v.cx; V.cy = v.cy; V.k = v.k; applyView(); }
@@ -535,7 +590,7 @@ function mapLabel(id) {
   return { school: 'OS: WFA', gorge: 'OS: Avon Gorge', penyfan: 'OS: Pen y Fan' }[id.split(':')[1]] || 'OS map';
 }
 function setAttrib() {
-  const a = S.map === 'world' ? 'Map data: Natural Earth · Gall-Peters projection (true sizes)' : S.map === 'merc' ? 'Map data: Natural Earth · Mercator projection' :
+  const a = S.map === 'world' ? (PROJ === 'merc' ? 'Map data: Natural Earth · Mercator projection (sizes near the poles look much too big)' : 'Map data: Natural Earth · Gall-Peters projection (true sizes)') : S.map === 'merc' ? 'Map data: Natural Earth · Mercator projection' :
     S.map === 'uk' ? 'Contains OS data © Crown copyright and database right 2024 · Source: Office for National Statistics (OGL) · Natural Earth' :
       `© OpenStreetMap contributors · Heights: OS Terrain 50 © Crown copyright · OS-style map, British National Grid square ${cur().L.sq || 'ST'}`;
   $('#attrib').textContent = a + ' · Version ' + VERSION;
@@ -565,19 +620,20 @@ function fitLL(bb, ms) {
 function fitBNG(bb, ms) { const a = bngToUk(bb[0], bb[3]), b = bngToUk(bb[2], bb[1]); fitBox(a.x, a.y, b.x - a.x, b.y - a.y, 1.05, ms); }
 
 /* ------------------------------------------------------------ dynamic layer: markers & labels */
-function markerColour(it) { return it.id === 'school' ? '#1798d3' : it.cap ? '#d32f2f' : it.phys ? '#2e7d32' : '#5e35b1'; }
-function placeCat(it) { return it.k === 'river' ? 'river' : it.k === 'line' ? 'line' : it.cap ? 'cap' : it.phys ? 'phys' : 'place'; }
-const PLACE_CATS = { cap: 'Capital cities', place: 'Cities and landmarks', phys: 'Physical features (mountains, hills, gorges)', line: 'Long features (mountain ranges, walls, faults)' };
+function markerColour(it) { return it.id === 'school' ? '#1798d3' : it.cap ? '#d32f2f' : it.phys ? '#2e7d32' : it.res ? '#795548' : '#5e35b1'; }
+function placeCat(it) { return it.k === 'river' ? 'river' : it.k === 'line' ? 'line' : it.cap ? 'cap' : it.phys ? 'phys' : it.res ? 'res' : 'place'; }
+const PLACE_CATS = { cap: 'Capital cities', place: 'Cities and landmarks', phys: 'Physical features (mountains, hills, gorges)', res: 'Natural resources (mines and quarries)', line: 'Long features (mountain ranges, walls, faults)' };
 function drawMarker(parent, it, opts = {}) {
   const [x, y] = it.xy;
   const g = cs(parent, x, y, 'mk' + (it.cap || it.id === 'school' ? ' capm' : '') + (opts.rev ? ' rev' : ''));
   g.dataset.id = it.id;
-  E('circle', { r: 26, fill: 'transparent' }, g);
+  E('circle', { r: 15, fill: 'transparent' }, g);
   const sg = E('g', { class: 'shape' }, g);
   sg.style.transform = `scale(calc(var(--ms, 1) * ${opts.rev ? .62 : 1}))`;          // earlier years' places are drawn smaller
   if (it.phys) E('path', { d: 'M0-13L12 9H-12z', fill: markerColour(it), stroke: '#fff', 'stroke-width': 2.5, class: 'dot' }, sg);
   else if (it.id === 'school') { E('circle', { r: 17, fill: '#fff', stroke: '#1798d3', 'stroke-width': 2.5 }, sg); E('image', { href: 'wfa-icon.png', x: -12, y: -14, width: 24, height: 27.5 }, sg); }
   else if (it.cap) E('rect', { x: -9, y: -9, width: 18, height: 18, fill: markerColour(it), stroke: '#fff', 'stroke-width': 2.5, transform: 'rotate(45)' }, sg);
+  else if (it.res) E('rect', { x: -8, y: -8, width: 16, height: 16, rx: 3, fill: markerColour(it), stroke: '#fff', 'stroke-width': 2.5, class: 'dot' }, sg);
   else E('circle', { r: 9, fill: markerColour(it), class: 'dot' }, sg);
   if (opts.label) {
     const t = E('text', { x: opts.rev ? 10 : it.id === 'school' ? 21 : 15, y: opts.rev ? 5 : 6, 'font-size': opts.rev ? 15 : 18, opacity: opts.rev ? .85 : 1 }, g);
@@ -955,9 +1011,13 @@ function drawMapKey() {
     ${hc.has('cap') ? '' : row('<rect x="-8" y="-8" width="16" height="16" fill="#d32f2f" stroke="#fff" stroke-width="2" transform="rotate(45)"/>', 'Capital city')}
     ${hc.has('place') ? '' : row('<circle r="8" fill="#5e35b1" stroke="#fff" stroke-width="2"/>', 'City or landmark')}
     ${hc.has('phys') ? '' : row('<path d="M0-11L10 8H-10z" fill="#2e7d32" stroke="#fff" stroke-width="2"/>', 'Physical feature')}
+    ${hc.has('res') || !visibleItems().some(i => i.res) ? '' : row('<rect x="-7" y="-7" width="14" height="14" rx="3" fill="#795548" stroke="#fff" stroke-width="2"/>', 'Natural resource')}
     ${hc.has('line') ? '' : row('<path d="M-12 0H12" stroke="#8d5524" stroke-width="4" stroke-dasharray="1 5" stroke-linecap="round"/>', 'Mountain range')}
+    ${S.map === 'world' && S.layers.world.plates ? row('<path d="M-12 0H12" stroke="#c62828" stroke-width="3"/>', 'Plate boundary') : ''}
+    ${S.map === 'world' && S.layers.world.climate ? row('<rect x="-11" y="-11" width="22" height="22" fill="rgba(255,112,67,.45)"/>', 'Tropical zone') + row('<rect x="-11" y="-11" width="22" height="22" fill="rgba(102,187,106,.4)"/>', 'Temperate zone') + row('<rect x="-11" y="-11" width="22" height="22" fill="rgba(66,165,245,.5)"/>', 'Polar zone') : ''}
     ${S.map === 'uk' && S.layers.uk.rivers ? row('<path d="M-12 0H12" stroke="#1e88e5" stroke-width="4"/>', 'River') : ''}
-    ${yr() && S.revision ? `<div class="small">Small symbols: earlier years</div>` : ''}`;
+    ${yr() && S.revision ? `<div class="small">Small symbols: earlier years</div>` : ''}
+    ${S.map === 'world' && PROJ === 'merc' ? `<div class="small" style="color:#b0351f">Mercator map: sizes near the poles<br>look much too big</div>` : ''}`;
   $('#mapKeyX').onclick = () => { S.mapKeyOff = true; save(); drawMapKey(); toast('The key is in 📍 Places if you want it back'); };
 }
 function legendHTML() {
@@ -972,8 +1032,12 @@ function exploreTap(p, cx, cy) {
   if (hit) { const it = byId[hit.dataset.id]; showItemCard(it); highlightItem(it, 'sel'); return; }
   const m = cur();
   // lines (mountain ranges, rivers) near the tap
-  const lineItems = visibleItems().filter(i => i.k === 'line' || (i.k === 'river' && S.layers.uk.rivers));
-  for (const it of lineItems) { const q = nearestOnLines(itemLines(it), p); if (q && q.d / V.k < 18) { showItemCard(it); highlightItem(it, 'sel'); return; } }
+  // long features and rivers only win if the tap is almost on the line (so counties underneath still work)
+  const mkOn = S.layers[S.map] && S.layers[S.map].markers !== false, hc = new Set((S.layers[S.map] || {}).hideCats || []);
+  const lineItems = visibleItems().filter(i => (i.k === 'line' && mkOn && !hc.has('line')) || (i.k === 'river' && S.layers.uk.rivers));
+  let bestLine = null, bestD = 9;
+  for (const it of lineItems) { const q = nearestOnLines(itemLines(it), p); if (q && q.d / V.k < bestD) { bestD = q.d / V.k; bestLine = it; } }
+  if (bestLine) { showItemCard(bestLine); highlightItem(bestLine, 'sel'); return; }
   if (S.map === 'world') {
     const part = worldLandAt(p);
     if (part) {
@@ -981,7 +1045,7 @@ function exploreTap(p, cx, cy) {
       const it = ITEMS.find(i => i.m === 'world' && i.k === 'country' && i.ref === code);
       m.parts.filter(e => e.dataset.code === code).forEach(e => e.classList.add('sel'));
       const cont = part.dataset.cont;
-      showCard(c.n, code === 'RUS' ? 'A country in Europe and Asia' : code === 'GBR' ? 'Our country — in Europe' : 'A country in ' + (cont === 'Islands' ? 'the ocean' : cont), [['Continent', code === 'RUS' ? 'Europe and Asia' : cont], ['Capital city', c.cap || '—']], it && it.f);
+      showCard(c.n, code === 'RUS' ? 'A country in Europe and Asia' : code === 'GBR' ? 'Our country — in Europe' : 'A country in ' + (cont === 'Islands' ? 'the ocean' : cont), [['Continent', code === 'RUS' ? 'Europe and Asia' : cont], ['Capital city', c.cap || '—']], it && it.f, c.f);
       return;
     }
     const ll = robInv(p.x, p.y); if (!ll) return;
@@ -997,7 +1061,7 @@ function exploreTap(p, cx, cy) {
     const n = e.dataset.n; const it = ITEMS.find(i => i.m === 'uk' && i.k === kind && i.ref === n);
     e.classList.add('sel');
     const country = m.ctry.find(x => x.isPointInFill(pt));
-    showCard(kind === 'county' ? n.replace('Bristol', 'City of Bristol') : n, label, country ? [['Country', country.dataset.n]] : [], it && it.f);
+    showCard(kind === 'county' ? n.replace('Bristol', 'City of Bristol') : n, label, country ? [['Country', country.dataset.n]] : [], (it && it.f || '') + (kind === 'ukcountry' && n === 'Northern Ireland' ? ' ' + NI_NOTE : ''), kind === 'ukcountry' ? UK_FLAGS[n] : null);
     return true;
   };
   if (S.layers.uk.counties && tryLayer(m.ctys, 'A county in England', 'county')) return;
@@ -1009,14 +1073,24 @@ function exploreTap(p, cx, cy) {
   showCard(sea, sea.includes('Ocean') ? 'An ocean' : sea.includes('Channel') ? 'A stretch of sea' : 'A sea', [], it && it.f);
   if (it) highlightItem(it, 'sel');
 }
+const UK_FLAGS = { England: 'gb-eng', Scotland: 'gb-sct', Wales: 'gb-wls', London: 'gb-eng', Cardiff: 'gb-wls', Edinburgh: 'gb-sct' };
+function flagFor(it) {                        // flag code for an item or a country code
+  if (typeof it === 'string') return (D.world.countries[it] || {}).f || null;
+  if (it.k === 'country') return (D.world.countries[it.ref] || {}).f || null;
+  if (it.k === 'ukcountry' || (it.m === 'uk' && it.cap)) return UK_FLAGS[it.ref || it.n] || null;
+  if (it.m === 'world' && it.cap) { const c = Object.values(D.world.countries).find(c => c.cap && c.cap.split(' / ').includes(it.n)); return c ? c.f : null; }
+  return null;
+}
+const flagImg = (f, h = 80, alt = '') => f ? `<img class="flag" src="flags/${f}.svg" alt="${esc(alt)}" style="height:${h}px">` : '';
+const NI_NOTE = 'Northern Ireland does not have its own official flag. The Union Flag of the United Kingdom is used there.';
 function showItemCard(it) {
   const rows = [];
   if (it.m === 'world' && it.ll) { const ll = Array.isArray(it.ll) ? it.ll : null; if (ll) rows.push(['Hemisphere', (ll[0] >= 0 ? 'Northern' : 'Southern') + ' and ' + (ll[1] >= 0 ? 'eastern' : 'western')]); }
   rows.push(['Year group', it.y.length ? 'Year ' + it.y.join(', ') : '—']);
-  showCard(it.n, kindText(it)[0].toUpperCase() + kindText(it).slice(1), rows, it.f);
+  showCard(it.n, kindText(it)[0].toUpperCase() + kindText(it).slice(1), rows, it.f, flagFor(it));
 }
-function showCard(title, sub, rows, fact) {
-  setPanel(`<div class="info"><p class="ptitle">You tapped…</p><h2>${esc(title)}</h2><div class="sub">${esc(sub)}</div>
+function showCard(title, sub, rows, fact, flag) {
+  setPanel(`<div class="info"><p class="ptitle">You tapped…</p>${flag ? flagImg(flag, 90, 'Flag of ' + title) : ''}<h2>${esc(title)}</h2><div class="sub">${esc(sub)}</div>
     ${rows.length ? `<dl>${rows.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>` : ''}</div>${factHTML(fact)}
     <button class="btn sec" id="backExplore">Back</button>`);
   $('#backExplore').onclick = () => { clearHL(); exploreStart(); };
@@ -1107,7 +1181,14 @@ function findStart() {
     $('#toW').onclick = () => { showMap('world'); startMode(); }; $('#toU').onclick = () => { showMap('uk'); startMode(); };
     return;
   }
-  const pool = visibleItems().filter(i => QUIZ_KINDS[S.map].includes(i.k));
+  let pool = visibleItems().filter(i => QUIZ_KINDS[S.map].includes(i.k));
+  if (S.findFlags) {
+    pool = pool.filter(i => (i.k === 'country' || i.k === 'ukcountry') && flagFor(i));
+    if (!pool.length) {
+      setPanel(`<p class="ptitle">Find it!</p>${findChips()}<div class="qcard"><p class="q">There are no flags to find on this map for ${yr() ? 'Year ' + yr() : 'this year'}.</p><p class="hint">Flags appear for the countries in each year's curriculum. Try the ${S.map === 'world' ? 'UK' : 'world'} map, or another year.</p></div>`);
+      wireFindChips(); return;
+    }
+  }
   if (!pool.length) {
     setPanel(`<p class="ptitle">Find it!</p><div class="qcard"><p class="q">There are no ${S.map === 'world' ? 'world' : 'UK'} places for ${yr() ? 'Year ' + yr() : 'this year'} yet.</p></div><button class="btn" id="toOther">Try the ${S.map === 'world' ? 'UK' : 'world'} map</button>`);
     $('#toOther').onclick = () => { showMap(S.map === 'world' ? 'uk' : 'world'); startMode(); };
@@ -1119,19 +1200,24 @@ function findStart() {
   findAsk();
 }
 function findItem() { return Q.order[Q.idx % Q.order.length]; }
+function findChips() { return `<div class="chips"><button class="chip ${S.findFlags ? '' : 'on'}" data-ff="0">🔤 Find by name</button><button class="chip ${S.findFlags ? 'on' : ''}" data-ff="1">🏳️ Find by flag</button></div>`; }
+function wireFindChips() { panel.querySelectorAll('[data-ff]').forEach(b => b.onclick = () => { S.findFlags = b.dataset.ff === '1'; save(); findStart(); }); }
 function findAsk() {
   ov.replaceChildren(); clearHL();
   Q.pin = null; Q.done = false; Q.tries = 0;
   const it = findItem();
   if (it.k === 'county') $('#uk-cty').style.visibility = '';
   if (it.k === 'region') $('#uk-reg').style.visibility = '';
-  setPanel(`<p class="ptitle">Find it!</p>${progressHTML(Q)}
-    <div class="qcard"><p class="q">Can you find…</p><div class="big">${esc(it.n)}</div><div class="kind">It is ${esc(kindText(it))}.</div></div>
+  const byFlag = S.findFlags && flagFor(it);
+  setPanel(`<p class="ptitle">Find it!</p>${findChips()}${progressHTML(Q)}
+    ${byFlag ? `<div class="qcard" style="text-align:center"><p class="q">Can you find the country with this flag?</p>${flagImg(flagFor(it), 120, 'A flag to find')}</div>`
+      : `<div class="qcard"><p class="q">Can you find…</p><div class="big">${esc(it.n)}</div><div class="kind">It is ${esc(kindText(it))}.</div></div>`}
     <div id="fbox"></div>
     <div class="row"><button class="btn go" id="check" disabled>Check</button></div>
     <div class="row"><button class="btn sec" id="skip">Skip</button><button class="btn sec" id="showme">Show me</button></div>
     <p class="hint" id="tapHint">Tap the map to put a pin where you think it is. Move the pin by tapping again.</p>`);
   $('#check').onclick = findCheck; $('#skip').onclick = findNext; $('#showme').onclick = () => findReveal(false);
+  wireFindChips();
   if (S.autoZoom) autoZoomFor(it); else home();
 }
 function autoZoomFor(it) {
@@ -1171,7 +1257,7 @@ function findCheck() {
   if (ok) {
     Q.done = true; if (Q.tries === 1) Q.score++;
     highlightItem(it);
-    fb.innerHTML = `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>That's ${esc(theName(it))}.</div>${factHTML(it.f)}${teamAwardHTML()}`;
+    fb.innerHTML = `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>That's ${esc(theName(it))}.${flagFor(it) ? '<br>' + flagImg(flagFor(it), 60, 'Flag of ' + it.n) : ''}</div>${factHTML(it.f)}${teamAwardHTML()}`;
     wireAward(fb);
     findButtonsNext();
     scrollEnd();
@@ -1198,7 +1284,7 @@ function findReveal(afterTries) {
     if (!['hemi', 'latline', 'lonline'].includes(it.k)) fitBox(x0, y0, x1 - x0, y1 - y0, 1.4);
   } else if (t && t.box && !['hemi'].includes(it.k)) fitBox(t.box[0], t.box[1], t.box[2], t.box[3], 1.6);
   scrollEnd();
-  $('#fbox').innerHTML = `<div class="fb bad"><span class="em">Here it is!</span>${esc(cap1(theName(it)))} is shown in yellow.</div>${factHTML(it.f)}`;
+  $('#fbox').innerHTML = `<div class="fb bad"><span class="em">Here it is!</span>${esc(cap1(theName(it)))} is shown in yellow.${flagFor(it) ? '<br>' + flagImg(flagFor(it), 60, 'Flag of ' + it.n) : ''}</div>${factHTML(it.f)}`;
   findButtonsNext();
 }
 function findButtonsNext() {
@@ -1840,7 +1926,7 @@ const mercY = lat => { const f = clamp(lat, -85, 85) * Math.PI / 180; return MW 
 const mercX = lon => (lon + 180) / 360 * MW;
 const mercInv = (x, y) => ({ lon: x / MW * 360 - 180, lat: (2 * Math.atan(Math.exp((MW / 2 - y) * 2 * Math.PI / MW)) - Math.PI / 2) * 180 / Math.PI });
 function robInvClamped(x, y) {
-  const sn = clamp((WH / 2 - y) * C45 / WR, -1, 1);
+  const sn = clamp((GH / 2 - y) * C45 / WR, -1, 1);
   return { lat: Math.asin(sn) * 180 / Math.PI, lon: clamp((x - WW / 2) / (WR * C45) * 180 / Math.PI, -180, 180) };
 }
 function buildMerc() {
@@ -2022,12 +2108,12 @@ $('#mapBtn').onclick = e => openPop(e.currentTarget, `<h3>Choose a map</h3>
 p => p.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { closePop(); showMap(b.dataset.m); startMode(); }));
 $('#layerBtn').onclick = e => {
   const key = mapKind(), L = S.layers[key];
-  const opts = key === 'world' ? [['names', 'Names'], ['colour', 'Colour the continents'], ['lines', 'Equator, tropics and polar circles'], ['grid', 'Lines of latitude and longitude'], ['tz', 'Time zones']]
+  const opts = key === 'world' ? [['names', 'Names'], ['colour', 'Colour the continents'], ['lines', 'Equator, tropics and polar circles'], ['grid', 'Lines of latitude and longitude'], ['tz', 'Time zones'], ['climate', 'Climate zones (tropical, temperate, polar)'], ['plates', 'Tectonic plate boundaries']]
     : key === 'uk' ? [['names', 'Names'], ['rivers', 'Rivers and canals'], ['regions', 'Regions of England'], ['counties', 'Counties of England']]
       : [['names', 'Place names and labels'], ['symbols', 'Map symbols'], ['contours', 'Contour lines (height)'], ['tenths', '100 m grid lines (for 6-figure references, when zoomed in)']];
   openPop(e.currentTarget, `<h3>Show on the map</h3>${opts.map(([k, t]) => `<label class="tog"><input type="checkbox" data-l="${k}" ${L[k] ? 'checked' : ''}>${t}</label>`).join('')}${key === 'local' ? '<button class="opt" id="popKey">🔑 Map key</button>' : ''}`,
     p => {
-      p.querySelectorAll('[data-l]').forEach(c => c.onchange = () => { L[c.dataset.l] = c.checked; save(); restyle(); refreshDyn(); onViewChange(); });
+      p.querySelectorAll('[data-l]').forEach(c => c.onchange = () => { L[c.dataset.l] = c.checked; save(); restyle(); refreshDyn(); onViewChange(); drawMapKey(); });
       const k = p.querySelector('#popKey'); if (k) k.onclick = () => { closePop(); showKey(); };
     });
   const r = e.currentTarget.getBoundingClientRect(), pp = $('#pop'); pp.style.left = (r.right - pp.offsetWidth) + 'px';
@@ -2066,6 +2152,15 @@ $('#symBtn').onclick = e => {
   }
   const r = e.currentTarget.getBoundingClientRect(), pp = $('#pop'); pp.style.left = Math.max(10, r.right - pp.offsetWidth) + 'px';
 };
+$('#projBtn').onclick = e => {
+  openPop(e.currentTarget, `<h3>World map projection</h3>
+    <p style="margin:0 0 4px;font-size:16px;font-weight:700;color:#4a6577;max-width:420px">A projection is a way of flattening the round Earth onto a flat map. Every flat map stretches something.</p>
+    <button class="opt ${PROJ === 'gp' ? 'on' : ''}" data-proj="gp">🌍 Gall-Peters<small>true sizes</small></button>
+    <button class="opt ${PROJ === 'merc' ? 'on' : ''}" data-proj="merc">🗺️ Mercator<small>like online maps</small></button>
+    <p style="margin:4px 0 0;font-size:15px;font-weight:700;color:#4a6577;max-width:420px">Gall-Peters shows every country at its true size, but stretches their shapes. Mercator keeps shapes but makes places near the poles look much too big: Greenland looks as big as Africa, but Africa is about 14 times bigger.</p>`,
+  p => p.querySelectorAll('[data-proj]').forEach(b => b.onclick = () => { closePop(); setProj(b.dataset.proj); }));
+  const r = e.currentTarget.getBoundingClientRect(), pp = $('#pop'); pp.style.left = Math.max(10, r.right - pp.offsetWidth) + 'px';
+};
 $('#setBtn').onclick = () => openModal(`<h2>Settings</h2>
   <div class="setrow"><span>Questions in a set</span><div class="chips">${[5, 10, 15, 20, 0].map(n => `<button class="chip ${S.count === n ? 'on' : ''}" data-c="${n}">${n || '∞'}</button>`).join('')}</div></div>
   <div class="setrow"><span>Include earlier years as revision</span><div class="chips"><button class="chip ${S.revision ? 'on' : ''}" data-rev="1">Yes</button><button class="chip ${!S.revision ? 'on' : ''}" data-rev="0">No</button></div></div>
@@ -2073,7 +2168,7 @@ $('#setBtn').onclick = () => openModal(`<h2>Settings</h2>
   <div class="setrow"><span>Extra-large text</span><div class="chips"><button class="chip ${S.big ? 'on' : ''}" data-big="1">Yes</button><button class="chip ${!S.big ? 'on' : ''}" data-big="0">No</button></div></div>
   <div class="setrow"><span>Grid references</span><div class="chips">${[[0, 'By year'], [4, '4-figure'], [6, '6-figure']].map(([v, t]) => `<button class="chip ${S.gridLevel === v ? 'on' : ''}" data-gl="${v}">${t}</button>`).join('')}</div></div>
   <p style="margin-top:18px;font-size:15px">Map Explorer · Version ${VERSION}. No pupil information is stored. Settings are saved on this computer only.<br>
-  World map: Natural Earth. UK map: contains OS data © Crown copyright and database right 2024; Office for National Statistics (Open Government Licence). OS-style maps: © OpenStreetMap contributors, drawn in the style of Ordnance Survey maps using the British National Grid.</p>
+  World map: Natural Earth. UK map: contains OS data © Crown copyright and database right 2024; Office for National Statistics (Open Government Licence). OS-style maps: © OpenStreetMap contributors, drawn in the style of Ordnance Survey maps using the British National Grid. Heights: OS Terrain 50 (OGL). Tectonic plates: Bird (2002), via Ahlenius &amp; Nordpil (ODC-BY). Flags: flag-icons (MIT).</p>
   <button class="btn" id="closeSet">Done</button>`, b => {
   const grp = (attr, f) => b.querySelectorAll(`[${attr}]`).forEach(x => x.onclick = () => { f(x.getAttribute(attr)); save(); b.querySelectorAll(`[${attr}]`).forEach(y => y.classList.toggle('on', y === x)); });
   grp('data-c', v => S.count = +v);

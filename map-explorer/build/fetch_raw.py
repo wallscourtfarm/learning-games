@@ -5,6 +5,8 @@
 
 Sources (all free to use; credited in the app):
   Natural Earth (public domain) - world countries, lakes, capital cities, time zones
+  Tectonic plate boundaries: Bird (2002), github.com/fraxen/tectonicplates (ODC-BY)
+  Flags (../flags): flag-icons, MIT licence (downloaded separately, see flags/LICENSE.txt)
   ONS Open Geography Portal (Open Government Licence) - UK countries, English regions, counties
   OS Terrain 50 (OS OpenData, Open Government Licence) - heights for contour lines
   OpenStreetMap via the Overpass API (ODbL) - rivers and the local OS-style maps
@@ -33,6 +35,7 @@ def fetch_world():
     ne = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/'
     for f in ['ne_50m_admin_0_countries', 'ne_50m_populated_places_simple', 'ne_50m_lakes', 'ne_10m_time_zones']:
         get(ne + f + '.geojson', f + '.geojson')
+    get('https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_boundaries.json', 'PB2002_boundaries.json')
 
 
 def fetch_uk():
