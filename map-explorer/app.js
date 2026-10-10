@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '10.10.26l';
+const VERSION = '10.10.26m';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -17,7 +17,7 @@ const DEFAULTS = {
   layers: {
     world: { names: true, colour: true, lines: true, grid: false, markers: true, tz: false, climate: false, plates: false, biomes: false },
     uk: { names: true, regions: false, counties: false, rivers: true, markers: true },
-    local: { names: true, symbols: true, contours: true, tenths: true, hide: [] },
+    local: { names: true, symbols: true, contours: true, tenths: true, tenthNums: true, hide: [] },
   },
 };
 let S = (() => {
@@ -832,7 +832,7 @@ function drawRulers(m) {
   Object.assign(rl.style, { left: lx + 'px', top: lTop + 'px', height: Math.max(0, lBot - lTop) + 'px', bottom: 'auto' });
   Object.assign(rb.style, { left: bLeft + 'px', top: by + 'px', width: Math.max(0, bRight - bLeft) + 'px', right: 'auto', bottom: 'auto' });
   let hb = '', hl = '';
-  const showT = tenthsOn();
+  const showT = tenthsOn() && S.layers.local.tenthNums !== false;   // tenths numbers on the edge strips
   for (let e = Math.ceil(L.e0 / 100) * 100; e <= L.e1; e += 100) {
     const sx = (e - L.e0 - x0) / V.k;
     if (sx < lx + RW + 4 || sx > bRight - 8) continue;
@@ -1016,12 +1016,12 @@ function exploreStart() {
   ov.replaceChildren(); clearHL();
   if (S.map.startsWith('local')) {
     setPanel(`<p class="ptitle">Explore</p><div class="qcard"><p class="q">Tap a symbol to find out what it is.</p><p class="hint">Tap anywhere else to see its grid square.</p></div>
-      <button class="btn sec" id="tenthsBtn">${S.layers.local.tenths !== false ? '▦ Hide' : '▦ Show'} the 100 m lines</button>
+      <button class="btn sec" id="tenthsBtn">▦ Tenths: ${TENTHS[tenthsMode()][0]} ▾</button>
       <button class="btn sec" id="keyBtn">🔑 Show the key</button>
       <button class="btn sec" id="printBtn">🖨️ Print a worksheet of this view</button>
       <p class="hint">Drag to move the map. Use ＋ and － to zoom in and out. Blue lines are grid lines, 1 km apart.</p>`);
     $('#keyBtn').onclick = showKey;
-    $('#tenthsBtn').onclick = () => { S.layers.local.tenths = S.layers.local.tenths === false; save(); onViewChange(); exploreStart(); if (S.layers.local.tenths && V.k >= 2.8) toast('Zoom in to see the 100 m lines'); };
+    $('#tenthsBtn').onclick = e => tenthsPicker(e.currentTarget, () => { exploreStart(); if (tenthsMode() !== 'none' && V.k >= 2.8) toast('Zoom in to see the 100 m lines'); });
     $('#printBtn').onclick = printSheet;
   } else {
     const its = visibleItems();
@@ -1167,6 +1167,17 @@ function refOf(L, x, y, level) {
   return [String(Math.floor(e / 100) % 1000).padStart(3, '0'), String(Math.floor(n / 100) % 1000).padStart(3, '0')];
 }
 const tenthsOn = () => S.layers.local.tenths !== false && V.k < 2.8;     // 100 m lines showing?
+// Tenths: 'all' = 100 m lines and 0-9 numbers, 'lines' = lines only, 'none' = estimate like a real OS map
+function tenthsMode() { const L = S.layers.local; return L.tenths === false ? 'none' : L.tenthNums === false ? 'lines' : 'all'; }
+const estimating = () => tenthsMode() !== 'all';
+const TENTHS = { all: ['Lines and numbers', '100 m lines with 0–9 along the edges'], lines: ['Lines only', 'children count the 100 m lines'], none: ['Hidden (estimate)', 'like a real OS map — Years 5–6, Year 4 when ready'] };
+function tenthsPicker(anchor, after) {
+  openPop(anchor, `<h3>Tenths for 6-figure references</h3>${Object.entries(TENTHS).map(([k, [t, d]]) => `<button class="opt ${tenthsMode() === k ? 'on' : ''}" data-tm="${k}">${t}<small>${d}</small></button>`).join('')}
+    <p style="margin:0;font-size:15px;font-weight:700;color:#4a6577;max-width:380px">When the numbers are hidden, an answer within one tenth (100 m) counts as a good estimate.</p>`,
+  p => p.querySelectorAll('[data-tm]').forEach(b => b.onclick = () => {
+    const k = b.dataset.tm; S.layers.local.tenths = k !== 'none'; S.layers.local.tenthNums = k === 'all'; save(); closePop(); onViewChange(); after && after();
+  }));
+}
 function squareHighlight(g, L, x, y, small) {
   // yellow = the 1 km grid square; blue = the 100 m square inside it (6-figure)
   const E_ = L.e0 + x, N_ = L.n1 - y;
@@ -1488,7 +1499,7 @@ function gridHeader() {
   const lvl = gridLevel();
   const pr = G ? `<span style="float:right;text-transform:none">${G.n === Infinity ? 'Q' + (G.idx + 1) : (G.idx + 1) + ' of ' + G.n} · ⭐ ${G.score}</span>` : '';
   return `<p class="ptitle">OS map skills${pr}</p>
-    <div class="chips"><button class="chip on" id="taskPick">${GRID_TASKS[S.gridTask]} ▾</button>${['give', 'find'].includes(S.gridTask) ? `<button class="chip on" id="lvlPick">${lvl}-figure ▾</button>` : ''}</div>`;
+    <div class="chips"><button class="chip on" id="taskPick">${GRID_TASKS[S.gridTask]} ▾</button>${['give', 'find'].includes(S.gridTask) ? `<button class="chip on" id="lvlPick">${lvl}-figure ▾</button>` : ''}${['give', 'find'].includes(S.gridTask) && lvl === 6 ? `<button class="chip ${estimating() ? 'on' : ''}" id="tenPick">Tenths: ${TENTHS[tenthsMode()][0]} ▾</button>` : ''}</div>`;
 }
 const GRID_TASKS = { give: 'Give the grid reference', find: 'Find the grid reference', symbols: 'Map symbols', far: 'How far? (scale)', high: 'How high? (contours)' };
 const GRID_TASK_YEARS = { give: 'Years 3-6', find: 'Years 3-6', symbols: 'Years 3-6', far: 'Years 5-6', high: 'Year 6' };
@@ -1501,6 +1512,7 @@ function osPois() {
 function wireGridHeader() {
   $('#taskPick').onclick = e => openPop(e.currentTarget, `<h3>Activity</h3>${Object.entries(GRID_TASKS).map(([k, t]) => `<button class="opt ${S.gridTask === k ? 'on' : ''}" data-task="${k}">${t}<small>${GRID_TASK_YEARS[k]}</small></button>`).join('')}`,
     p => p.querySelectorAll('[data-task]').forEach(b => b.onclick = () => { closePop(); S.gridTask = b.dataset.task; save(); gridStart(); }));
+  const tp = $('#tenPick'); if (tp) tp.onclick = e => tenthsPicker(e.currentTarget, () => { const c = tp; c.textContent = `Tenths: ${TENTHS[tenthsMode()][0]} ▾`; c.classList.toggle('on', estimating()); });
   const lp = $('#lvlPick');
   if (lp) lp.onclick = e => openPop(e.currentTarget, `<h3>Grid references</h3>${[4, 6].map(l => `<button class="opt ${gridLevel() === l ? 'on' : ''}" data-lvl="${l}">${l}-figure<small>${l === 4 ? 'Year 3' : 'Years 4-6'}</small></button>`).join('')}`,
     p => p.querySelectorAll('[data-lvl]').forEach(b => b.onclick = () => { closePop(); S.gridLevel = +b.dataset.lvl; save(); gridStart(); }));
@@ -1536,7 +1548,7 @@ function gridAsk() {
     else { const cx = Math.floor((L.e0 + p.x) / 1000) * 1000 - L.e0 + 500, cy = L.n1 - Math.floor((L.n1 - p.y) / 1000) * 1000 - 500; const off = () => (Math.random() - .5) * 1200; fitBox(cx - 1300 + off(), cy - 1300 + off(), 2600, 2600, 1); }
     setPanel(gridHeader() + `
       <div class="qcard"><p class="q">Find this grid reference:</p><div class="big" style="font-size:calc(54px*var(--fs));letter-spacing:4px"><span style="color:#b0351f">${ref[0]}</span> <span style="color:#1a5fb4">${ref[1]}</span></div>
-      <p class="hint">${G.lvl === 6 ? 'Tap the exact spot. Zoom in to see the tenths.' : 'Tap inside the grid square.'}</p></div>
+      <p class="hint">${G.lvl === 6 ? (estimating() ? 'Tap the spot. Estimate the tenths: split each square into ten in your head.' : 'Tap the exact spot. Zoom in to see the tenths.') : 'Tap inside the grid square.'}</p></div>
       <div id="fbox"></div>
       <div class="row"><button class="btn go" id="check" disabled>Check</button></div>
       <div class="row"><button class="btn sec" id="skip">Skip</button><button class="btn sec" id="showme">Show me how</button></div>`);
@@ -1569,13 +1581,20 @@ document.addEventListener('keydown', e => {
     else if (e.key === 'Enter' && $('#check') && !$('#check').disabled) $('#check').click();
   }
 });
+function closeEnough(got, want) {           // within one tenth (100 m) each way, when children are estimating
+  if (G.lvl !== 6 || !estimating()) return false;
+  const d = (a, b) => { const x = Math.abs(+a - +b) % 1000; return Math.min(x, 1000 - x); };
+  return d(got[0], want[0]) <= 1 && d(got[1], want[1]) <= 1;
+}
 function gridCheckGive() {
   const want = G.ref.join(''), got = G.entry, h = G.lvl / 2;
   G.tries++;
   const fb = $('#fbox');
-  if (got === want) {
+  const near = got !== want && closeEnough([got.slice(0, h), got.slice(h)], G.ref);
+  if (got === want || near) {
     G.done = true; if (G.tries === 1) G.score++;
-    fb.innerHTML = `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>${want.slice(0, h)} ${want.slice(h)} is right.</div>${teamAwardHTML()}`;
+    fb.innerHTML = near ? `<div class="fb good"><span class="em">Good estimate! ✅</span>You said ${got.slice(0, h)} ${got.slice(h)}. The exact reference is ${want.slice(0, h)} ${want.slice(h)}.</div>${teamAwardHTML()}`
+      : `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>${want.slice(0, h)} ${want.slice(h)} is right.</div>${teamAwardHTML()}`;
     wireAward(fb); gridNextButtons();
   } else {
     const eOK = got.slice(0, h) === want.slice(0, h), nOK = got.slice(h) === want.slice(h);
@@ -1601,8 +1620,10 @@ function gridCheckFind() {
   const L = cur().L, got = refOf(L, G.pin.x, G.pin.y, G.lvl), want = G.ref;
   G.tries++;
   const fb = $('#fbox'), p = G.p;
-  if (got.join('') === want.join('')) {
+  const near = got.join('') !== want.join('') && closeEnough(got, want);
+  if (got.join('') === want.join('') || near) {
     G.done = true; if (G.tries === 1) G.score++;
+    if (near) toast(`Good estimate! The exact spot is ${want.join(' ')}`, 3000);
     const g = cs(ov, p.x, p.y, 'hlx'); E('circle', { class: 'pulse', r: 16 }, g); E('circle', { r: 24, fill: 'none', stroke: '#2e9e4f', 'stroke-width': 4 }, g);
     fb.innerHTML = `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>You found it! ${p.ours ? 'That is WFA, our school!' : 'There is a ' + esc(POI_SHORT[p.t]) + ' there.'}</div>${teamAwardHTML()}`;
     wireAward(fb); gridNextButtons();
@@ -2273,7 +2294,7 @@ $('#layerBtn').onclick = e => {
   const key = mapKind(), L = S.layers[key];
   const opts = key === 'world' ? [['names', 'Names'], ['colour', 'Colour the continents'], ['lines', 'Equator, tropics and polar circles'], ['grid', 'Lines of latitude and longitude'], ['tz', 'Time zones'], ['biomes', 'Biomes (rainforest, desert, tundra…)'], ['climate', 'Climate zones (tropical, temperate, polar)'], ['plates', 'Tectonic plate boundaries']]
     : key === 'uk' ? [['names', 'Names'], ['rivers', 'Rivers and canals'], ['regions', 'Regions of England'], ['counties', 'Counties of England']]
-      : [['names', 'Place names and labels'], ['symbols', 'Map symbols'], ['contours', 'Contour lines (height)'], ['tenths', '100 m grid lines (for 6-figure references, when zoomed in)']];
+      : [['names', 'Place names and labels'], ['symbols', 'Map symbols'], ['contours', 'Contour lines (height)'], ['tenths', '100 m grid lines (for 6-figure references, when zoomed in)'], ['tenthNums', 'Tenths numbers (0–9) along the edges']];
   openPop(e.currentTarget, `<h3>Show on the map</h3>${opts.map(([k, t]) => `<label class="tog"><input type="checkbox" data-l="${k}" ${L[k] ? 'checked' : ''}>${t}</label>`).join('')}${key === 'local' ? '<button class="opt" id="popKey">🔑 Map key</button>' : ''}`,
     p => {
       p.querySelectorAll('[data-l]').forEach(c => c.onchange = () => { L[c.dataset.l] = c.checked; save(); restyle(); refreshDyn(); onViewChange(); drawMapKey(); });
