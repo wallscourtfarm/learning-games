@@ -8,7 +8,7 @@
  * Nothing about the child is stored; only teacher settings, on this device. Picture word
  * banks live in content.js; the sentence engine (parts, text, sense check) in engine.js.
  */
-const VERSION = '10.10.26d';
+const VERSION = '10.10.26e';
 
 const CAT = {
   who:      {label:'who',      icon:'who',      q:() => 'Who or what is in the picture?'},
@@ -153,10 +153,15 @@ function readSentence(opts = {}){ speakTokens(buildTokens(opts), () => { heard =
 function showHome(){
   if (window.speechSynthesis) speechSynthesis.cancel();
   mode = 'build'; pic = null;
-  $('#home').hidden = false; $('#build').hidden = true; $('#homeBtn').hidden = true; $('#stepTag').hidden = true;
+  $('#home').hidden = false; $('#build').hidden = true; $('#crumbs').hidden = true;
+  setNav(isFree() ? 'free' : 'home');
   const sc = $('#stepCards'); sc.innerHTML = '';
+  // Free build has its own place in the menu; here it is just "choose a picture"
+  $('#stepsSec').hidden = isFree();
+  $('#picsSec h2').textContent = isFree() ? '✨ Free build · Choose a picture' : '2. Choose a picture';
   Object.entries(STEPS).forEach(([n, st]) => {
-    const b = el('button', 'step-card' + (+n === step ? ' on' : ''));
+    if (n === 'F') return;
+    const b = el('button', 'step-card' + (String(n) === String(step) ? ' on' : ''));
     const mini = st.mini.map(([c, t]) => `<span class="c-${c}${c === 'doing' ? ' dark' : ''}">${esc(t)}</span>`).join('')
       + '<span class="dot">.</span>';
     b.innerHTML = `<h3>${st.title}</h3><p>${st.sub}</p><div class="mini">${mini}</div>`;
@@ -189,10 +194,84 @@ function showBuildScreen(p, tag){
   pic = p;
   document.querySelector('.pic-panel').hidden = false;
   document.getElementById('build').classList.remove('nopic');
-  $('#home').hidden = true; $('#build').hidden = false; $('#homeBtn').hidden = false;
-  $('#stepTag').hidden = false; $('#stepTag').innerHTML = tag;
+  $('#home').hidden = true; $('#build').hidden = false;
   $('#pic').src = p.img; $('#picTitle').textContent = p.title;
+  setCrumbs(tag, p.title);
   window.scrollTo(0, 0);
+}
+
+/* ---------- navigation ---------- */
+const fitHeader = () => document.documentElement.style.setProperty('--hdr', $('#top').offsetHeight + 'px');
+window.addEventListener('resize', fitHeader);
+let routing = false;          // true while restoring a screen from the address (Back button)
+function go(url){
+  try { if (routing) history.replaceState(null, '', url); else history.pushState(null, '', url); } catch(e) {}
+}
+function setNav(key){
+  document.querySelectorAll('[data-nav]').forEach(b => b.classList.toggle('on', b.closest('#mainNav') && b.dataset.nav === key));
+}
+function scrollToId(id){ const n = document.getElementById(id); if (n) n.scrollIntoView({behavior:'smooth', block:'start'}); }
+function navTo(key){
+  if (key === 'write') return startWrite(null);
+  if (key === 'free'){ step = 'F'; }
+  if (key === 'build' && isFree()) step = settings.lastStep || 1;
+  showHome(); go(location.pathname + (key === 'home' ? '' : '?go=' + key));
+  setNav(key);
+  if (key === 'home') window.scrollTo({top:0, behavior:'smooth'});
+  else scrollToId(key === 'fix' ? 'fixSec' : key === 'free' ? 'picsSec' : 'stepsSec');
+}
+// The bar under the header on every activity screen: where you are, and what you can change.
+function setCrumbs(tag, title){
+  $('#crumbs').hidden = false;
+  $('#crumbPath').innerHTML = `<a href="#" data-crumb="home">Home</a><span>›</span>${tag}${title ? `<span>›</span><b>${esc(title)}</b>` : ''}`;
+  $('#crumbPath').querySelector('[data-crumb]').onclick = e => { e.preventDefault(); navTo('home'); };
+  const acts = $('#crumbActions'); acts.innerHTML = '';
+  const add = (html, fn) => { const b = el('button', 'crumb-btn', html); b.onclick = fn; acts.appendChild(b); };
+  if (mode === 'build' || mode === 'free'){
+    setNav(isFree() ? 'free' : 'build');
+    if (!isFree()) add('🪜 Change step', chooseStepModal);
+    add('🖼️ Change picture', () => choosePictureModal(p => start(p)));
+    add('Next picture ➜', () => { const ps = topic.pictures; start(ps[(ps.indexOf(pic) + 1) % ps.length]); });
+  } else if (mode === 'fix'){
+    setNav('fix');
+    add('🔧 Change type', chooseFixModal);
+    add('🖼️ Change picture', () => choosePictureModal(p => startFix(fx.type, p)));
+  } else if (mode === 'write'){
+    setNav('write');
+    add(wr.pic ? '🖼️ Change picture' : '🖼️ Add a picture', () => choosePictureModal(p => startWrite(p)));
+    if (wr.pic) add('✖ No picture', () => startWrite(null));
+  }
+}
+function openModal(html){ $('#modalBox').innerHTML = html + '<div style="text-align:right;margin-top:14px"><button class="btn" id="closeModal">Close</button></div>'; $('#closeModal').onclick = () => { $('#modal').hidden = true; }; $('#modal').hidden = false; }
+function chooseStepModal(){
+  openModal('<h2>🪜 Choose a step</h2><div class="step-cards" id="mSteps"></div>');
+  Object.entries(STEPS).forEach(([n, st]) => {
+    if (n === 'F') return;
+    const b = el('button', 'step-card' + (String(n) === String(step) ? ' on' : ''), `<h3>${st.title}</h3><p>${st.sub}</p>`);
+    b.onclick = () => { $('#modal').hidden = true; step = +n; settings.step = step; settings.lastStep = step; saveSettings(); start(pic); };
+    $('#mSteps').appendChild(b);
+  });
+}
+function chooseFixModal(){
+  openModal('<h2>🔧 Choose what to fix</h2><div class="step-cards" id="mFix"></div>');
+  Object.entries(FIXES).forEach(([id, f]) => {
+    const b = el('button', 'step-card fix-card', `<h3>${f.icon} ${esc(f.title)}</h3><p>${esc(f.sub)}</p>`);
+    b.onclick = () => { $('#modal').hidden = true; startFix(id, pic); };
+    $('#mFix').appendChild(b);
+  });
+}
+function choosePictureModal(onPick){
+  let tp = topic;
+  const draw = () => {
+    openModal('<h2>🖼️ Choose a picture</h2><div class="topic-tabs" id="mTabs"></div><div class="pic-grid mini-grid" id="mPics"></div>');
+    TOPICS.forEach(t => { const b = el('button', t === tp ? 'on' : '', `${esc(t.label)} <small>(${esc(t.years)})</small>`); b.onclick = () => { tp = t; draw(); }; $('#mTabs').appendChild(b); });
+    tp.pictures.forEach(p => {
+      const b = el('button', 'pic-card', `<img src="${p.img}" alt="" loading="lazy"><div>${esc(p.title)}</div>`);
+      b.onclick = () => { $('#modal').hidden = true; topic = tp; onPick(p); };
+      $('#mPics').appendChild(b);
+    });
+  };
+  draw();
 }
 
 /* ---------- build ---------- */
@@ -202,7 +281,8 @@ function start(p){
   phase = 'core'; heard = false; stripped = false; covered = false; problemSlot = null; coachMsg = null; editing = null;
   moveOpen = false; moveSel = null;
   showBuildScreen(p, `<b>${STEPS[step].title}</b><span class="sub">: ${esc(STEPS[step].sub)}</span>`);
-  try { history.replaceState(null, '', `?step=${step}&pic=${topic.id}.${p.id}`); } catch(e) {}
+  go(`?step=${step}&pic=${topic.id}.${p.id}`);
+  if (!isFree()){ settings.lastStep = step; saveSettings(); }
   render();
 }
 
@@ -797,7 +877,7 @@ function startFix(type, p){
     fx.clause = overloaded(p, settings.extras);
   }
   showBuildScreen(p, `<b>${FIXES[type].icon} Fix it</b><span class="sub">: ${esc(FIXES[type].title)}</span>`);
-  try { history.replaceState(null, '', `?fix=${type}&pic=${topic.id}.${p.id}`); } catch(e) {}
+  go(`?fix=${type}&pic=${topic.id}.${p.id}`);
   render();
 }
 
@@ -1366,12 +1446,12 @@ async function loadChecker(){
 function startWrite(p){
   mode = 'write'; pic = null;
   wr.pic = p || null; wr.result = null; coachMsg = null; covered = false;
-  $('#home').hidden = true; $('#build').hidden = false; $('#homeBtn').hidden = false;
-  $('#stepTag').hidden = false; $('#stepTag').innerHTML = '<b>📝 Check my writing</b>';
+  $('#home').hidden = true; $('#build').hidden = false;
+  setCrumbs('<span>📝 Check my writing</span>', wr.pic ? wr.pic.title : '');
   if (wr.pic){ $('#pic').src = wr.pic.img; $('#picTitle').textContent = wr.pic.title; }
   document.querySelector('.pic-panel').hidden = !wr.pic;
   document.getElementById('build').classList.toggle('nopic', !wr.pic);
-  try { history.replaceState(null, '', '?mode=write' + (wr.pic ? `&pic=${topic.id}.${wr.pic.id}` : '')); } catch(e) {}
+  go('?mode=write' + (wr.pic ? `&pic=${topic.id}.${wr.pic.id}` : ''));
   loadChecker();
   render();
   window.scrollTo(0, 0);
@@ -1413,9 +1493,12 @@ function fixAndToStop(sen, andTok){
   applyFix(txt => { const before = txt.slice(0, a).replace(/[\s,]+$/, ''); const after = txt.slice(b).replace(/^\s+/, ''); return capAt(before + '. ' + after, before.length + 2); });
 }
 
+// The whole idea, up to where the next one starts (shortened if it is long).
 const ideaText = (sen, x) => {
-  const end = x.verb != null ? x.verb : x.start;
-  return sen.tokens.slice(x.start, end + 1).filter(t => !/^[.,!?;]$/.test(t)).join(' ');
+  const next = sen.ideas.filter(y => y.kind !== 'rel' && y.start > x.start).map(y => y.joinAt != null ? y.joinAt : y.start)[0];
+  const end = next != null ? next : sen.tokens.length;
+  const words = sen.tokens.slice(x.start, end).filter(t => !/^[.,!?;]$/.test(t));
+  return words.length > 9 ? words.slice(0, 8).join(' ') + '…' : words.join(' ');
 };
 const whoText = (sen, x) => {
   const out = [];
@@ -1488,6 +1571,11 @@ function sentenceStrip(sen, si){
   const gaps = new Map();
   sen.problems.forEach(pr => { if (pr.type === 'runon') gaps.set(pr.idea.start, 'runon'); if (pr.type === 'splice') gaps.set(pr.at, 'splice'); if (pr.type === 'subcomma') gaps.set(pr.idea.start, 'subcomma'); });
   const ands = sen.problems.some(p => p.type === 'ands');
+  // no doing word: mark the who, and show where the doing word is missing
+  const frag = sen.problems.find(p => p.type === 'fragment' || p.type === 'fragment-rel');
+  if (frag){
+    for (let k = frag.idea.start; k < sen.tokens.length; k++){ const tk = sen.tokens[k]; if (/^[.,!?;(]$/.test(tk) || /^(who|which|that|whose)$/i.test(tk)) break; roles[k] = 'w-who'; }
+  }
   sen.tokens.forEach((tk, i) => {
     if (gaps.get(i) === 'runon' || gaps.get(i) === 'subcomma'){
       const g = el('button', 'wr-gap', gaps.get(i) === 'runon' ? '▾ <small>full stop?</small>' : '▾ <small>comma?</small>');
@@ -1499,8 +1587,10 @@ function sentenceStrip(sen, si){
     const w = el(ands && /^and$/i.test(tk) ? 'button' : 'span', cls, esc(tk));
     if (ands && /^and$/i.test(tk)){ w.classList.add('wr-and'); w.onclick = () => fixAndToStop(sen, i); }
     w.dataset.s = si; w.dataset.t = i;
+    if (frag && i === sen.tokens.length - 1 && /^[.!?]$/.test(tk)) wrap.appendChild(el('span', 'wr-missing', 'doing?'));
     wrap.appendChild(w);
   });
+  if (frag && !/^[.!?]$/.test(sen.tokens[sen.tokens.length - 1])) wrap.appendChild(el('span', 'wr-missing', 'doing?'));
   return wrap;
 }
 
@@ -1529,8 +1619,7 @@ function renderWrite(){
   if (canSpeak()) add('🔊 Read it to me', 'primary', () => { if (wr.text.trim()) say(wr.text); });
   add('🔍 Check my sentences', 'good', () => { if (wr.text.trim() && wr.loaded) runCheck(); }, !wr.loaded);
   add('🧹 Clear', '', () => { wr.text = ''; wr.result = null; render(); });
-  if (!wr.pic) add('🖼️ Choose a picture', '', () => { wr.choosing = !wr.choosing; render(); });
-  else add('✖ No picture', '', () => startWrite(null));
+
 
   const c = $('#coach');
   c.hidden = false; c.className = 'coach';
@@ -1614,13 +1703,19 @@ function openSettings(){
 
 /* ---------- boot ---------- */
 $('#ver').textContent = VERSION;
-$('#homeLink').onclick = e => { e.preventDefault(); showHome(); try { history.replaceState(null, '', location.pathname); } catch(_) {} };
-$('#homeBtn').onclick = () => $('#homeLink').click();
+$('#homeLink').onclick = e => { e.preventDefault(); navTo('home'); };
+document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => navTo(b.dataset.nav));
+window.addEventListener('popstate', () => { $('#modal').hidden = true; routing = true; try { route(); } finally { routing = false; }
+fitHeader(); });
 $('#setBtn').onclick = openSettings;
 $('#modal').onclick = e => { if (e.target.id === 'modal') $('#modal').hidden = true; };
 
-(function boot(){
+// Shows the screen the address describes (on load, and when Back / Forward is pressed).
+function route(){
+  if (window.speechSynthesis) speechSynthesis.cancel();
   const p = new URLSearchParams(location.search);
+  const goKey = p.get('go');
+  if (goKey){ if (goKey === 'free') step = 'F'; showHome(); setNav(goKey); scrollToId(goKey === 'fix' ? 'fixSec' : goKey === 'free' ? 'picsSec' : 'stepsSec'); return; }
   const sp = p.get('step'); const st = isNaN(+sp) ? sp : +sp; if (STEPS[st]) step = st;
   if (p.get('mode') === 'write'){ startWrite(); return; }
   const [tid, pid] = (p.get('pic') || '').split('.');
@@ -1630,5 +1725,8 @@ $('#modal').onclick = e => { if (e.target.id === 'modal') $('#modal').hidden = t
   const fix = p.get('fix');
   if (FIXES[fix]){ startFix(fix, pp || null); return; }
   if (pp){ start(pp); return; }
-  showHome();
-})();
+  if (isFree() && !p.get('step')) step = settings.lastStep || 1;
+  showHome(); window.scrollTo(0, 0);
+}
+routing = true; try { route(); } finally { routing = false; }
+fitHeader();

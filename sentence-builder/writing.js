@@ -26,6 +26,13 @@ const WR = (() => {
   const MODAL = S('can could will would shall should may might must');
   // past tenses and other finite forms of common irregular verbs
   const IRREG = S('arose awoke bore beat became began bent bet bit bled blew broke brought built burnt burned burst bought caught chose clung came cost crept cut dealt dug dived dove drew dreamt dreamed drank drove ate fell fed felt fought found fled flew forbade forgot forgave froze got gave went ground grew hung heard hid hit held hurt kept knelt knew laid led leant leapt learnt left lent let lay lit lost made meant met paid put quit ran rang rose said sat saw sought sold sent set shook shone shot showed shrank shut sang sank slept slid slung smelt spoke sped spent spun spat split spread sprang stood stole stuck stung stank strode struck swore swept swam swung took taught tore told thought threw understood woke wore wove wept won wound wrote goes does has says');
+  // common misspellings of doing words in children's writing
+  const MISSPELT = S('bilt cort caught brang brung thort thot sor wos woz wuz wer sed sayd goed eated finded throwed catched runned swimmed bringed buyed tooked seed');
+  // after these, a new who + doing word is what was said or thought ("I think the rover is cool")
+  const SAY_THINK = S('think thinks thought know knows knew say says said hope hopes hoped wish wished believe believes believed guess guessed feel feels felt bet reckon reckons realised realized remember remembered noticed notice saw see sees heard hear hears decided decide shouted shouts whispered whispers told tell tells asked ask asks wondered wonder');
+  // words that can sit between a joining word and the next who ("and then it", "and suddenly the door")
+  const LINKERS = S('then suddenly also finally later soon quickly slowly afterwards next luckily unfortunately eventually');
+  const ADVERB_LIKE = S('always never also then often sometimes all both just still even really not only quickly slowly suddenly');
   const NOT_ED_VERB = S('red bed shed sled hundred sacred naked wicked beloved crooked ragged rugged jagged aged learned');
   const PUNCT_END = S('. ! ?');
 
@@ -59,7 +66,12 @@ const WR = (() => {
       if (DET.has(pw) && !BE_HAVE_DO.has(w) && !MODAL.has(w)) return false;    // "the scared cat"
       if (pw === 'to') return false;                                              // "to find" — not finite
       if (PREP.has(pw) && !BE_HAVE_DO.has(w) && !MODAL.has(w) && !IRREG.has(w)) return false;   // "of mars" is not a doing word
-      if (BE_HAVE_DO.has(w) || MODAL.has(w) || IRREG.has(w)) return true;
+      if (BE_HAVE_DO.has(w) || MODAL.has(w) || IRREG.has(w) || MISSPELT.has(w)) return true;
+      // straight after I / he / she / we / they, a word is almost always the doing word,
+      // even when it is misspelt ("we bilt", "he floted")
+      if (SUBJ_PRON.has(pw) && needSubj && !ADVERB_LIKE.has(w) && !/ly$/.test(w) && !DET.has(w) && !PREP.has(w) && !COORD.has(w) && !SUBORD.has(w) && !REL.has(w) && /^[a-z]+$/.test(w)) return true;
+      // an unknown -ed word straight after the who is a misspelt doing word ("the astronot floted")
+      if (needSubj && /[a-z]{3,}ed$/.test(w) && !NOT_ED_VERB.has(w) && !DET.has(pw) && !JJ_LIKE(p)) return true;
       if (w.endsWith('ed') && !NOT_ED_VERB.has(w) && stemIsVerb(w)) return true;
       if (/^VB[DZ]$|^MD$/.test(tag(i)) && stemIsVerb(w) && (needSubj || tag(i) === 'VBD')) return true;
       // present tense: "the rocket roars". An -s word straight after the who is a doing word,
@@ -133,6 +145,13 @@ const WR = (() => {
       if (!cur || cur.verb != null){
         const v = subjectVerbAt(i, !!cur);
         if (v >= 0){
+          if (join){
+            // "big and scary it breathed": the "and" joined describing words, not these ideas
+            const between = low.slice(join.i + 1, i);
+            if (!between.every(x => LINKERS.has(x) || x === ',')) join = null;
+          }
+          const pv = prevWord(i);
+          if (!join && cur && pv >= 0 && pv === cur.verb && SAY_THINK.has(low[pv])) join = {w:'', i:pv, type:'wh'};   // "I think the rover is cool"
           const kind = join && join.type === 'sub' ? 'sub' : join && join.type === 'wh' ? 'wh' : 'main';
           const afterSub = frontedSub && kind === 'main' && !join;
           cur = {kind, start:i, subj:i, verb:v, join: join ? join.w : null, joinAt: join ? join.i : null,

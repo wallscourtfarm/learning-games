@@ -11,7 +11,7 @@ button{font-family:inherit;cursor:pointer}
 [hidden]{display:none!important}
 
 /* header */
-#top{display:flex;align-items:center;gap:14px;padding:8px 16px;background:linear-gradient(90deg,#1798d3,#0f6fa0);color:#fff;position:sticky;top:0;z-index:20}
+#top{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;padding:8px 16px 0;background:linear-gradient(90deg,#1798d3,#0f6fa0);color:#fff;position:sticky;top:0;z-index:20}
 .brand{display:flex;align-items:center;gap:10px;color:#fff;text-decoration:none}
 .brand img{height:40px;width:auto;background:#fff;border-radius:8px;padding:3px}
 .brand b{display:block;font-size:1.25rem;font-weight:900;line-height:1.1}
@@ -231,3 +231,33 @@ button.wr-and{border:2px solid #c0392b;color:#c0392b;font-family:'Andika',sans-s
 .wr-ok{background:#eaf8ef;border:2px solid #a8dcb9;border-radius:12px;padding:10px 12px;font-weight:700}
 .mini-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));max-height:420px;overflow:auto}
 .mini-grid .pic-card div{font-size:.9rem;padding:6px 8px}
+.wr-missing{border:3px dashed var(--doing);color:#8a6d00;border-radius:6px;padding:0 8px;margin:0 4px;font-family:'Nunito',sans-serif;font-weight:900;font-size:1rem;line-height:1.6;background:#fffbea}
+
+/* main navigation (every screen) */
+#mainNav{order:3;flex:1 0 100%;display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:2px 0 0}
+#mainNav::-webkit-scrollbar{display:none}
+#mainNav button{border:0;background:transparent;color:#fff;font-weight:800;font-size:1rem;padding:8px 14px;border-radius:10px 10px 0 0;display:flex;align-items:center;gap:6px;white-space:nowrap;opacity:.88}
+#mainNav button:hover{background:rgba(255,255,255,.15);opacity:1}
+#mainNav button.on{background:#fff;color:#0f6fa0;opacity:1}
+.tools a.tool{text-decoration:none}
+/* where-am-I bar */
+#crumbs{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 16px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:var(--hdr,96px);z-index:15}
+.crumb-path{display:flex;align-items:center;gap:8px;font-weight:800;color:var(--muted);flex-wrap:wrap}
+.crumb-path a{color:var(--brand);text-decoration:none}
+.crumb-path a:hover{text-decoration:underline}
+.crumb-path b{color:var(--ink)}
+.crumb-actions{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.crumb-btn{border:2px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font-weight:800;font-size:.92rem;color:var(--ink)}
+.crumb-btn:hover{border-color:var(--brand)}
+.pic-panel{top:150px}
+/* home: the four things you can do */
+.home-modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:14px}
+.home-modes button{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;border:3px solid var(--line);background:#fff;border-radius:16px;padding:14px 16px;color:var(--ink)}
+.home-modes button:hover{border-color:var(--brand)}
+.home-modes .big{font-size:2rem}
+.home-modes b{font-size:1.2rem;font-weight:900}
+.home-modes small{color:var(--muted);font-weight:700;font-size:.92rem}
+#stepsSec,#picsSec,#fixSec{scroll-margin-top:70px}
+@media (max-width:640px){ #mainNav button{font-size:.88rem;padding:7px 9px} }
+@media (max-width:600px){ .crumb-actions{margin-left:0} }
+.crumb-path .sub{display:none}
