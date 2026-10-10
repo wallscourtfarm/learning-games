@@ -141,3 +141,32 @@ code{background:#eef2f7;border-radius:6px;padding:1px 6px}
 }
 .chip.empty img,.chip.empty .lab{display:none}
 .chip.empty{min-height:78px}
+
+/* joining words (Steps 4-5, Fix it) */
+.join-chip{background:#fff;border:3px solid #cfd6e2;color:#c0392b}
+.join-chip.j-subord{color:#2e5fa3}
+.join-chip.j-stop,.join-chip.j-comma{color:#222}
+.join-chip .w{font-weight:700}
+.join-chip .lab{color:#5b6475}
+.join-chip.empty{border-style:dashed;background:#fff!important;min-height:78px}
+.join-chip.empty img{display:none}
+.join-chip.tappable{box-shadow:0 0 0 3px rgba(23,152,211,.3)}
+.join-card{background:#fff;color:#c0392b;border:3px solid currentColor;display:flex;flex-direction:column;align-items:flex-start;gap:2px;box-shadow:none}
+.join-card.j-subord{color:#2e5fa3}
+.join-card.j-stop{color:#222}
+.join-card .jw{font-weight:700}
+.join-card small{font-family:'Nunito',sans-serif;font-size:.8rem;color:#5b6475;font-weight:700}
+.lit.faint{color:#c3cad6}
+.mini span.c-lit{background:none;color:var(--ink);padding:3px 0}
+.mini span.c-coord{background:#fff;color:#c0392b;border:1px solid #c0392b}
+.mini span.c-subord{background:#fff;color:#2e5fa3;border:1px solid #2e5fa3}
+.fix-card h3{font-size:1.15rem}
+
+/* fix it */
+.word{border:2px solid var(--line);background:#f7f9fc;border-radius:10px;padding:8px 12px;font-family:'Andika',sans-serif;font-size:1.6rem;color:var(--ink);align-self:center}
+.word:hover{border-color:var(--brand)}
+.word.speaking{background:#e3f3fb;border-color:var(--brand)}
+.word.hint{border-color:var(--think);box-shadow:0 0 0 4px rgba(224,161,0,.35)}
+.comma-mark{padding-bottom:18px;margin-left:-6px}
+.chip.removable::before{content:'✖';position:absolute;top:-9px;left:-7px;background:#fff;color:#c0392b;border:2px solid #c0392b;border-radius:50%;font-size:.7rem;width:20px;height:20px;line-height:16px;text-align:center}
+@media (max-width:860px){ .word{font-size:1.3rem;padding:6px 9px} }
