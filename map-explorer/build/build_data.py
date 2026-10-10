@@ -139,6 +139,7 @@ def build_world():
             caplist.append([p['name'], p['adm0_a3'], round(p['latitude'], 2), round(p['longitude'], 2)])
     countries = {}
     parts = []
+    mar = next((shape(f['geometry']).buffer(0) for f in nec if f['properties']['ADM0_A3'] == 'MAR'), None)
     for f in nec:
         p = f['properties']
         code = p['ADM0_A3']
@@ -147,6 +148,13 @@ def build_world():
             name = 'United Kingdom'
         cont = p['CONTINENT']
         g = shape(f['geometry'])
+        # Western Sahara: shown separately along the internationally recognised border (27°40'N), as on
+        # UK school atlases, rather than along the line of control used in Natural Earth's data
+        ws_cut = box(-17.5, 20.0, -8.66, 27.6667)
+        if code == 'MAR':
+            g = g.difference(ws_cut)
+        elif code == 'SAH' and mar is not None:
+            g = unary_union([g, mar.intersection(ws_cut)])
         if code == 'RUS':  # split Russia where Europe meets Asia (roughly the Urals)
             west = g.intersection(box(0, -90, 60, 90))
             east = g.difference(box(0, -90, 60, 90))

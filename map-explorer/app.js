@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '10.10.26o';
+const VERSION = '10.10.26r';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -200,6 +200,11 @@ function spinFast() {                         // quick redraw of just the land w
       el.setAttribute('d', out);
     });
   });
+}
+function setProjKeep(p) {                     // like setProj('globe') but keeps the centre already set
+  if (S.map !== 'world') return;
+  PROJ = p; WH = GS; delete built['world:globe'];
+  reprojItems(); showMap('world'); home(0); startMode();
 }
 function setProj(p) {
   if (p === PROJ || S.map !== 'world') return;
@@ -737,7 +742,10 @@ function fitLL(bb, ms) {
   }
   const [w, s, e, n] = bb; const pts = [rob(w, n), rob(e, n), rob(w, s), rob(e, s), rob((w + e) / 2, n), rob((w + e) / 2, s)];
   const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
-  fitBox(Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1.05, ms);
+  const x0 = Math.min(...xs), y0 = Math.min(...ys), w0 = Math.max(...xs) - x0, h0 = Math.max(...ys) - y0;
+  // leave room for the buttons along the top of the map
+  const k = Math.max(w0 / V.W, h0 / Math.max(100, V.H - 64)) * 1.05;
+  goTo(x0 + w0 / 2, y0 + h0 / 2 - 32 * k, k, ms);
 }
 function fitBNG(bb, ms) { const a = bngToUk(bb[0], bb[3]), b = bngToUk(bb[2], bb[1]); fitBox(a.x, a.y, b.x - a.x, b.y - a.y, 1.05, ms); }
 
@@ -1200,12 +1208,12 @@ function exploreTap(p, cx, cy) {
   if (S.map === 'world') {
     const part = worldLandAt(p);
     if (part) {
-      const code = part.dataset.code, c = D.world.countries[code];
-      const it = ITEMS.find(i => i.m === 'world' && i.k === 'country' && i.ref === code);
-      m.parts.filter(e => e.dataset.code === code).forEach(e => e.classList.add('sel'));
-      const cont = part.dataset.cont, bio = biomeAt(p);
-      if (bio) { showCard(c.n, 'A country in ' + (cont === 'Islands' ? 'the ocean' : cont), [['Biome here', bio.n], ['Capital city', c.cap || '—']], bio.f, c.f); return; }
-      showCard(c.n, code === 'RUS' ? 'A country in Europe and Asia' : code === 'GBR' ? 'Our country — in Europe' : 'A country in ' + (cont === 'Islands' ? 'the ocean' : cont), [['Continent', code === 'RUS' ? 'Europe and Asia' : cont], ['Capital city', c.cap || '—']], it && it.f, c.f);
+      const code = part.dataset.code, cont = part.dataset.cont, bio = biomeAt(p);
+      if (PROJ === 'globe') {                 // spin the globe to bring the country to the front, then show it
+        const c = D.world.countries[code], q = gpToLL(...(c._l || c.l));
+        return spinTo(q.lon, q.lat, () => countryCard(code, cont, bio, true));
+      }
+      countryCard(code, cont, bio, false);
       return;
     }
     const ll = robInv(p.x, p.y); if (!ll) return;
@@ -1243,6 +1251,52 @@ function flagFor(it) {                        // flag code for an item or a coun
 }
 const flagImg = (f, h = 80, alt = '') => f ? `<img class="flag" src="flags/${f}.svg" alt="${esc(alt)}" style="height:${h}px">` : '';
 const NI_NOTE = 'Northern Ireland does not have its own official flag. The Union Flag of the United Kingdom is used there.';
+function countryCard(code, cont, bio, zoom) {
+  const m = cur(), c = D.world.countries[code];
+  const parts = m.parts.filter(e => e.dataset.code === code);
+  parts.forEach(e => e.classList.add('sel'));
+  if (zoom && parts.length) {
+    const big = parts.reduce((a, b) => (b.getBBox().width * b.getBBox().height > a.getBBox().width * a.getBBox().height ? b : a)), bb = big.getBBox();
+    const w = Math.max(bb.width, 700), h = Math.max(bb.height, 700);
+    fitBox(bb.x + bb.width / 2 - w / 2, bb.y + bb.height / 2 - h / 2, w, h, 1.6);
+  }
+  const it = ITEMS.find(i => i.m === 'world' && i.k === 'country' && i.ref === code);
+  if (bio) showCard(c.n, 'A country in ' + (cont === 'Islands' ? 'the ocean' : cont), [['Biome here', bio.n], ['Capital city', c.cap || '—']], bio.f, c.f);
+  else showCard(c.n, code === 'RUS' ? 'A country in Europe and Asia' : code === 'GBR' ? 'Our country — in Europe' : 'A country in ' + (cont === 'Islands' ? 'the ocean' : cont), [['Continent', code === 'RUS' ? 'Europe and Asia' : cont], ['Capital city', c.cap || '—']], it && it.f, c.f);
+  // a button to jump between the globe and the flat map, keeping this country selected
+  const back = $('#backExplore'); if (!back) return;
+  const contView = WORLD_VIEWS[cont] ? cont : null;
+  const btn = PROJ === 'globe'
+    ? H(`<button class="btn" id="projJump">🗺️ Show ${esc(contView || c.n)} on the flat map</button>`)
+    : H(`<button class="btn" id="projJump">🌐 See ${esc(c.n)} on the globe</button>`);
+  back.before(btn);
+  btn.onclick = () => {
+    if (PROJ === 'globe') {
+      setProj('gp');
+      if (contView) fitLL(WORLD_VIEWS[contView], 600);
+      countryCard(code, cont, null, !contView);
+    } else {
+      const q = gpToLL(...(c._l || c.l));
+      GLOBE.lon = q.lon; GLOBE.lat = clamp(q.lat, -60, 60);
+      setProjKeep('globe');
+      countryCard(code, cont, null, true);
+    }
+  };
+}
+let spinAnim = 0;
+function spinTo(lon, lat, done, ms = 650) {   // smooth turn of the globe, then redraw everything
+  cancelAnimationFrame(spinAnim);
+  const a = { lon: GLOBE.lon, lat: GLOBE.lat }, t0 = performance.now();
+  let dl = ((lon - a.lon + 540) % 360) - 180;
+  const tl = clamp(lat, -60, 60);
+  const step = now => {
+    const t = Math.min(1, (now - t0) / ms), e = t < .5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+    GLOBE.lon = ((a.lon + dl * e + 540) % 360) - 180; GLOBE.lat = a.lat + (tl - a.lat) * e;
+    if (t < 1) { spinFast(); spinAnim = requestAnimationFrame(step); }
+    else { cancelAnimationFrame(spinRAF); rebuildGlobe(); done && done(); }
+  };
+  spinAnim = requestAnimationFrame(step);
+}
 function showItemCard(it) {
   const rows = [];
   if (it.m === 'world' && it.ll) { const ll = Array.isArray(it.ll) ? it.ll : null; if (ll) rows.push(['Hemisphere', (ll[0] >= 0 ? 'Northern' : 'Southern') + ' and ' + (ll[1] >= 0 ? 'eastern' : 'western')]); }
