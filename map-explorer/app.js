@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '10.10.26c';
+const VERSION = '10.10.26d';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -568,16 +568,19 @@ function fitBNG(bb, ms) { const a = bngToUk(bb[0], bb[3]), b = bngToUk(bb[2], bb
 
 /* ------------------------------------------------------------ dynamic layer: markers & labels */
 function markerColour(it) { return it.id === 'school' ? '#1798d3' : it.cap ? '#d32f2f' : it.phys ? '#2e7d32' : '#5e35b1'; }
+function placeCat(it) { return it.k === 'river' ? 'river' : it.k === 'line' ? 'line' : it.cap ? 'cap' : it.phys ? 'phys' : 'place'; }
+const PLACE_CATS = { cap: 'Capital cities', place: 'Cities and landmarks', phys: 'Physical features (mountains, hills, gorges)', line: 'Long features (mountain ranges, walls, faults)' };
 function drawMarker(parent, it, opts = {}) {
   const [x, y] = it.xy;
-  const g = cs(parent, x, y, 'mk' + (it.cap || it.id === 'school' ? ' capm' : ''));
+  const g = cs(parent, x, y, 'mk' + (it.cap || it.id === 'school' ? ' capm' : '') + (opts.rev ? ' rev' : ''));
   g.dataset.id = it.id;
   E('circle', { r: 26, fill: 'transparent' }, g);
-  if (it.phys) E('path', { d: 'M0-13L12 9H-12z', fill: markerColour(it), stroke: '#fff', 'stroke-width': 2.5, class: 'dot' }, g);
-  else if (it.id === 'school') { E('circle', { r: 17, fill: '#fff', stroke: '#1798d3', 'stroke-width': 2.5 }, g); E('image', { href: 'wfa-icon.png', x: -12, y: -14, width: 24, height: 27.5 }, g); }
-  else if (it.cap) E('rect', { x: -9, y: -9, width: 18, height: 18, fill: markerColour(it), stroke: '#fff', 'stroke-width': 2.5, transform: 'rotate(45)' }, g);
-  else E('circle', { r: 9, fill: markerColour(it), class: 'dot' }, g);
-  if (opts.label) E('text', { x: it.id === 'school' ? 21 : 15, y: 6, 'font-size': 18 }, g).textContent = it.n;
+  const sg = E('g', { class: 'shape', transform: opts.rev ? 'scale(.62)' : null }, g);   // earlier years' places are drawn smaller
+  if (it.phys) E('path', { d: 'M0-13L12 9H-12z', fill: markerColour(it), stroke: '#fff', 'stroke-width': 2.5, class: 'dot' }, sg);
+  else if (it.id === 'school') { E('circle', { r: 17, fill: '#fff', stroke: '#1798d3', 'stroke-width': 2.5 }, sg); E('image', { href: 'wfa-icon.png', x: -12, y: -14, width: 24, height: 27.5 }, sg); }
+  else if (it.cap) E('rect', { x: -9, y: -9, width: 18, height: 18, fill: markerColour(it), stroke: '#fff', 'stroke-width': 2.5, transform: 'rotate(45)' }, sg);
+  else E('circle', { r: 9, fill: markerColour(it), class: 'dot' }, sg);
+  if (opts.label) E('text', { x: opts.rev ? 10 : it.id === 'school' ? 21 : 15, y: opts.rev ? 5 : 6, 'font-size': opts.rev ? 15 : 18, opacity: opts.rev ? .85 : 1 }, g).textContent = it.n;
   return g;
 }
 function drawItemLine(parent, it, label) {
@@ -598,8 +601,11 @@ function refreshDyn() {
   const its = visibleItems();
   const showMk = S.map === 'world' ? S.layers.world.markers !== false : S.layers.uk.markers !== false;
   if (!quiz && showMk) {
+    const hideCats = new Set(S.layers[S.map].hideCats || []);
     for (const it of its) {
-      if (it.k === 'point') drawMarker(m.dyn, it, { label: names });
+      if (hideCats.has(placeCat(it))) continue;
+      const rev = yr() > 0 && !it.y.includes(yr());
+      if (it.k === 'point') drawMarker(m.dyn, it, { label: names, rev });
       else if (it.k === 'line') drawItemLine(m.dyn, it, names);
     }
   }
@@ -668,15 +674,28 @@ function declutter() {                       // hide labels that would overlap, 
       });
       return;
     }
+    // 1. markers: where they pile up, keep the most important (this year's capitals first)
+    const mks = [...m.dyn.querySelectorAll('.mk')];
+    const rank = g => (g.classList.contains('rev') ? 2 : 0) + (g.classList.contains('capm') ? 0 : 1);
+    mks.sort((a, b) => rank(a) - rank(b));
+    mks.forEach(g => g.style.visibility = '');
+    const taken = [];
+    for (const g of mks) {
+      const r = g.querySelector('.shape').getBoundingClientRect();
+      if (taken.some(o => r.left < o.right + 2 && r.right > o.left - 2 && r.top < o.bottom + 2 && r.bottom > o.top - 2)) g.style.visibility = 'hidden';
+      else taken.push(r);
+    }
+    // 2. labels
+    const shown = t => { const mk = t.closest('.mk'); return !mk || mk.style.visibility !== 'hidden'; };
     const groups = [
-      [...m.dyn.querySelectorAll('.capm text')],
+      [...m.dyn.querySelectorAll('.capm:not(.rev) text')],
       [...(m.names ? m.names.querySelectorAll('text.pri') : [])],
-      [...m.dyn.querySelectorAll('.mk:not(.capm) text, .mkline text')],
+      [...m.dyn.querySelectorAll('.mk:not(.capm):not(.rev) text, .mkline text')],
+      [...m.dyn.querySelectorAll('.mk.rev text')],
       [...(m.names ? m.names.querySelectorAll('text:not(.pri)') : [])].filter(t => t.parentNode.style.display !== 'none'),
     ];
-    const all = groups.flat();
+    const all = groups.flat().filter(shown);
     all.forEach(t => t.style.visibility = '');
-    const taken = [...m.dyn.querySelectorAll('.mk .dot, .mk rect, .mk path')].map(e => e.getBoundingClientRect());
     const rects = all.map(t => t.getBoundingClientRect());
     all.forEach((t, i) => {
       const r = rects[i];
@@ -741,10 +760,10 @@ function drawScale() {
   if (!mpp) { el.hidden = true; return; }
   el.hidden = false;
   let best = 100;
-  for (const v of [50, 100, 200, 250, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000]) if (v / mpp <= 220) best = v;
+  for (const v of [50, 100, 200, 250, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000]) if (Math.abs(v / mpp - 170) < Math.abs(best / mpp - 170)) best = v;
   const px = best / mpp, half = best / 2;
   const fmt = v => v >= 1000 ? (v / 1000) + ' km' : v + ' m';
-  el.innerHTML = `<div class="sb-bar" style="width:${px}px"><i></i><i></i></div><div class="sb-lab"><span>0</span><span style="left:${px / 2}px">${fmt(half)}</span><span style="left:${px}px">${fmt(best)}</span></div>`;
+  el.innerHTML = `<div class="sb-bar" style="width:${px}px"><i></i><i></i></div><div class="sb-lab"><span>0</span>${px >= 150 ? `<span style="left:${px / 2}px">${fmt(half)}</span>` : ''}<span style="left:${px}px">${fmt(best)}</span></div>`;
 }
 
 /* ------------------------------------------------------------ hit testing */
@@ -1988,11 +2007,19 @@ $('#symBtn').onclick = e => {
       p.querySelector('#symFew').onclick = () => { L.hide = ['pub', 'parking', 'po']; L.symbols = true; p.querySelectorAll('[data-st]').forEach(c => c.checked = !L.hide.includes(c.dataset.st)); p.querySelector('#symAll').checked = true; apply(); };
     });
   } else {
-    const L = S.layers[key];
-    openPop(e.currentTarget, `<h3>Show on the map</h3>
-      <label class="tog"><input type="checkbox" data-l="markers" ${L.markers !== false ? 'checked' : ''}>Place markers (cities and landmarks)</label>
-      <label class="tog"><input type="checkbox" data-l="names" ${L.names ? 'checked' : ''}>Names</label>`,
-    p => p.querySelectorAll('[data-l]').forEach(c => c.onchange = () => { L[c.dataset.l] = c.checked; save(); restyle(); refreshDyn(); }));
+    const L = S.layers[key], hc = new Set(L.hideCats || []);
+    openPop(e.currentTarget, `<h3>Places on the map</h3>
+      <label class="tog"><input type="checkbox" data-l="markers" ${L.markers !== false ? 'checked' : ''}><b>Show places</b></label>
+      ${Object.entries(PLACE_CATS).map(([k, t]) => `<label class="tog"><input type="checkbox" data-cat="${k}" ${hc.has(k) ? '' : 'checked'}>${t}</label>`).join('')}
+      ${key === 'uk' ? `<label class="tog"><input type="checkbox" data-l="rivers" ${L.rivers ? 'checked' : ''}>Rivers and canals</label>` : ''}
+      <label class="tog"><input type="checkbox" data-l="names" ${L.names ? 'checked' : ''}>Names</label>
+      <label class="tog"><input type="checkbox" id="revTog" ${S.revision ? 'checked' : ''}>Include earlier years' places</label>
+      <p style="margin:0;font-size:15px;color:#4a6577;font-weight:700">Earlier years' places are drawn smaller. Zoom in to see places hidden where they crowd together.</p>`,
+    p => {
+      p.querySelectorAll('[data-l]').forEach(c => c.onchange = () => { L[c.dataset.l] = c.checked; save(); restyle(); refreshDyn(); });
+      p.querySelectorAll('[data-cat]').forEach(c => c.onchange = () => { const h = new Set(L.hideCats || []); c.checked ? h.delete(c.dataset.cat) : h.add(c.dataset.cat); L.hideCats = [...h]; save(); refreshDyn(); });
+      p.querySelector('#revTog').onchange = ev => { S.revision = ev.target.checked; save(); refreshDyn(); };
+    });
   }
   const r = e.currentTarget.getBoundingClientRect(), pp = $('#pop'); pp.style.left = Math.max(10, r.right - pp.offsetWidth) + 'px';
 };
