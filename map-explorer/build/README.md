@@ -6,9 +6,9 @@ Places, facts and year groups are in `content.py` (from the CLF Geographers curr
 To change a fact or add a place: edit `content.py`, then rebuild.
 
 ```
-python3 -m venv /tmp/mapvenv && /tmp/mapvenv/bin/pip install shapely pyproj numpy contourpy
+python3 -m venv /tmp/mapvenv && /tmp/mapvenv/bin/pip install shapely pyproj numpy contourpy pyshp
 /tmp/mapvenv/bin/python fetch_raw.py /tmp/map-raw        # downloads ~200 MB (only needed once)
-/tmp/mapvenv/bin/python build_data.py /tmp/map-raw ../map-data.js
+/tmp/mapvenv/bin/python build_data.py /tmp/map-raw ../map-data.js --biomes   # --biomes also rebuilds ../biomes.json (slow)
 ```
 
 Then bump `VERSION` in `../app.js` and the `?v=` in `../index.html`.

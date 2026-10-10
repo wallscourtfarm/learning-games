@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '10.10.26i';
+const VERSION = '10.10.26j';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -15,7 +15,7 @@ const DEFAULTS = {
   year: null, map: 'world', mode: 'explore', revision: true, autoZoom: true, count: 10, big: false,
   teams: 0, scores: [0, 0, 0, 0, 0, 0], gridLevel: 0, gridTask: 'give', globeTask: 'read', panelOpen: true,
   layers: {
-    world: { names: true, colour: true, lines: true, grid: false, markers: true, tz: false, climate: false, plates: false },
+    world: { names: true, colour: true, lines: true, grid: false, markers: true, tz: false, climate: false, plates: false, biomes: false },
     uk: { names: true, regions: false, counties: false, rivers: true, markers: true },
     local: { names: true, symbols: true, contours: true, tenths: true, hide: [] },
   },
@@ -274,9 +274,9 @@ const POI = {
   worship: 'Place of worship', school: 'School', univ: 'University', pub: 'Pub (public house)', po: 'Post office',
   parking: 'Parking', hospital: 'Hospital', bus: 'Bus station', fire: 'Fire station', police: 'Police station',
   station: 'Railway station', viewpoint: 'Viewpoint', museum: 'Museum', info: 'Information centre', picnic: 'Picnic site',
-  golf: 'Golf course', tower: 'Tower', antiquity: 'Ancient site', peak: 'Summit (spot height)', trig: 'Trig point',
+  golf: 'Golf course', tower: 'Tower', antiquity: 'Ancient site', peak: 'Summit (spot height)', trig: 'Trig point', attraction: 'Famous landmark',
 };
-const POI_SHORT = { worship: 'place of worship', school: 'school', univ: 'university', pub: 'pub', po: 'post office', parking: 'car park', hospital: 'hospital', bus: 'bus station', fire: 'fire station', police: 'police station', station: 'railway station', viewpoint: 'viewpoint', museum: 'museum', info: 'information centre', picnic: 'picnic site', golf: 'golf course', tower: 'tower', antiquity: 'ancient site', peak: 'summit', trig: 'trig point' };
+const POI_SHORT = { worship: 'place of worship', school: 'school', univ: 'university', pub: 'pub', po: 'post office', parking: 'car park', hospital: 'hospital', bus: 'bus station', fire: 'fire station', police: 'police station', station: 'railway station', viewpoint: 'viewpoint', museum: 'museum', info: 'information centre', picnic: 'picnic site', golf: 'golf course', tower: 'tower', antiquity: 'ancient site', peak: 'summit', trig: 'trig point', attraction: 'landmark' };
 function buildDefs() {
   const defs = $('#defs');
   const txt = (id, t, w) => {
@@ -308,6 +308,8 @@ function buildDefs() {
   E('path', { d: 'M-5-5l10 10M5-5l-10 10', stroke: '#6d4c41', 'stroke-width': 2.5 }, g);
   g = E('g', { id: 'sym-peak' }, defs);
   E('circle', { r: 5, fill: '#111', stroke: '#fff', 'stroke-width': 2 }, g);
+  g = E('g', { id: 'sym-attraction' }, defs);
+  E('path', { d: 'M0-13l3.8 8 8.7 1.1-6.4 6 1.7 8.6L0 6.4-7.8 10.7l1.7-8.6-6.4-6 8.7-1.1z', fill: '#1565c0', stroke: '#fff', 'stroke-width': 2 }, g);
   g = E('g', { id: 'sym-trig' }, defs);
   E('path', { d: 'M0-11L10 7H-10z', fill: '#1565c0', stroke: '#fff', 'stroke-width': 2 }, g); E('circle', { cy: 1, r: 2.5, fill: '#fff' }, g);
   // pin used for answers
@@ -375,6 +377,7 @@ function buildWorld() {
     const p = rob(clamp(z * 15, -176, 176), -57);
     E('text', { 'text-anchor': 'middle', 'font-size': 14, 'font-weight': 900, fill: '#26408b' }, cs(tz, p.x, p.y, 'lbl')).textContent = z === 0 ? 'GMT' : (z > 0 ? '+' + z : '−' + -z);
   }
+  E('g', { id: 'w-biomes', 'pointer-events': 'none', opacity: .88 }, g);   // filled in when the layer is first switched on
   // climate zones (bands between the tropics and the polar circles)
   const clim = E('g', { id: 'w-climate', 'pointer-events': 'none' }, g);
   const band = (a, b, fill) => { const p1 = rob(-180, a), p2 = rob(180, b); E('rect', { x: p1.x, y: Math.min(p1.y, p2.y), width: p2.x - p1.x, height: Math.abs(p2.y - p1.y), fill }, clim); };
@@ -422,6 +425,8 @@ function styleWorld(m) {
   m.g.querySelector('#w-gratlab').style.display = grid ? '' : 'none';
   m.g.querySelector('#w-tz').style.visibility = tzOn ? '' : 'hidden';
   m.g.querySelector('#w-climate').style.display = L.climate ? '' : 'none';
+  m.g.querySelector('#w-biomes').style.display = L.biomes ? '' : 'none';
+  if (L.biomes) loadBiomes(m);
   const pl = m.g.querySelector('#w-plates'); if (pl) pl.style.display = L.plates ? '' : 'none';
   m.g.querySelector('#w-lines').style.display = L.lines ? '' : 'none';
 }
@@ -521,6 +526,7 @@ function buildLocal(id) {
     const gg = cs(poiG, p.x, p.y, 'poi');
     gg.dataset.i = i; gg.dataset.t = p.t;
     E('use', { href: '#sym-' + p.t }, gg);
+    if (p.t === 'attraction') E('text', { x: 15, y: 6, 'font-size': 16, 'font-weight': 900, 'font-style': 'italic', fill: '#0d47a1', class: 'lbl' }, gg).textContent = p.n;
     if (p.t === 'peak') { E('text', { x: 8, y: 5, 'font-size': 15, 'font-weight': 900, fill: '#111', class: 'lbl' }, gg).textContent = p.h; if (p.n) E('text', { x: 8, y: -10, 'font-size': 14, 'font-weight': 800, 'font-style': 'italic', fill: '#333', class: 'lbl' }, gg).textContent = p.n; }
     if (p.ours) {
       E('circle', { cy: -34, r: 20, fill: '#fff', stroke: '#1798d3', 'stroke-width': 2.5 }, gg);
@@ -587,7 +593,7 @@ function restyle() {
 function mapLabel(id) {
   if (id === 'world' || id === 'merc') return 'World';
   if (id === 'uk') return 'United Kingdom';
-  return { school: 'OS: WFA', gorge: 'OS: Avon Gorge', penyfan: 'OS: Pen y Fan' }[id.split(':')[1]] || 'OS map';
+  return { school: 'OS: WFA', gorge: 'OS: Avon Gorge', penyfan: 'OS: Pen y Fan', london: 'OS: London' }[id.split(':')[1]] || 'OS map';
 }
 function setAttrib() {
   const a = S.map === 'world' ? (PROJ === 'merc' ? 'Map data: Natural Earth · Mercator projection (sizes near the poles look much too big)' : 'Map data: Natural Earth · Gall-Peters projection (true sizes)') : S.map === 'merc' ? 'Map data: Natural Earth · Mercator projection' :
@@ -700,7 +706,7 @@ function refreshDyn() {
     zoomNames();
   }
 }
-const POI_RANK = ['station', 'museum', 'hospital', 'univ', 'worship', 'school', 'tower', 'viewpoint', 'antiquity', 'info', 'golf', 'bus', 'fire', 'police', 'picnic', 'po', 'pub', 'parking'];
+const POI_RANK = ['attraction', 'station', 'museum', 'hospital', 'univ', 'worship', 'school', 'tower', 'viewpoint', 'antiquity', 'info', 'golf', 'bus', 'fire', 'police', 'picnic', 'po', 'pub', 'parking'];
 function poiRank(p) { return p.ours ? -1 : (POI_RANK.indexOf(p.t) + 1 || 99); }
 function forcePoi(...idx) { const m = cur(); if (m && m.L) { m.force = new Set(idx); styleLocal(m); } }
 let declT = 0;
@@ -717,9 +723,10 @@ function declutter() {                       // hide labels that would overlap, 
         m.poiOrder.forEach(g => g.style.visibility = '');
         const rects = m.poiOrder.map(g => g.querySelector('use').getBoundingClientRect());
         m.poiOrder.forEach((g, i) => { if (force.has(+g.dataset.i)) taken.push(rects[i]); });
+        const gap = clamp((V.k - 2) * -2.5, -14, 3);   // zoomed out: give each symbol more room, so fewer show
         m.poiOrder.forEach((g, i) => {
           if (force.has(+g.dataset.i)) return;
-          if (over(rects[i], taken, 3)) g.style.visibility = 'hidden'; else taken.push(rects[i]);
+          if (over(rects[i], taken, gap)) g.style.visibility = 'hidden'; else taken.push(rects[i]);
         });
       }
       if (S.layers.local.symbols) m.poiG.querySelectorAll('text').forEach(t => taken.push(t.getBoundingClientRect()));
@@ -1013,12 +1020,44 @@ function drawMapKey() {
     ${hc.has('phys') ? '' : row('<path d="M0-11L10 8H-10z" fill="#2e7d32" stroke="#fff" stroke-width="2"/>', 'Physical feature')}
     ${hc.has('res') || !visibleItems().some(i => i.res) ? '' : row('<rect x="-7" y="-7" width="14" height="14" rx="3" fill="#795548" stroke="#fff" stroke-width="2"/>', 'Natural resource')}
     ${hc.has('line') ? '' : row('<path d="M-12 0H12" stroke="#8d5524" stroke-width="4" stroke-dasharray="1 5" stroke-linecap="round"/>', 'Mountain range')}
+    ${S.map === 'world' && S.layers.world.biomes ? Object.entries(BIOMES).map(([k, b]) => row(`<rect x="-11" y="-11" width="22" height="22" rx="3" fill="${b.c}" stroke="#999"/>`, b.n)).join('') : ''}
     ${S.map === 'world' && S.layers.world.plates ? row('<path d="M-12 0H12" stroke="#c62828" stroke-width="3"/>', 'Plate boundary') : ''}
     ${S.map === 'world' && S.layers.world.climate ? row('<rect x="-11" y="-11" width="22" height="22" fill="rgba(255,112,67,.45)"/>', 'Tropical zone') + row('<rect x="-11" y="-11" width="22" height="22" fill="rgba(102,187,106,.4)"/>', 'Temperate zone') + row('<rect x="-11" y="-11" width="22" height="22" fill="rgba(66,165,245,.5)"/>', 'Polar zone') : ''}
     ${S.map === 'uk' && S.layers.uk.rivers ? row('<path d="M-12 0H12" stroke="#1e88e5" stroke-width="4"/>', 'River') : ''}
     ${yr() && S.revision ? `<div class="small">Small symbols: earlier years</div>` : ''}
     ${S.map === 'world' && PROJ === 'merc' ? `<div class="small" style="color:#b0351f">Mercator map: sizes near the poles<br>look much too big</div>` : ''}`;
   $('#mapKeyX').onclick = () => { S.mapKeyOff = true; save(); drawMapKey(); toast('The key is in 📍 Places if you want it back'); };
+}
+const BIOMES = {
+  rainforest: { n: 'Tropical rainforest', c: '#1e8a46', f: 'Tropical rainforests are hot and wet all year. They have tall trees and more kinds of plants and animals than anywhere else on Earth. The Amazon is the biggest.' },
+  tropdry: { n: 'Tropical dry forest', c: '#9ccc65', f: 'Tropical dry forests are warm all year but have a long dry season, when many trees lose their leaves to save water.' },
+  savanna: { n: 'Savanna', c: '#e8c95a', f: 'Savannas are hot grasslands with scattered trees. They have a wet season and a dry season. Lions, zebras and elephants live on the African savanna.' },
+  desert: { n: 'Desert', c: '#f5e2b0', f: 'Deserts get very little rain. Days can be very hot and nights can be cold. The Sahara is the largest hot desert.' },
+  med: { n: 'Mediterranean', c: '#c0a24a', f: 'Mediterranean places have hot, dry summers and mild, wet winters. Shrubs and small trees such as olives grow there, like on the east coast of Spain.' },
+  tempforest: { n: 'Temperate forest', c: '#66bb6a', f: 'Temperate forests have four seasons, with mild summers and cool winters. Most of the UK would naturally be covered by this kind of forest.' },
+  grassland: { n: 'Temperate grassland', c: '#d4e157', f: 'Temperate grasslands are huge open plains with few trees, warm summers and cold winters, such as the prairies of North America and the steppes of Asia.' },
+  taiga: { n: 'Boreal forest (taiga)', c: '#2f6f62', f: 'Boreal forests (taiga) have long, very cold winters and short summers. They are huge forests of conifer trees across the north of Canada, Scandinavia and Russia.' },
+  tundra: { n: 'Tundra', c: '#b8cbc5', f: 'Tundra is cold and has no trees. Under the surface, the ground stays frozen all year. Only small plants like mosses grow there.' },
+  mountain: { n: 'Mountain grassland', c: '#a1887f', f: 'Mountain grasslands are high, cool and windy places with grasses and shrubs, such as the Andes and the plateau of Tibet.' },
+  ice: { n: 'Ice sheet', c: '#f2f8fc', f: 'Ice sheets are land covered in thick ice all year round, like most of Antarctica and Greenland.' },
+};
+let biomeData = null, biomeLoading = false;
+function loadBiomes(m) {
+  const fill = () => {
+    const g = m.g.querySelector('#w-biomes');
+    if (g.childElementCount) return;
+    for (const [k, d] of Object.entries(biomeData)) if (BIOMES[k]) E('path', { d: reprojD(d), fill: BIOMES[k].c, stroke: 'none', 'data-biome': k }, g);
+  };
+  if (biomeData) return fill();
+  if (biomeLoading) return;
+  biomeLoading = true;
+  fetch('biomes.json?v=' + VERSION).then(r => r.json()).then(j => { biomeData = j; fill(); }).catch(() => toast('Could not load the biomes layer')).finally(() => { biomeLoading = false; });
+}
+function biomeAt(p) {
+  const m = cur(); if (!m || S.map !== 'world' || !S.layers.world.biomes) return null;
+  const pt = DPt(p.x, p.y);
+  const e = [...m.g.querySelectorAll('#w-biomes path')].find(x => x.isPointInFill(pt));
+  return e ? BIOMES[e.dataset.biome] : null;
 }
 function legendHTML() {
   const row = (svgInner, t) => `<div style="display:flex;align-items:center;gap:12px;font-weight:800;font-size:calc(18px*var(--fs))"><svg width="34" height="34" viewBox="-17 -17 34 34">${svgInner}</svg>${t}</div>`;
@@ -1044,7 +1083,8 @@ function exploreTap(p, cx, cy) {
       const code = part.dataset.code, c = D.world.countries[code];
       const it = ITEMS.find(i => i.m === 'world' && i.k === 'country' && i.ref === code);
       m.parts.filter(e => e.dataset.code === code).forEach(e => e.classList.add('sel'));
-      const cont = part.dataset.cont;
+      const cont = part.dataset.cont, bio = biomeAt(p);
+      if (bio) { showCard(c.n, 'A country in ' + (cont === 'Islands' ? 'the ocean' : cont), [['Biome here', bio.n], ['Capital city', c.cap || '—']], bio.f, c.f); return; }
       showCard(c.n, code === 'RUS' ? 'A country in Europe and Asia' : code === 'GBR' ? 'Our country — in Europe' : 'A country in ' + (cont === 'Islands' ? 'the ocean' : cont), [['Continent', code === 'RUS' ? 'Europe and Asia' : cont], ['Capital city', c.cap || '—']], it && it.f, c.f);
       return;
     }
@@ -1133,7 +1173,7 @@ function localExplore(p) {
     setPanel(`<div class="info"><p class="ptitle">You tapped…</p>
       <div style="display:flex;align-items:center;gap:14px"><svg width="70" height="56" viewBox="-35 -28 70 56"><use href="#sym-${q.t}" transform="scale(1.6)"/></svg><h2>${esc(POI[q.t])}</h2></div>
       ${q.n ? `<div class="sub">${esc(q.n)}</div>` : ''}
-      ${refRowsHTML(r4, r6, show6)}</div>
+      ${refRowsHTML(r4, r6, show6)}</div>${q.item && byId[q.item] ? factHTML(byId[q.item].f) : ''}
       <p class="hint">Remember: along the corridor (eastings) first, then up the stairs (northings).</p>
       <button class="btn sec" id="backExplore">Back</button>`);
   } else {
@@ -2108,7 +2148,7 @@ $('#mapBtn').onclick = e => openPop(e.currentTarget, `<h3>Choose a map</h3>
 p => p.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { closePop(); showMap(b.dataset.m); startMode(); }));
 $('#layerBtn').onclick = e => {
   const key = mapKind(), L = S.layers[key];
-  const opts = key === 'world' ? [['names', 'Names'], ['colour', 'Colour the continents'], ['lines', 'Equator, tropics and polar circles'], ['grid', 'Lines of latitude and longitude'], ['tz', 'Time zones'], ['climate', 'Climate zones (tropical, temperate, polar)'], ['plates', 'Tectonic plate boundaries']]
+  const opts = key === 'world' ? [['names', 'Names'], ['colour', 'Colour the continents'], ['lines', 'Equator, tropics and polar circles'], ['grid', 'Lines of latitude and longitude'], ['tz', 'Time zones'], ['biomes', 'Biomes (rainforest, desert, tundra…)'], ['climate', 'Climate zones (tropical, temperate, polar)'], ['plates', 'Tectonic plate boundaries']]
     : key === 'uk' ? [['names', 'Names'], ['rivers', 'Rivers and canals'], ['regions', 'Regions of England'], ['counties', 'Counties of England']]
       : [['names', 'Place names and labels'], ['symbols', 'Map symbols'], ['contours', 'Contour lines (height)'], ['tenths', '100 m grid lines (for 6-figure references, when zoomed in)']];
   openPop(e.currentTarget, `<h3>Show on the map</h3>${opts.map(([k, t]) => `<label class="tog"><input type="checkbox" data-l="${k}" ${L[k] ? 'checked' : ''}>${t}</label>`).join('')}${key === 'local' ? '<button class="opt" id="popKey">🔑 Map key</button>' : ''}`,
@@ -2168,7 +2208,7 @@ $('#setBtn').onclick = () => openModal(`<h2>Settings</h2>
   <div class="setrow"><span>Extra-large text</span><div class="chips"><button class="chip ${S.big ? 'on' : ''}" data-big="1">Yes</button><button class="chip ${!S.big ? 'on' : ''}" data-big="0">No</button></div></div>
   <div class="setrow"><span>Grid references</span><div class="chips">${[[0, 'By year'], [4, '4-figure'], [6, '6-figure']].map(([v, t]) => `<button class="chip ${S.gridLevel === v ? 'on' : ''}" data-gl="${v}">${t}</button>`).join('')}</div></div>
   <p style="margin-top:18px;font-size:15px">Map Explorer · Version ${VERSION}. No pupil information is stored. Settings are saved on this computer only.<br>
-  World map: Natural Earth. UK map: contains OS data © Crown copyright and database right 2024; Office for National Statistics (Open Government Licence). OS-style maps: © OpenStreetMap contributors, drawn in the style of Ordnance Survey maps using the British National Grid. Heights: OS Terrain 50 (OGL). Tectonic plates: Bird (2002), via Ahlenius &amp; Nordpil (ODC-BY). Flags: flag-icons (MIT).</p>
+  World map: Natural Earth. UK map: contains OS data © Crown copyright and database right 2024; Office for National Statistics (Open Government Licence). OS-style maps: © OpenStreetMap contributors, drawn in the style of Ordnance Survey maps using the British National Grid. Heights: OS Terrain 50 (OGL). Tectonic plates: Bird (2002), via Ahlenius &amp; Nordpil (ODC-BY). Flags: flag-icons (MIT). Biomes: RESOLVE Ecoregions 2017 (CC-BY 4.0).</p>
   <button class="btn" id="closeSet">Done</button>`, b => {
   const grp = (attr, f) => b.querySelectorAll(`[${attr}]`).forEach(x => x.onclick = () => { f(x.getAttribute(attr)); save(); b.querySelectorAll(`[${attr}]`).forEach(y => y.classList.toggle('on', y === x)); });
   grp('data-c', v => S.count = +v);

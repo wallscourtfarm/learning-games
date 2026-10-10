@@ -380,6 +380,9 @@ def osm_geoms(el):
     return None
 
 
+CITY_IDS = {'school', 'bristol', 'bath', 'exeter', 'manchester', 'birmingham', 'liverpool', 'leeds', 'sheffield', 'newcastle'}
+
+
 def build_local(spec):
     data = load(spec['raw'] + '.json')['elements']
     e0, n0, e1, n1 = spec['e0'], spec['n0'], spec['e1'], spec['n1']
@@ -394,6 +397,7 @@ def build_local(spec):
     roads = {}
     rails, rail_dis, rivers, streams, canals, cliffs = [], [], [], [], [], []
     pois, places, names, spots = [], [], [], []
+    named_rivers = {}
     road_refs = {}
     for el in data:
         tags = el.get('tags', {})
@@ -441,6 +445,7 @@ def build_local(spec):
         if isinstance(gl, LineString) and tags.get('tunnel') not in ('culvert', 'yes'):
             if ww == 'river':
                 rivers.append(gl)
+                named_rivers.setdefault(tags.get('name', ''), []).append(gl)
                 if tags.get('name') and gb.length > 600:
                     names.append(dict(t=tags['name'], line=1, g=gl, c='water'))
             elif ww in ('stream', 'drain', 'ditch'):
@@ -474,6 +479,16 @@ def build_local(spec):
 
     W, H = e1 - e0, n1 - n0
     clipbox = box(-pad, -pad, W + pad, H + pad)
+    # wide rivers whose water area is incomplete in the data: widen the centre line instead
+    for rname, half in spec.get('riverbuffer', {}).items():
+        for ln in named_rivers.get(rname, []):
+            areas['water'].append(ln.buffer(half, cap_style=2))
+    # curriculum landmarks that fall on this map get a named tourist-style symbol
+    for it in ITEMS:
+        if it['m'] == 'uk' and it['k'] == 'point' and not it.get('phys') and not it.get('cap') and it['id'] not in CITY_IDS:
+            ee, nn = to_bng.transform(it['p'][1], it['p'][0])
+            if e0 + 150 < ee < e1 - 150 and n0 + 150 < nn < n1 - 150:
+                pois.append(dict(t='attraction', x=round(ee - e0), y=round(n1 - nn), n=it['n'], area=10 ** 9, item=it['id']))
 
     def ad(lst, tol=2.0):
         if not lst:
@@ -496,11 +511,11 @@ def build_local(spec):
             continue
         keep.append(p)
     # thin out crowded symbols so the board stays readable
-    SPACING = dict(peak=150, trig=150, pub=350, worship=220, school=160, po=400, parking=300, tower=150, museum=200, viewpoint=250,
+    SPACING = dict(attraction=60, peak=150, trig=150, pub=350, worship=220, school=160, po=400, parking=300, tower=150, museum=200, viewpoint=250,
                    univ=400, station=150, hospital=300, police=300, fire=300, info=200, picnic=200, golf=400, antiquity=150, bus=200)
     thin = []
     for p in sorted(keep, key=lambda p: (0 if 'Wallscourt' in p['n'] else 1, -bool(p['n']), -p.get('area', 0))):
-        sp = SPACING.get(p['t'], 150)
+        sp = SPACING.get(p['t'], 150) * (1 if p['t'] == 'attraction' else spec.get('thin', 1))
         if any(q['t'] == p['t'] and (q['x'] - p['x']) ** 2 + (q['y'] - p['y']) ** 2 < sp * sp for q in thin):
             continue
         thin.append(p)
@@ -547,7 +562,7 @@ def build_local(spec):
 def load_terrain(e0, n0, e1, n1):
     """Heights (OS Terrain 50, 50 m grid) covering the box, as (xs, ys, z) in BNG metres."""
     import numpy as np
-    letters = {(3, 1): 'ST', (3, 2): 'SO', (2, 1): 'SS', (2, 2): 'SN', (4, 1): 'SU', (4, 2): 'SP'}
+    letters = {(3, 1): 'ST', (3, 2): 'SO', (2, 1): 'SS', (2, 2): 'SN', (4, 1): 'SU', (4, 2): 'SP', (5, 1): 'TQ', (5, 2): 'TL'}
     E0, N0 = (e0 // 10000) * 10000, (n0 // 10000) * 10000
     E1, N1 = -(-e1 // 10000) * 10000, -(-n1 // 10000) * 10000
     nx, ny = (E1 - E0) // 50, (N1 - N0) // 50
@@ -615,10 +630,48 @@ def build_timezones():
     return zones
 
 
+BIOME_GROUPS = {   # RESOLVE Ecoregions 2017 BIOME_NUM -> a child-friendly biome
+    1: 'rainforest', 14: 'rainforest', 2: 'tropdry', 3: 'tropdry', 7: 'savanna', 9: 'savanna',
+    13: 'desert', 12: 'med', 4: 'tempforest', 5: 'tempforest', 8: 'grassland', 6: 'taiga', 11: 'tundra', 10: 'mountain',
+}
+
+
+def build_biomes(out_path):
+    import shapefile, glob
+    shp = glob.glob(os.path.join(RAW, 'eco', '*.shp'))
+    if not shp:
+        print('no biome data; skipping'); return
+    r = shapefile.Reader(shp[0], encoding='latin-1')
+    groups = {}
+    for sr in r.iterShapeRecords():
+        num = int(sr.record['BIOME_NUM'] or 0)
+        k = 'ice' if (sr.record['BIOME_NAME'] or '') == 'N/A' else BIOME_GROUPS.get(num)
+        if not k:
+            continue
+        try:
+            g = shape(sr.shape.__geo_interface__).buffer(0).simplify(0.08)
+        except Exception:
+            continue
+        if g.is_empty:
+            continue
+        groups.setdefault(k, []).append(g)
+    out = {}
+    for k, gs in groups.items():
+        u = unary_union(gs)
+        pg = polys_only(rob_geom(u).buffer(0)).simplify(1.6)
+        if isinstance(pg, MultiPolygon):
+            pg = MultiPolygon([p for p in pg.geoms if p.area > 8])
+        out[k] = geom_d(pg, 1)
+        print('biome', k, len(out[k]) // 1024, 'KB')
+    json.dump(out, open(out_path, 'w'), separators=(',', ':'))
+
+
 def main():
     data = dict(world=build_world(), uk=build_uk(), items=[item_geo(i) for i in ITEMS], tz=build_timezones(),
                 local=[build_local(s) for s in LOCAL_MAPS])
     js = '/* Generated by build/build_data.py. Do not edit by hand. */\nwindow.MAP_DATA=' + json.dumps(data, separators=(',', ':')) + ';\n'
+    if '--biomes' in sys.argv:
+        build_biomes(os.path.join(os.path.dirname(OUT), 'biomes.json'))
     open(OUT, 'w').write(js)
     print('wrote', OUT, len(js) // 1024, 'KB')
     print('world parts', len(data['world']['parts']), 'uk counties', len(data['uk']['counties']))

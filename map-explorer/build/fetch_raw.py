@@ -5,6 +5,7 @@
 
 Sources (all free to use; credited in the app):
   Natural Earth (public domain) - world countries, lakes, capital cities, time zones
+  Biomes: RESOLVE Ecoregions 2017 (CC-BY 4.0)
   Tectonic plate boundaries: Bird (2002), github.com/fraxen/tectonicplates (ODC-BY)
   Flags (../flags): flag-icons, MIT licence (downloaded separately, see flags/LICENSE.txt)
   ONS Open Geography Portal (Open Government Licence) - UK countries, English regions, counties
@@ -36,6 +37,8 @@ def fetch_world():
     for f in ['ne_50m_admin_0_countries', 'ne_50m_populated_places_simple', 'ne_50m_lakes', 'ne_10m_time_zones']:
         get(ne + f + '.geojson', f + '.geojson')
     get('https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_boundaries.json', 'PB2002_boundaries.json')
+    # biomes: RESOLVE Ecoregions 2017 (CC-BY 4.0), about 150 MB
+    zipfile.ZipFile(io.BytesIO(get('https://storage.googleapis.com/teow2016/Ecoregions2017.zip'))).extractall(os.path.join(RAW, 'eco'))
 
 
 def fetch_uk():
@@ -105,7 +108,7 @@ def fetch_local(ids):
 
 def terrain_tiles():
     """OS 10 km tile names (e.g. 'st57') covering each local map."""
-    letters = {(3, 1): 'st', (3, 2): 'so', (2, 1): 'ss', (2, 2): 'sn', (4, 1): 'su', (4, 2): 'sp'}
+    letters = {(3, 1): 'st', (3, 2): 'so', (2, 1): 'ss', (2, 2): 'sn', (4, 1): 'su', (4, 2): 'sp', (5, 1): 'tq', (5, 2): 'tl'}
     need = set()
     for spec in LOCAL_MAPS:
         for e in range(spec['e0'] - 1000, spec['e1'] + 1000, 1000):

@@ -542,6 +542,8 @@ LOCAL_MAPS = [
          years=[1, 2, 3, 4, 5, 6], sq='ST', contour=10),
     dict(id='gorge', name='Clifton and the Avon Gorge', e0=355000, n0=170000, e1=361000, n1=176000, raw='gorge',
          years=[3, 4, 5, 6], views={'Suspension Bridge': [356475, 173067], 'City centre': [358800, 172900]}, sq='ST', contour=10),
+    dict(id='london', name='Central London', e0=528000, n0=177000, e1=534000, n1=183000, raw='london',
+         years=[1, 2, 3, 4, 5, 6], views={'Westminster': [530200, 179600], 'Tower of London': [533500, 180500]}, sq='TQ', contour=10, thin=2.5, riverbuffer={'River Thames': 115}),
     dict(id='penyfan', name='Pen y Fan, Bannau Brycheiniog', e0=300000, n0=218000, e1=306000, n1=224000, raw='penyfan',
          years=[4, 5, 6], views={'Pen y Fan summit': [301200, 221550]}, sq='SO', contour=10),
 ]
