@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '10.10.26m';
+const VERSION = '10.10.26o';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -110,8 +110,38 @@ function mcInv(x, y) {
   if (Math.abs(lon) > 180 || Math.abs(lat) > MLAT + .01) return null;
   return { lat, lon };
 }
-function rob(lon, lat) { return PROJ === 'merc' ? mcF(lon, lat) : gpF(lon, lat); }
-function robInv(x, y) { return PROJ === 'merc' ? mcInv(x, y) : gpInv(x, y); }
+// Globe: an orthographic view of the Earth that can be spun by dragging. GLOBE is the point at the centre.
+const GLOBE = { lon: 0, lat: 20 }, GR = 2000, GC = 2060, GS = 4120, RAD = Math.PI / 180;
+function orthoF(lon, lat) {
+  const l = (lon - GLOBE.lon) * RAD, p = lat * RAD, p0 = GLOBE.lat * RAD;
+  const cosc = Math.sin(p0) * Math.sin(p) + Math.cos(p0) * Math.cos(p) * Math.cos(l);
+  let x = GR * Math.cos(p) * Math.sin(l), y = GR * (Math.cos(p0) * Math.sin(p) - Math.sin(p0) * Math.cos(p) * Math.cos(l));
+  if (cosc < 0) { const d = Math.hypot(x, y) || 1; x = x / d * GR; y = y / d * GR; }     // far side: pin to the edge
+  return { x: GC + x, y: GC - y, back: cosc < 0 };
+}
+function orthoInv(X, Y) {
+  const x = X - GC, y = GC - Y, rho = Math.hypot(x, y);
+  if (rho > GR) return null;
+  if (rho < 1e-9) return { lat: GLOBE.lat, lon: GLOBE.lon };
+  const c = Math.asin(rho / GR), p0 = GLOBE.lat * RAD;
+  const lat = Math.asin(Math.cos(c) * Math.sin(p0) + y * Math.sin(c) * Math.cos(p0) / rho) / RAD;
+  const lon = GLOBE.lon + Math.atan2(x * Math.sin(c), rho * Math.cos(c) * Math.cos(p0) - y * Math.sin(c) * Math.sin(p0)) / RAD;
+  return { lat, lon: ((lon + 540) % 360) - 180 };
+}
+function rob(lon, lat) { return PROJ === 'globe' ? orthoF(lon, lat) : PROJ === 'merc' ? mcF(lon, lat) : gpF(lon, lat); }
+function robInv(x, y) { return PROJ === 'globe' ? orthoInv(x, y) : PROJ === 'merc' ? mcInv(x, y) : gpInv(x, y); }
+const onFront = (lon, lat) => PROJ !== 'globe' || !orthoF(lon, lat).back;
+const gpToLL = (x, y) => { const sn = clamp((GH / 2 - y) * C45 / WR, -1, 1); return { lat: Math.asin(sn) / RAD, lon: clamp((x - WW / 2) / (WR * C45) / RAD, -180, 180) }; };
+function llPath(ll) {                          // a line through [lon, lat] points; on the globe it stops at the edge
+  let d = '', pen = false;
+  for (const [lon, lat] of ll) {
+    const p = rob(lon, lat);
+    if (p.back) { pen = false; continue; }
+    d += (pen ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1); pen = true;
+  }
+  return d;
+}
+const steps = (a, b, st) => { const o = []; for (let v = a; v <= b + 1e-9; v += st) o.push(v); return o; };
 function fromGP(x, y) {                       // stored data is in Gall-Peters units; convert to the current projection
   if (PROJ === 'gp') return [x, y];
   const sn = clamp((GH / 2 - y) * C45 / WR, -1, 1), lon = clamp((x - WW / 2) / (WR * C45) * 180 / Math.PI, -180, 180);
@@ -119,10 +149,17 @@ function fromGP(x, y) {                       // stored data is in Gall-Peters u
 }
 function reprojD(d) {
   if (PROJ === 'gp') return d;
-  return parsePath(d).map(r => 'M' + r.map(([x, y]) => fromGP(x, y).map(v => v.toFixed(1)).join(' ')).join('L') + 'z').join('');
+  return parsePath(d).map(r => {
+    if (PROJ === 'globe') {                    // polygons: far-side points are pinned to the edge; skip rings entirely out of sight
+      let any = false; const pts = r.map(([x, y]) => { const ll = gpToLL(x, y), q = orthoF(ll.lon, ll.lat); if (!q.back) any = true; return q; });
+      return any ? 'M' + pts.map(q => q.x.toFixed(1) + ' ' + q.y.toFixed(1)).join('L') + 'z' : '';
+    }
+    return 'M' + r.map(([x, y]) => fromGP(x, y).map(v => v.toFixed(1)).join(' ')).join('L') + 'z';
+  }).join('');
 }
 function reprojLines(d) {
   if (PROJ === 'gp') return d;
+  if (PROJ === 'globe') return parsePath(d).map(r => llPath(r.map(([x, y]) => { const q = gpToLL(x, y); return [q.lon, q.lat]; }))).join('');
   return parsePath(d).map(r => 'M' + r.map(([x, y]) => fromGP(x, y).map(v => v.toFixed(1)).join(' ')).join('L')).join('');
 }
 function reprojItems() {
@@ -133,15 +170,47 @@ function reprojItems() {
   }
   for (const c of Object.values(D.world.countries)) if (c.l) { if (!c._l) c._l = c.l; c.l = fromGP(...c._l); }
 }
+// spin the globe so (lon, lat) is in the middle, then redraw everything
+function centreOn(lon, lat) {
+  if (PROJ !== 'globe') return;
+  GLOBE.lon = lon; GLOBE.lat = clamp(lat, -70, 70);
+  rebuildGlobe();
+}
+function rebuildGlobe() {
+  const keep = [Q, GL].filter(x => x && x.pin).map(x => [x, robInv(x.pin.x, x.pin.y)]);
+  svg.classList.remove('spinning');
+  delete built['world:globe'];
+  reprojItems();
+  showMap('world', true);
+  for (const [x, ll] of keep) if (ll && onFront(ll.lon, ll.lat)) { x.pin = rob(ll.lon, ll.lat); placePin(x.pin); } else x.pin = null;
+}
+let globeLL = null, spinRAF = 0;
+function spinFast() {                         // quick redraw of just the land while dragging
+  cancelAnimationFrame(spinRAF);
+  spinRAF = requestAnimationFrame(() => {
+    const m = cur(); if (!m) return;
+    globeLL ||= D.world.parts.map(([, , d]) => parsePath(d).map(r => r.map(([x, y]) => gpToLL(x, y))));
+    svg.classList.add('spinning');
+    m.parts.forEach((el, i) => {
+      let out = '';
+      for (const r of globeLL[i]) {
+        let any = false; const pts = r.map(q => { const o = orthoF(q.lon, q.lat); if (!o.back) any = true; return o; });
+        if (any) out += 'M' + pts.map(o => o.x.toFixed(0) + ' ' + o.y.toFixed(0)).join('L') + 'z';
+      }
+      el.setAttribute('d', out);
+    });
+  });
+}
 function setProj(p) {
   if (p === PROJ || S.map !== 'world') return;
   const ll = robInv(V.cx, V.cy) || { lat: 20, lon: 0 }, rel = V.k / fitK(V.b.w, V.b.h);
-  PROJ = p; WH = p === 'merc' ? MH : GH;
+  PROJ = p; WH = p === 'merc' ? MH : p === 'globe' ? GS : GH;
+  if (p === 'globe') { GLOBE.lon = ll.lon; GLOBE.lat = clamp(ll.lat, -60, 60); delete built['world:globe']; }
   reprojItems();
   showMap('world');
-  const q = rob(ll.lon, ll.lat); goTo(q.x, q.y, rel * fitK(V.b.w, V.b.h), 0);
+  if (p === 'globe') home(0); else { const q = rob(ll.lon, ll.lat); goTo(q.x, q.y, rel * fitK(V.b.w, V.b.h), 0); }
   startMode();
-  toast(p === 'merc' ? 'Mercator map: look how big Greenland, Russia and Antarctica have become!' : 'Gall-Peters map: every country at its true size', 3200);
+  toast(p === 'merc' ? 'Mercator map: look how big Greenland, Russia and Antarctica have become!' : p === 'globe' ? 'Globe: drag to spin the Earth' : 'Gall-Peters map: every country at its true size', 3200);
 }
 function km(a, b) {                           // great-circle distance between {lat,lon}
   const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
@@ -223,7 +292,7 @@ svg.addEventListener('pointerdown', e => {
   svg.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   cancelAnimationFrame(anim);
-  if (ptrs.size === 1) drag = { x0: e.clientX, y0: e.clientY, cx: V.cx, cy: V.cy, moved: false };
+  if (ptrs.size === 1) drag = { x0: e.clientX, y0: e.clientY, cx: V.cx, cy: V.cy, moved: false, glon: GLOBE.lon, glat: GLOBE.lat };
   else if (ptrs.size === 2) {
     const [a, b] = [...ptrs.values()];
     const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
@@ -247,7 +316,11 @@ svg.addEventListener('pointermove', e => {
   } else if (drag) {
     const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
     if (!drag.moved && Math.hypot(dx, dy) > 12) drag.moved = true;
-    if (drag.moved) { V.cx = drag.cx - dx * V.k; V.cy = drag.cy - dy * V.k; applyView(); }
+    if (drag.moved && S.map === 'world' && PROJ === 'globe') {        // on the globe, dragging spins the Earth
+      GLOBE.lon = ((drag.glon - dx * V.k / GR / RAD) + 540) % 360 - 180;
+      GLOBE.lat = clamp(drag.glat + dy * V.k / GR / RAD, -75, 75);
+      drag.spun = true; spinFast();
+    } else if (drag.moved) { V.cx = drag.cx - dx * V.k; V.cy = drag.cy - dy * V.k; applyView(); }
   }
 });
 function endPtr(e) {
@@ -257,6 +330,7 @@ function endPtr(e) {
   if (ptrs.size < 2) pinch = null;
   if (ptrs.size === 0) {
     if (drag && !drag.moved && e.type === 'pointerup') onTap(e.clientX, e.clientY);
+    if (drag && drag.spun) rebuildGlobe();
     drag = null;
   } else if (ptrs.size === 1 && drag) {
     const [p] = [...ptrs.values()]; drag = { x0: p.x, y0: p.y, cx: V.cx, cy: V.cy, moved: true };
@@ -359,62 +433,74 @@ const bngToUk = (e, n) => ({ x: (e - D.uk.e0) / D.uk.s, y: (D.uk.n1 - n) / D.uk.
 const UK_VIEWS = { 'Whole UK': null, 'South West': [80000, 0, 430000, 270000], 'South East': [380000, 70000, 660000, 270000], Wales: [160000, 160000, 360000, 400000], 'North of England': [290000, 360000, 480000, 620000], Scotland: [0, 520000, 470000, 1000000] };
 
 function buildWorld() {
-  const g = E('g'), W = D.world;
-  const outline = [];
-  for (let lat = 90; lat >= -90; lat -= 5) { const p = rob(180, lat); outline.push(p); }
-  for (let lat = -90; lat <= 90; lat += 5) { const p = rob(-180, lat); outline.push(p); }
-  E('path', { d: 'M' + outline.map(p => p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join('L') + 'z', fill: '#cfe7f5', stroke: '#9cc6de', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, g);
+  const g = E('g'), W = D.world, globe = PROJ === 'globe';
+  if (globe) E('circle', { cx: GC, cy: GC, r: GR, fill: '#cfe7f5', stroke: '#7fb2d2', 'stroke-width': 2.5, 'vector-effect': 'non-scaling-stroke' }, g);
+  else {
+    const outline = [];
+    for (let lat = 90; lat >= -90; lat -= 5) outline.push(rob(180, lat));
+    for (let lat = -90; lat <= 90; lat += 5) outline.push(rob(-180, lat));
+    E('path', { d: 'M' + outline.map(p => p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join('L') + 'z', fill: '#cfe7f5', stroke: '#9cc6de', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, g);
+  }
   const land = E('g', { id: 'w-land' }, g);
   const parts = [];
-  for (const [code, cont, d] of W.parts) {
-    const p = E('path', { d: reprojD(d), class: 'land', 'data-code': code, 'data-cont': cont }, land);
-    parts.push(p);
-  }
-  E('path', { d: reprojD(W.lakes), fill: '#cfe7f5', stroke: '#8a8a7a', 'stroke-width': .6, 'vector-effect': 'non-scaling-stroke' }, g);
+  for (const [code, cont, d] of W.parts) parts.push(E('path', { d: reprojD(d), class: 'land', 'data-code': code, 'data-cont': cont }, land));
+  E('path', { id: 'w-lakes', d: reprojD(W.lakes), fill: '#cfe7f5', stroke: '#8a8a7a', 'stroke-width': .6, 'vector-effect': 'non-scaling-stroke' }, g);
   // time zones (standard time, Natural Earth)
   const tz = E('g', { id: 'w-tz', 'pointer-events': 'none' }, g);
   const tzPaths = D.tz.map(z => E('path', { d: reprojD(z.d), fill: Math.abs(Math.round(z.z)) % 2 ? 'rgba(40,70,160,.16)' : 'rgba(255,255,255,0)', stroke: '#5c6fa8', 'stroke-width': .9, 'stroke-dasharray': '4 3', 'vector-effect': 'non-scaling-stroke', 'data-z': z.z }, tz));
   for (let z = -12; z <= 14; z++) {
-    const p = rob(clamp(z * 15, -176, 176), -57);
+    const lon = clamp(z * 15, -176, 176), lat = globe ? 0 : -57;
+    if (!onFront(lon, lat)) continue;
+    const p = rob(lon, lat);
     E('text', { 'text-anchor': 'middle', 'font-size': 14, 'font-weight': 900, fill: '#26408b' }, cs(tz, p.x, p.y, 'lbl')).textContent = z === 0 ? 'GMT' : (z > 0 ? '+' + z : '−' + -z);
   }
   E('g', { id: 'w-biomes', 'pointer-events': 'none', opacity: .88 }, g);   // filled in when the layer is first switched on
   // climate zones (bands between the tropics and the polar circles)
   const clim = E('g', { id: 'w-climate', 'pointer-events': 'none' }, g);
-  const band = (a, b, fill) => { const p1 = rob(-180, a), p2 = rob(180, b); E('rect', { x: p1.x, y: Math.min(p1.y, p2.y), width: p2.x - p1.x, height: Math.abs(p2.y - p1.y), fill }, clim); };
-  band(-23.44, 23.44, 'rgba(255,112,67,.22)'); band(23.44, 66.56, 'rgba(102,187,106,.18)'); band(-66.56, -23.44, 'rgba(102,187,106,.18)');
-  band(66.56, 90, 'rgba(66,165,245,.25)'); band(-90, -66.56, 'rgba(66,165,245,.25)');
+  const band = (a, b, fill) => {
+    const pts = [...steps(-180, 180, 3).map(lon => rob(lon, a)), ...steps(-180, 180, 3).reverse().map(lon => rob(lon, b))];
+    E('path', { d: 'M' + pts.map(p => p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join('L') + 'z', fill }, clim);
+  };
+  if (!globe) {
+    band(-23.44, 23.44, 'rgba(255,112,67,.22)'); band(23.44, 66.56, 'rgba(102,187,106,.18)'); band(-66.56, -23.44, 'rgba(102,187,106,.18)');
+    band(66.56, 90, 'rgba(66,165,245,.25)'); band(-90, -66.56, 'rgba(66,165,245,.25)');
+  }
   for (const [lat, t, col] of [[8, 'TROPICAL', '#bf360c'], [45, 'TEMPERATE', '#2e7d32'], [-45, 'TEMPERATE', '#2e7d32'], [76, 'POLAR', '#1565c0'], [-75, 'POLAR', '#1565c0']]) {
-    const q = rob(-150, lat); E('text', { 'font-size': 17, 'font-weight': 900, fill: col, 'letter-spacing': 2 }, cs(clim, q.x, q.y, 'lbl')).textContent = t;
+    const lon = globe ? GLOBE.lon - 35 : -150; if (!onFront(lon, lat)) continue;
+    const q = rob(lon, lat); E('text', { 'font-size': 17, 'font-weight': 900, fill: col, 'letter-spacing': 2 }, cs(clim, q.x, q.y, 'lbl')).textContent = t;
   }
   // tectonic plate boundaries
   if (D.world.plates) E('path', { id: 'w-plates', d: reprojLines(D.world.plates), fill: 'none', stroke: '#c62828', 'stroke-width': 2.4, 'stroke-linejoin': 'round', 'vector-effect': 'non-scaling-stroke', 'pointer-events': 'none' }, g);
   // lines of latitude and longitude, every 10 degrees, drawn over the land
   const grat = E('g', { id: 'w-grat', stroke: '#4f86b8', 'stroke-width': .8, opacity: .75, fill: 'none' }, g);
-  for (let lat = -80; lat <= 80; lat += 10) { if (PROJ === 'merc' && Math.abs(lat) > MLAT) continue; const a = rob(-180, lat), b = rob(180, lat); E('path', { d: `M${a.x} ${a.y}H${b.x}`, 'vector-effect': 'non-scaling-stroke' }, grat); }
-  for (let lon = -180; lon <= 180; lon += 10) { const pts = []; for (let lat = -90; lat <= 90; lat += 5) pts.push(rob(lon, lat)); E('path', { d: 'M' + pts.map(p => p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join('L'), 'vector-effect': 'non-scaling-stroke' }, grat); }
+  for (let lat = -80; lat <= 80; lat += 10) { if (PROJ === 'merc' && Math.abs(lat) > MLAT) continue; E('path', { d: llPath(steps(-180, 180, 3).map(lon => [lon, lat])), 'vector-effect': 'non-scaling-stroke' }, grat); }
+  for (let lon = -180; lon <= 170; lon += 10) E('path', { d: llPath(steps(-90, 90, 3).map(lat => [lon, lat])), 'vector-effect': 'non-scaling-stroke' }, grat);
+  if (!globe) E('path', { d: llPath(steps(-90, 90, 3).map(lat => [180, lat])), 'vector-effect': 'non-scaling-stroke' }, grat);
   const glab = E('g', { id: 'w-gratlab' }, g);
   const deg = (v, pos, neg) => v === 0 ? '0°' : Math.abs(v) + '°' + (v > 0 ? pos : neg);
-  for (let lat = -80; lat <= 80; lat += 10) for (const lon of [-175, 175, -5]) {
-    const p = rob(lon, lat); E('text', { 'text-anchor': lon > 0 ? 'end' : lon === -5 ? 'end' : 'start', y: -3, 'font-size': 13, 'font-weight': 900, fill: '#1f5f99', class: 'lbl' }, cs(glab, p.x, p.y, 'lbl' + (lat % 30 ? ' minor' : ''))).textContent = deg(lat, 'N', 'S');
+  const latLabLons = globe ? [Math.round((GLOBE.lon - 5) / 10) * 10 + 5] : [-175, 175, -5];
+  for (let lat = -80; lat <= 80; lat += 10) for (const lon of latLabLons) {
+    if (!onFront(lon, lat)) continue;
+    const p = rob(lon, lat); E('text', { 'text-anchor': lon > 0 && !globe ? 'end' : lon === -5 ? 'end' : 'start', y: -3, 'font-size': 13, 'font-weight': 900, fill: '#1f5f99', class: 'lbl' }, cs(glab, p.x, p.y, 'lbl' + (lat % 30 ? ' minor' : ''))).textContent = deg(lat, 'N', 'S');
   }
-  for (let lon = -170; lon <= 170; lon += 10) for (const lat of [-1.5, 61.5, -48.5]) {
-    const p = rob(lon, lat); E('text', { 'text-anchor': 'middle', y: lat < 0 ? 14 : -4, 'font-size': 13, 'font-weight': 900, fill: '#1f5f99', class: 'lbl' }, cs(glab, p.x, p.y, 'lbl' + (lon % 30 ? ' minor' : ''))).textContent = deg(lon, 'E', 'W');
+  for (let lon = -170; lon <= 180; lon += 10) for (const lat of globe ? [-1.5] : [-1.5, 61.5, -48.5]) {
+    if (!onFront(lon, lat) || (lon === 180 && !globe)) continue;
+    const p = rob(lon, lat); E('text', { 'text-anchor': 'middle', y: lat < 0 ? 14 : -4, 'font-size': 13, 'font-weight': 900, fill: '#1f5f99', class: 'lbl' }, cs(glab, p.x, p.y, 'lbl' + (lon % 30 ? ' minor' : ''))).textContent = lon === 180 ? '180°' : deg(lon, 'E', 'W');
   }
   const lines = E('g', { id: 'w-lines' }, g);
   const ln = (lat, col, dash, name) => {
-    const a = rob(-180, lat), b = rob(180, lat);
-    E('path', { d: `M${a.x} ${a.y}H${b.x}`, stroke: col, 'stroke-width': 2.6, 'stroke-dasharray': dash, 'vector-effect': 'non-scaling-stroke', fill: 'none' }, lines);
-    const lp = rob(-168, lat); const lg = cs(lines, lp.x, lp.y - 0, 'lbl wl-lab'); E('text', { y: -7, 'font-size': 15, fill: col, 'font-style': 'italic' }, lg).textContent = name;
+    E('path', { d: llPath(steps(-180, 180, 2).map(lon => [lon, lat])), stroke: col, 'stroke-width': 2.6, 'stroke-dasharray': dash, 'vector-effect': 'non-scaling-stroke', fill: 'none' }, lines);
+    const lon = globe ? GLOBE.lon + 20 : -168; if (!onFront(lon, lat)) return;
+    const lp = rob(lon, lat); const lg = cs(lines, lp.x, lp.y, 'lbl wl-lab'); E('text', { y: -7, 'font-size': 15, fill: col, 'font-style': 'italic' }, lg).textContent = name;
   };
   ln(0, '#d32f2f', null, 'Equator'); ln(23.44, '#ef6c00', '8 6', 'Tropic of Cancer'); ln(-23.44, '#ef6c00', '8 6', 'Tropic of Capricorn');
   ln(66.56, '#1e88e5', '8 6', 'Arctic Circle'); ln(-66.56, '#1e88e5', '8 6', 'Antarctic Circle');
-  const pm = []; for (let lat = -90; lat <= 90; lat += 5) pm.push(rob(0, lat));
-  E('path', { d: 'M' + pm.map(p => p.x + ' ' + p.y).join('L'), stroke: '#2e7d32', 'stroke-width': 2.2, 'stroke-dasharray': '3 5', 'vector-effect': 'non-scaling-stroke', fill: 'none' }, lines);
-  const pml = rob(0, -50); E('text', { y: 0, 'font-size': 15, fill: '#2e7d32', 'font-style': 'italic' }, cs(lines, pml.x + 6, pml.y, 'lbl wl-lab')).textContent = 'Prime Meridian';
+  E('path', { d: llPath(steps(-90, 90, 2).map(lat => [0, lat])), stroke: '#2e7d32', 'stroke-width': 2.2, 'stroke-dasharray': '3 5', 'vector-effect': 'non-scaling-stroke', fill: 'none' }, lines);
+  const pmLat = globe ? clamp(GLOBE.lat - 25, -60, 60) : -50;
+  if (onFront(0, pmLat)) { const pml = rob(0, pmLat); E('text', { y: 0, 'font-size': 15, fill: '#2e7d32', 'font-style': 'italic' }, cs(lines, pml.x + 6, pml.y, 'lbl wl-lab')).textContent = 'Prime Meridian'; }
   const names = E('g', { id: 'w-allnames', class: 'lbl' }, g);
   const dyn = E('g', { id: 'dyn' }, g);
-  const res = { g, parts, tzPaths, b: { x: 0, y: 0, w: WW, h: WH }, minK: .25, dyn, names, sized: false };
+  const res = { g, parts, tzPaths, b: globe ? { x: 0, y: 0, w: GS, h: GS } : { x: 0, y: 0, w: WW, h: WH }, minK: .25, dyn, names, sized: false };
   res.countryW = {};
   return res;
 }
@@ -579,7 +665,7 @@ function showMap(id, keepView) {
   $('#symBtn').textContent = id.startsWith('local') ? '📍 Symbols' : '📍 Places';
   $('#symBtn').hidden = $('#layerBtn').hidden = id === 'merc';
   $('#projBtn').hidden = id !== 'world';
-  $('#projBtn').textContent = PROJ === 'merc' ? '🗺️ Mercator ▾' : '🌍 Gall-Peters ▾';
+  $('#projBtn').textContent = PROJ === 'merc' ? '🗺️ Mercator ▾' : PROJ === 'globe' ? '🌐 Globe ▾' : '🌍 Gall-Peters ▾';
   buildViewBar();
   const v = views[id];
   if (keepView && v) { V.cx = v.cx; V.cy = v.cy; V.k = v.k; applyView(); }
@@ -597,7 +683,7 @@ function mapLabel(id) {
   return { school: 'OS: WFA', gorge: 'OS: Avon Gorge', penyfan: 'OS: Pen y Fan', london: 'OS: London' }[id.split(':')[1]] || 'OS map';
 }
 function setAttrib() {
-  const a = S.map === 'world' ? (PROJ === 'merc' ? 'Map data: Natural Earth · Mercator projection (sizes near the poles look much too big)' : 'Map data: Natural Earth · Gall-Peters projection (true sizes)') : S.map === 'merc' ? 'Map data: Natural Earth · Mercator projection' :
+  const a = S.map === 'world' ? (PROJ === 'globe' ? 'Map data: Natural Earth · Globe view (orthographic projection): drag to spin' : PROJ === 'merc' ? 'Map data: Natural Earth · Mercator projection (sizes near the poles look much too big)' : 'Map data: Natural Earth · Gall-Peters projection (true sizes)') : S.map === 'merc' ? 'Map data: Natural Earth · Mercator projection' :
     S.map === 'uk' ? 'Contains OS data © Crown copyright and database right 2024 · Source: Office for National Statistics (OGL) · Natural Earth' :
       `© OpenStreetMap contributors · Heights: OS Terrain 50 © Crown copyright · OS-style map, British National Grid square ${cur().L.sq || 'ST'}`;
   $('#attrib').textContent = a + ' · Version ' + VERSION;
@@ -643,6 +729,12 @@ function buildViewBar() {
   bar.appendChild(b);
 }
 function fitLL(bb, ms) {
+  if (PROJ === 'globe' && S.map === 'world') {
+    const [w, sth, e, n] = bb;
+    centreOn((w + e) / 2, (sth + n) / 2);
+    const span = Math.max(e - w, (n - sth) * 1.3);
+    return goTo(GC, GC, (2 * GR * Math.sin(Math.min(90, span / 2 + 6) * RAD)) / Math.min(V.W, V.H - 64) * 1.05, ms);
+  }
   const [w, s, e, n] = bb; const pts = [rob(w, n), rob(e, n), rob(w, s), rob(e, s), rob((w + e) / 2, n), rob((w + e) / 2, s)];
   const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
   fitBox(Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1.05, ms);
@@ -674,7 +766,9 @@ function drawMarker(parent, it, opts = {}) {
 function drawItemLine(parent, it, label) {
   const pts = it.pts;
   const g = E('g', { 'data-id': it.id, class: 'mkline' }, parent);
-  E('path', { d: 'M' + pts.map(p => p.join(' ')).join('L'), class: 'feat-line', stroke: it.phys ? '#8d5524' : '#6d4c41', 'stroke-width': it.phys ? 6 : 4, 'stroke-dasharray': it.phys ? '1 9' : '10 5', opacity: .9 }, g);
+  const globeLine = it.m === 'world' && PROJ === 'globe' && it._gp;
+  if (globeLine && !llPath(it._gp.pts.map(q => { const a = gpToLL(...q); return [a.lon, a.lat]; }))) { g.remove(); return g; }
+  E('path', { d: globeLine ? llPath(it._gp.pts.map(q => { const a = gpToLL(...q); return [a.lon, a.lat]; })) : 'M' + pts.map(p => p.join(' ')).join('L'), class: 'feat-line', stroke: it.phys ? '#8d5524' : '#6d4c41', 'stroke-width': it.phys ? 6 : 4, 'stroke-dasharray': it.phys ? '1 9' : '10 5', opacity: .9 }, g);
   if (label) { const mid = pts[Math.floor(pts.length / 2)]; E('text', { x: 10, y: -8, 'font-size': 17, 'font-style': 'italic' }, cs(g, mid[0], mid[1], 'lbl')).textContent = it.n; }
   return g;
 }
@@ -694,22 +788,24 @@ function refreshDyn() {
     for (const it of its) {
       if (hideCats.has(placeCat(it))) continue;
       const rev = yr() > 0 && !it.y.includes(yr());
+      if (S.map === 'world' && PROJ === 'globe' && it.ll && !onFront(it.ll[1], it.ll[0]) && it.k === 'point') continue;
       if (it.k === 'point') drawMarker(m.dyn, it, { label: names, rev });
       else if (it.k === 'line') drawItemLine(m.dyn, it, names);
     }
   }
   if (!names) return;
   if (S.map === 'world') {
-    for (const [c, ll] of Object.entries(CONT_LABEL)) { const p = rob(ll[1], ll[0]); E('text', { class: 'pri', 'text-anchor': 'middle', 'font-size': 24, 'font-weight': 900, fill: '#3b3b3b', 'letter-spacing': 2, opacity: .8 }, cs(m.names, p.x, p.y, 'lbl')).textContent = c.toUpperCase(); }
+    for (const [c, ll] of Object.entries(CONT_LABEL)) { if (!onFront(ll[1], ll[0])) continue; const p = rob(ll[1], ll[0]); E('text', { class: 'pri', 'text-anchor': 'middle', 'font-size': 24, 'font-weight': 900, fill: '#3b3b3b', 'letter-spacing': 2, opacity: .8 }, cs(m.names, p.x, p.y, 'lbl')).textContent = c.toUpperCase(); }
     const seen = new Set();
     for (const [n, lat, lon] of D.world.anchors) {
-      if (seen.has(n)) continue; seen.add(n);
+      if (seen.has(n) || !onFront(lon, lat)) continue; seen.add(n);
       const p = rob(lon, lat); E('text', { 'text-anchor': 'middle', 'font-size': 19, 'font-style': 'italic', 'font-weight': 800, fill: '#1565c0' }, cs(m.names, p.x, p.y, 'lbl')).textContent = n;
     }
     m.cnames = [];
     const cur_ = new Set(its.filter(i => i.k === 'country').map(i => i.ref));
     for (const [code, c] of Object.entries(D.world.countries)) {
       if (!c.l) continue;
+      if (PROJ === 'globe') { const q = gpToLL(...(c._l || c.l)); if (!onFront(q.lon, q.lat)) continue; }
       const t = E('text', { 'text-anchor': 'middle', 'font-size': cur_.has(code) ? 17 : 14, 'font-weight': cur_.has(code) ? 900 : 700, fill: cur_.has(code) ? '#111' : '#444' }, cs(m.names, c.l[0], c.l[1], 'lbl'));
       t.textContent = c.n; m.cnames.push({ t: t.parentNode, code, cur: cur_.has(code) });
     }
@@ -927,14 +1023,14 @@ function targetPoint(it, from) {             // a sensible point on the target, 
     case 'continent': { const ll = CONT_LABEL[it.ref], p = rob(ll[1], ll[0]); const b = bbC(m.parts.filter(e => e.dataset.cont === it.ref)); return { x: p.x, y: p.y, box: b.box }; }
     case 'ocean': case 'sea': {
       let best = null, bd = Infinity;
-      const list = it.k === 'ocean' ? D.world.anchors.map(([n, lat, lon]) => [n, rob(lon, lat)]) : D.uk.anchors.map(([n, x, y]) => [n, { x, y }]);
+      const list = it.k === 'ocean' ? D.world.anchors.filter(([, lat, lon]) => onFront(lon, lat)).map(([n, lat, lon]) => [n, rob(lon, lat)]) : D.uk.anchors.map(([n, x, y]) => [n, { x, y }]);
       for (const [n, q] of list) if (n === it.ref) { const d = from ? Math.hypot(q.x - from.x, q.y - from.y) : 0; if (d < bd) { bd = d; best = q; } }
       return { x: best.x, y: best.y, box: [best.x - 300, best.y - 300, 600, 600] };
     }
-    case 'latline': { const y = rob(0, it.lat).y; return { x: from ? from.x : WW / 2, y, box: [0, y - 200, WW, 400] }; }
-    case 'lonline': { const p = rob(0, from ? (robInv(from.x, from.y) || { lat: 0 }).lat : 0); return { x: p.x, y: p.y, box: [WW / 2 - 300, 0, 600, WH] }; }
+    case 'latline': { if (PROJ === 'globe') { const q = rob(GLOBE.lon, it.lat); return { x: q.x, y: q.y, box: [q.x - 300, q.y - 200, 600, 400] }; } const y = rob(0, it.lat).y; return { x: from ? from.x : WW / 2, y, box: [0, y - 200, WW, 400] }; }
+    case 'lonline': { const p = rob(0, PROJ === 'globe' ? GLOBE.lat : from ? (robInv(from.x, from.y) || { lat: 0 }).lat : 0); return { x: p.x, y: p.y, box: [WW / 2 - 300, 0, 600, WH] }; }
     case 'pole': { const p = rob(from ? clamp((robInv(from.x, from.y) || { lon: 0 }).lon, -170, 170) : 0, it.lat > 0 ? 88 : -88); return { x: p.x, y: p.y, box: [0, it.lat > 0 ? 0 : WH - 400, WW, 400] }; }
-    case 'hemi': { const p = { N: rob(0, 45), S: rob(0, -45), E: rob(90, 0), W: rob(-90, 0) }[it.ref]; return { x: p.x, y: p.y, box: [0, 0, WW, WH] }; }
+    case 'hemi': { const gl = PROJ === 'globe' ? GLOBE.lon : 0; const p = { N: rob(gl, 45), S: rob(gl, -45), E: rob(PROJ === 'globe' ? clamp(GLOBE.lon, 20, 160) : 90, 0), W: rob(PROJ === 'globe' ? clamp(GLOBE.lon, -160, -20) : -90, 0) }[it.ref]; return { x: p.x, y: p.y, box: [0, 0, WW, WH] }; }
     case 'ukcountry': { const c = D.uk.countries.find(c => c.n === it.ref); return { x: c.l[0], y: c.l[1], box: bbC(m.ctry.filter(e => e.dataset.n === it.ref)).box }; }
     case 'region': { const c = D.uk.regions.find(c => c.n === it.ref); return { x: c.l[0], y: c.l[1], box: bbC(m.regs.filter(e => e.dataset.n === it.ref)).box }; }
     case 'county': { const c = D.uk.counties.find(c => c.n === it.ref); return { x: c.l[0], y: c.l[1], box: bbC(m.ctys.filter(e => e.dataset.n === it.ref)).box }; }
@@ -1298,6 +1394,10 @@ function findAsk() {
   if (S.autoZoom) autoZoomFor(it); else home();
 }
 function autoZoomFor(it) {
+  if (it.m === 'world' && PROJ === 'globe') {
+    const [lon, lat] = itemLL(it), off = (Math.random() < .5 ? -1 : 1) * (35 + Math.random() * 20);
+    centreOn(lon + off, clamp(lat + (Math.random() - .5) * 30, -50, 50)); return home(0);
+  }
   if (it.m === 'world') {
     const t = targetPoint(it); if (!t) return home();
     const ll = robInv(t.x, t.y);
@@ -1392,7 +1492,7 @@ function compassCandidates() {
   if (S.map.startsWith('local')) {
     const m = cur(); return m.pois.map((p, i) => ({ x: p.x, y: p.y, n: p.ours ? 'WFA' : 'the ' + POI_SHORT[p.t], t: p.t, i }));
   }
-  const its = visibleItems();
+  const its = visibleItems().filter(i => !(S.map === 'world' && PROJ === 'globe' && i.ll && !onFront(i.ll[1], i.ll[0])));
   const pts = its.filter(i => i.k === 'point').map(i => ({ x: i.xy[0], y: i.xy[1], n: i.n, it: i }));
   if (pts.length < 6) {
     if (S.map === 'world') for (const i of its.filter(i => i.k === 'country')) { const c = D.world.countries[i.ref]; if (c && c.l) pts.push({ x: c.l[0], y: c.l[1], n: i.n, it: i }); }
@@ -1990,6 +2090,7 @@ function timeAsk(p) {
   const opts = [t]; for (const c of shuffle(cand)) { if (!opts.some(o => ((o % 24) + 24) % 24 === ((c % 24) + 24) % 24)) opts.push(c); if (opts.length === 4) break; }
   shuffle(opts);
   const right = opts.indexOf(t);
+  if (PROJ === 'globe') { const dl = ((p.lon + 540) % 360) - 180; centreOn(Math.abs(dl) < 110 ? dl / 2 : p.lon, (p.lat + 51.5) / 2); }
   home();
   const lon = rob(-0.13, 51.5); const lg = cs(ov, lon.x, lon.y, 'hlx'); E('circle', { r: 9, fill: '#1565c0', stroke: '#fff', 'stroke-width': 3 }, lg); E('text', { x: -14, y: 6, 'text-anchor': 'end', 'font-size': 18, class: 'lbl' }, lg).textContent = 'London';
   globeMark(p, p.n);
@@ -2190,8 +2291,21 @@ function zoomToBox(box, minSize) {
   w = Math.max(w, minSize); h = Math.max(h, minSize);
   fitBox(c[0] - w / 2, c[1] - h / 2, w, h, 1.5);
 }
+function itemLL(it) {                        // rough [lon, lat] of a world item
+  if (it.ll) return [it.ll[1], it.ll[0]];
+  if (it.k === 'continent') { const c = CONT_LABEL[it.ref]; return [c[1], c[0]]; }
+  if (it.k === 'ocean') { const a = D.world.anchors.find(a => a[0] === it.ref); return [a[2], it.ref === 'Arctic Ocean' ? 70 : a[1]]; }
+  if (it.k === 'country' && D.world.countries[it.ref]) { const c = D.world.countries[it.ref], q = gpToLL(...(c._l || c.l)); return [q.lon, q.lat]; }
+  if (it.k === 'group') { const c = D.world.countries[it.refs[0]], q = gpToLL(...(c._l || c.l)); return [q.lon, q.lat]; }
+  if (it.k === 'latline') return [GLOBE.lon, it.lat];
+  if (it.k === 'lonline') return [it.lon, 20];
+  if (it.k === 'pole') return [GLOBE.lon, it.lat > 0 ? 70 : -70];
+  if (it.k === 'hemi') return { N: [GLOBE.lon, 40], S: [GLOBE.lon, -40], E: [90, 10], W: [-90, 10] }[it.ref];
+  return [GLOBE.lon, GLOBE.lat];
+}
 function searchCountry(code) {
   goMap('world');
+  if (PROJ === 'globe') { const c = D.world.countries[code], q = gpToLL(...(c._l || c.l)); centreOn(q.lon, q.lat); }
   const m = cur(), parts = m.parts.filter(e => e.dataset.code === code), c = D.world.countries[code];
   parts.forEach(e => e.classList.add('sel'));
   const big = parts.reduce((a, b) => (b.getBBox().width * b.getBBox().height > a.getBBox().width * a.getBBox().height ? b : a));
@@ -2201,6 +2315,7 @@ function searchCountry(code) {
 }
 function searchItem(it) {
   goMap(it.m === 'uk' ? 'uk' : 'world');
+  if (it.m === 'world' && PROJ === 'globe') centreOn(...itemLL(it));
   highlightItem(it, 'sel');
   const t = targetPoint(it, { x: V.b.w / 2, y: V.b.h / 2 });
   if (t && t.box && !['hemi', 'latline', 'lonline'].includes(it.k)) zoomToBox(t.box, it.m === 'uk' ? 240 : 700);
@@ -2208,6 +2323,7 @@ function searchItem(it) {
 }
 function searchCity(n, cn, lat, lon, cap) {
   goMap('world');
+  centreOn(lon, lat);
   const q = rob(lon, lat), it = { id: '_s', n, k: 'point', m: 'world', xy: [q.x, q.y], cap, y: [] };
   const g = E('g', { class: 'hlx' }, ov); drawMarker(g, it, { label: true }); E('circle', { class: 'pulse', r: 16 }, cs(g, q.x, q.y));
   zoomToBox([q.x, q.y, 1, 1], 900);
@@ -2341,7 +2457,8 @@ $('#projBtn').onclick = e => {
     <p style="margin:0 0 4px;font-size:16px;font-weight:700;color:#4a6577;max-width:420px">A projection is a way of flattening the round Earth onto a flat map. Every flat map stretches something.</p>
     <button class="opt ${PROJ === 'gp' ? 'on' : ''}" data-proj="gp">🌍 Gall-Peters<small>true sizes</small></button>
     <button class="opt ${PROJ === 'merc' ? 'on' : ''}" data-proj="merc">🗺️ Mercator<small>like online maps</small></button>
-    <p style="margin:4px 0 0;font-size:15px;font-weight:700;color:#4a6577;max-width:420px">Gall-Peters shows every country at its true size, but stretches their shapes. Mercator keeps shapes but makes places near the poles look much too big: Greenland looks as big as Africa, but Africa is about 14 times bigger.</p>`,
+    <button class="opt ${PROJ === 'globe' ? 'on' : ''}" data-proj="globe">🌐 Globe<small>drag to spin</small></button>
+    <p style="margin:4px 0 0;font-size:15px;font-weight:700;color:#4a6577;max-width:420px">A globe is the only map with nothing stretched, but you can only see half the Earth at once. Gall-Peters shows every country at its true size, but stretches their shapes. Mercator keeps shapes but makes places near the poles look much too big: Greenland looks as big as Africa, but Africa is about 14 times bigger.</p>`,
   p => p.querySelectorAll('[data-proj]').forEach(b => b.onclick = () => { closePop(); setProj(b.dataset.proj); }));
   const r = e.currentTarget.getBoundingClientRect(), pp = $('#pop'); pp.style.left = Math.max(10, r.right - pp.offsetWidth) + 'px';
 };

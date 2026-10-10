@@ -244,6 +244,7 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 }
 
 /* ---------- map styling ---------- */
+#map.spinning #w-grat, #map.spinning #w-gratlab, #map.spinning #w-lines, #map.spinning #w-tz, #map.spinning #w-climate, #map.spinning #w-plates, #map.spinning #w-biomes, #map.spinning #dyn, #map.spinning #w-allnames, #map.spinning #overlay, #map.spinning #w-lakes { display: none; }
 /* only the marker itself is tappable, never its name, so countries and counties under labels still work */
 #map text, .mk text, .mkline text { pointer-events: none; }
 #w-gratlab .minor { display: none; }
