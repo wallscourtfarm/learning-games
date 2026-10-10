@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '10.10.26r';
+const VERSION = '10.10.26s';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -334,7 +334,7 @@ function endPtr(e) {
   ptrs.delete(e.pointerId);
   if (ptrs.size < 2) pinch = null;
   if (ptrs.size === 0) {
-    if (drag && !drag.moved && e.type === 'pointerup') onTap(e.clientX, e.clientY);
+    if (drag && !drag.moved && e.type === 'pointerup') handleTap(e.clientX, e.clientY);
     if (drag && drag.spun) rebuildGlobe();
     drag = null;
   } else if (ptrs.size === 1 && drag) {
@@ -1106,6 +1106,33 @@ function endHTML(Q, again) {
 }
 
 /* ------------------------------------------------------------ tap dispatch */
+let lastTap = null;
+function handleTap(cx, cy) {                  // two quick taps in the same place = double-tap to zoom in
+  const now = performance.now();
+  if (lastTap && now - lastTap.t < 400 && Math.hypot(cx - lastTap.x, cy - lastTap.y) < 34) { lastTap = null; onDoubleTap(cx, cy); return; }
+  lastTap = { t: now, x: cx, y: cy };
+  onTap(cx, cy);
+}
+function onDoubleTap(cx, cy) {
+  if (tool) return;
+  const p = toMap(cx, cy), m = cur(), r = svg.getBoundingClientRect();
+  let box = null;
+  if (S.map === 'world' && PROJ !== 'globe') {
+    const part = worldLandAt(p);
+    if (part) box = m.parts.filter(e => e.dataset.code === part.dataset.code).map(e => e.getBBox()).reduce((a, b) => (b.width * b.height > a.width * a.height ? b : a));
+  } else if (S.map === 'uk') {
+    const pt = DPt(p.x, p.y);
+    const el = (S.layers.uk.counties && m.ctys.find(e => e.isPointInFill(pt))) || (S.layers.uk.regions && m.regs.find(e => e.isPointInFill(pt))) || m.ctry.find(e => e.isPointInFill(pt));
+    if (el) box = el.getBBox();
+  }
+  if (box) {                                   // the place fills the middle of the screen, with its neighbours around it
+    const k = fitK(Math.max(box.width, 1), Math.max(box.height, 1)) * 2.2;
+    if (k < V.k * .92) return goTo(box.x + box.width / 2, box.y + box.height / 2, Math.max(k, V.minK), 550);
+  }
+  // otherwise zoom in on the spot that was double-tapped, keeping it under the finger
+  const nk = Math.max(V.minK, V.k / 2);
+  goTo(p.x - (cx - r.left - V.W / 2) * nk, p.y - (cy - r.top - V.H / 2) * nk, nk, 450);
+}
 function onTap(cx, cy) {
   if (tool) return;
   const p = toMap(cx, cy);
@@ -1123,7 +1150,7 @@ function exploreStart() {
       <button class="btn sec" id="tenthsBtn">▦ Tenths: ${TENTHS[tenthsMode()][0]} ▾</button>
       <button class="btn sec" id="keyBtn">🔑 Show the key</button>
       <button class="btn sec" id="printBtn">🖨️ Print a worksheet of this view</button>
-      <p class="hint">Drag to move the map. Use ＋ and － to zoom in and out. Blue lines are grid lines, 1 km apart.</p>`);
+      <p class="hint">Drag to move the map. Double-tap to zoom in. Blue lines are grid lines, 1 km apart.</p>`);
     $('#keyBtn').onclick = showKey;
     $('#tenthsBtn').onclick = e => tenthsPicker(e.currentTarget, () => { exploreStart(); if (tenthsMode() !== 'none' && V.k >= 2.8) toast('Zoom in to see the 100 m lines'); });
     $('#printBtn').onclick = printSheet;
@@ -1131,7 +1158,7 @@ function exploreStart() {
     const its = visibleItems();
     setPanel(`<p class="ptitle">Explore</p><div class="qcard"><p class="q">Tap anything on the map to find out about it.</p><p class="hint">${S.map === 'world' ? 'Countries, oceans, cities and landmarks' : 'Countries, seas, cities, rivers and landmarks'} for ${yr() ? 'Year ' + yr() : 'all years'}: ${its.length} places to explore.</p></div>
       ${legendHTML()}
-      <p class="hint">Drag to move the map. Pinch, scroll or use ＋ and － to zoom.</p>
+      <p class="hint">Drag to move the map. Double-tap to zoom in on a place. Pinch, scroll or use ＋ and － to zoom.</p>
       <button class="btn sec" id="printBtn">🖨️ Print a worksheet of this view</button>`);
     $('#printBtn').onclick = printSheet;
   }
