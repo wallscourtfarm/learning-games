@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '10.10.26j';
+const VERSION = '10.10.26k';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -602,12 +602,14 @@ function setAttrib() {
   $('#attrib').textContent = a + ' · Version ' + VERSION;
 }
 function buildViewBar() {
+  // one "Go to" button with a menu, instead of a row of buttons, so the top of the map stays clear
   const bar = $('#viewBar'); bar.replaceChildren();
-  const add = (t, f) => { const b = H(`<button>${esc(t)}</button>`); b.onclick = f; bar.appendChild(b); };
+  const opts = [];
+  const add = (t, f) => opts.push([t, f]);
   if (S.map === 'world') {
-    for (const [n, bb] of Object.entries(WORLD_VIEWS)) add(n, () => bb ? fitLL(bb) : home());
+    for (const [n, bb] of Object.entries(WORLD_VIEWS)) add(n === 'World' ? 'Whole world' : n, () => bb ? fitLL(bb) : home());
   } else if (S.map === 'merc') {
-    add('Back to the world map', () => { S.globeTask = 'read'; save(); startMode(); });
+    const b = H('<button>⬅ Back to the world map</button>'); b.onclick = () => { S.globeTask = 'read'; save(); startMode(); }; bar.appendChild(b); return;
   } else if (S.map === 'uk') {
     for (const [n, bb] of Object.entries(UK_VIEWS)) add(n, () => bb ? fitBNG(bb) : home());
   } else {
@@ -617,6 +619,10 @@ function buildViewBar() {
     if (ours) add('WFA', () => fitBox(ours.x - 700, ours.y - 700, 1400, 1400));
     for (const [n, [e, nn]] of Object.entries(m.L.views || {})) add(n, () => fitBox(e - m.L.e0 - 700, m.L.n1 - nn - 700, 1400, 1400));
   }
+  const b = H('<button>🔎 Go to ▾</button>');
+  b.onclick = e => openPop(e.currentTarget, `<h3>Go to</h3>${opts.map(([t], i) => `<button class="opt" data-v="${i}">${esc(t)}</button>`).join('')}`,
+    p => p.querySelectorAll('[data-v]').forEach(x => x.onclick = () => { closePop(); opts[+x.dataset.v][1](); }));
+  bar.appendChild(b);
 }
 function fitLL(bb, ms) {
   const [w, s, e, n] = bb; const pts = [rob(w, n), rob(e, n), rob(w, s), rob(e, s), rob((w + e) / 2, n), rob((w + e) / 2, s)];
