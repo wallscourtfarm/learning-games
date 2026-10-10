@@ -34,8 +34,8 @@ ITEMS = [
          f='Edinburgh is the capital city of Scotland. It has a famous castle on top of an old volcano.'),
     dict(id='belfast', n='Belfast', k='point', p=[54.5973, -5.9301], tol=20, y=[1, 3], m='uk', cap=True,
          f='Belfast is the capital city of Northern Ireland. The Titanic was built there.'),
-    dict(id='school', n='Our school', k='point', p=[51.4972, -2.5569], tol=15, y=[1, 2], m='uk',
-         f='Wallscourt Farm Academy is on the north-east edge of Bristol, in South Gloucestershire.'),
+    dict(id='school', n='WFA', k='point', p=[51.4972, -2.5569], tol=15, y=[1, 2], m='uk',
+         f='WFA (Wallscourt Farm Academy) is on the north-east edge of Bristol, in South Gloucestershire.'),
     dict(id='atlantic-uk', n='Atlantic Ocean', k='sea', ref='Atlantic Ocean', y=[1, 2], m='uk',
          f='The Atlantic Ocean is to the west of the United Kingdom. It is the second largest ocean in the world.'),
     dict(id='northsea', n='North Sea', k='sea', ref='North Sea', y=[1, 2], m='uk',
@@ -457,7 +457,7 @@ COUNTY_GROUPS = {
 
 # Local OS-style map extracts (British National Grid, metres).
 LOCAL_MAPS = [
-    dict(id='school', name='Our school and Stoke Gifford', e0=359000, n0=175000, e1=365000, n1=181000, raw='school',
+    dict(id='school', name='WFA and Stoke Gifford', e0=359000, n0=175000, e1=365000, n1=181000, raw='school',
          years=[1, 2, 3, 4, 5, 6], sq='ST', contour=10),
     dict(id='gorge', name='Clifton and the Avon Gorge', e0=355000, n0=170000, e1=361000, n1=176000, raw='gorge',
          years=[3, 4, 5, 6], views={'Suspension Bridge': [356475, 173067], 'City centre': [358800, 172900]}, sq='ST', contour=10),

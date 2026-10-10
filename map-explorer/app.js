@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '10.10.26b';
+const VERSION = '10.10.26c';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -296,7 +296,7 @@ const KIND_TXT = {
   hemi: 'half of the Earth', region: 'a region of England', county: 'a county', river: 'a river or canal', line: 'a long feature', point: 'a place',
 };
 function kindText(it) {
-  if (it.k === 'point') return it.cap ? 'a capital city' : it.phys ? 'a physical feature' : it.id === 'school' ? 'our school' : /city|ton$|ham$|ool$|eds$|ield$|stle$/.test(it.n) || ['bristol', 'exeter', 'bath', 'manchester', 'birmingham', 'liverpool', 'leeds', 'sheffield', 'newcastle', 'mumbai', 'newyork', 'rio', 'singapore', 'sydney'].includes(it.id) ? 'a city' : 'a landmark';
+  if (it.k === 'point') return it.cap ? 'a capital city' : it.phys ? 'a physical feature' : it.id === 'school' ? 'our school, WFA' : /city|ton$|ham$|ool$|eds$|ield$|stle$/.test(it.n) || ['bristol', 'exeter', 'bath', 'manchester', 'birmingham', 'liverpool', 'leeds', 'sheffield', 'newcastle', 'mumbai', 'newyork', 'rio', 'singapore', 'sydney'].includes(it.id) ? 'a city' : 'a landmark';
   if (it.k === 'line') return it.phys ? 'a mountain range or hills' : 'a landmark';
   return KIND_TXT[it.k] || 'a place';
 }
@@ -473,8 +473,9 @@ function buildLocal(id) {
     E('use', { href: '#sym-' + p.t }, gg);
     if (p.t === 'peak') { E('text', { x: 8, y: 5, 'font-size': 15, 'font-weight': 900, fill: '#111', class: 'lbl' }, gg).textContent = p.h; if (p.n) E('text', { x: 8, y: -10, 'font-size': 14, 'font-weight': 800, 'font-style': 'italic', fill: '#333', class: 'lbl' }, gg).textContent = p.n; }
     if (p.ours) {
-      E('path', { d: 'M0-34l5 10 11 1.6-8 7.8 1.9 11L0 1.2-9.9 6.4-8-4.6-16-12.4-5-14z', fill: '#ffd54a', stroke: '#b07d00', 'stroke-width': 1.5, transform: 'translate(0,-12) scale(.9)' }, gg);
-      E('text', { y: 30, 'text-anchor': 'middle', 'font-size': 17, 'font-weight': 900, fill: '#0f6e9c', class: 'lbl' }, gg).textContent = 'Wallscourt Farm Academy';
+      E('circle', { cy: -34, r: 20, fill: '#fff', stroke: '#1798d3', 'stroke-width': 2.5 }, gg);
+      E('image', { href: 'wfa-icon.png', x: -14, y: -50, width: 28, height: 32 }, gg);
+      E('text', { y: 30, 'text-anchor': 'middle', 'font-size': 18, 'font-weight': 900, fill: '#0f6e9c', class: 'lbl' }, gg).textContent = 'WFA';
     }
   });
   const dyn = E('g', { id: 'dyn' }, g);
@@ -533,7 +534,7 @@ function restyle() {
 function mapLabel(id) {
   if (id === 'world' || id === 'merc') return 'World';
   if (id === 'uk') return 'United Kingdom';
-  return { school: 'OS: Our school', gorge: 'OS: Avon Gorge', penyfan: 'OS: Pen y Fan' }[id.split(':')[1]] || 'OS map';
+  return { school: 'OS: WFA', gorge: 'OS: Avon Gorge', penyfan: 'OS: Pen y Fan' }[id.split(':')[1]] || 'OS map';
 }
 function setAttrib() {
   const a = S.map === 'world' || S.map === 'merc' ? 'Map data: Natural Earth' :
@@ -554,7 +555,7 @@ function buildViewBar() {
     const m = cur();
     add('Whole map', () => home());
     const ours = m.pois.find(p => p.ours);
-    if (ours) add('Our school', () => fitBox(ours.x - 700, ours.y - 700, 1400, 1400));
+    if (ours) add('WFA', () => fitBox(ours.x - 700, ours.y - 700, 1400, 1400));
     for (const [n, [e, nn]] of Object.entries(m.L.views || {})) add(n, () => fitBox(e - m.L.e0 - 700, m.L.n1 - nn - 700, 1400, 1400));
   }
 }
@@ -573,10 +574,10 @@ function drawMarker(parent, it, opts = {}) {
   g.dataset.id = it.id;
   E('circle', { r: 26, fill: 'transparent' }, g);
   if (it.phys) E('path', { d: 'M0-13L12 9H-12z', fill: markerColour(it), stroke: '#fff', 'stroke-width': 2.5, class: 'dot' }, g);
-  else if (it.id === 'school') E('path', { d: 'M0-14l4 9 10 1-7.5 7 2 10L0 8-8.5 13l2-10L-14-4l10-1z', fill: '#1798d3', stroke: '#fff', 'stroke-width': 2.5 }, g);
+  else if (it.id === 'school') { E('circle', { r: 17, fill: '#fff', stroke: '#1798d3', 'stroke-width': 2.5 }, g); E('image', { href: 'wfa-icon.png', x: -12, y: -14, width: 24, height: 27.5 }, g); }
   else if (it.cap) E('rect', { x: -9, y: -9, width: 18, height: 18, fill: markerColour(it), stroke: '#fff', 'stroke-width': 2.5, transform: 'rotate(45)' }, g);
   else E('circle', { r: 9, fill: markerColour(it), class: 'dot' }, g);
-  if (opts.label) E('text', { x: 15, y: 6, 'font-size': 18 }, g).textContent = it.n;
+  if (opts.label) E('text', { x: it.id === 'school' ? 21 : 15, y: 6, 'font-size': 18 }, g).textContent = it.n;
   return g;
 }
 function drawItemLine(parent, it, label) {
@@ -1163,7 +1164,7 @@ function drawArrow(a, b, col = '#e53935', parent = ov) {
 let C = null;
 function compassCandidates() {
   if (S.map.startsWith('local')) {
-    const m = cur(); return m.pois.map((p, i) => ({ x: p.x, y: p.y, n: p.ours ? 'our school' : 'the ' + POI_SHORT[p.t], t: p.t, i }));
+    const m = cur(); return m.pois.map((p, i) => ({ x: p.x, y: p.y, n: p.ours ? 'WFA' : 'the ' + POI_SHORT[p.t], t: p.t, i }));
   }
   const its = visibleItems();
   const pts = its.filter(i => i.k === 'point').map(i => ({ x: i.xy[0], y: i.xy[1], n: i.n, it: i }));
@@ -1306,7 +1307,7 @@ function gridAsk() {
     // keep the place off-centre so children have to use the grid, not the middle of the screen
     fitBox(p.x - span / 2 + (Math.random() - .5) * span * .3, p.y - span / 2 + (Math.random() - .5) * span * .3, span, span, 1.05);
     setPanel(gridHeader() + `
-      <div class="qcard"><p class="q">What is the ${G.lvl}-figure grid reference of the ${p.ours ? 'school (our school!)' : esc(POI_SHORT[p.t])}?</p></div>
+      <div class="qcard"><p class="q">What is the ${G.lvl}-figure grid reference of ${p.ours ? 'WFA, our school' : 'the ' + esc(POI_SHORT[p.t])}?</p></div>
       <div class="refbox" id="refbox"></div>
       <div class="ref-legend"><span class="e">Eastings (along)</span><span class="n">Northings (up)</span></div>
       <div class="keypad" id="pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(n => `<button data-k="${n}">${n}</button>`).join('')}<button data-k="back" class="wide">⌫</button><button data-k="ok" id="check" class="ok" disabled>Check</button></div>
@@ -1388,7 +1389,7 @@ function gridCheckFind() {
   if (got.join('') === want.join('')) {
     G.done = true; if (G.tries === 1) G.score++;
     const g = cs(ov, p.x, p.y, 'hlx'); E('circle', { class: 'pulse', r: 16 }, g); E('circle', { r: 24, fill: 'none', stroke: '#2e9e4f', 'stroke-width': 4 }, g);
-    fb.innerHTML = `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>You found it! There is a ${p.ours ? 'school — our school' : esc(POI_SHORT[p.t])} there.</div>${teamAwardHTML()}`;
+    fb.innerHTML = `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>You found it! ${p.ours ? 'That is WFA, our school!' : 'There is a ' + esc(POI_SHORT[p.t]) + ' there.'}</div>${teamAwardHTML()}`;
     wireAward(fb); gridNextButtons();
   } else {
     const msg = got[0] !== want[0] && got[1] !== want[1] ? `You tapped ${got.join(' ')}. Find ${want[0]} along the bottom first, then ${want[1]} up the side.`
@@ -1541,7 +1542,7 @@ function distanceAsk() {
   const others = shuffle([-4, -3, -2, 2, 3, 4, 5].map(k => ladder[ai + k]).filter(v => v && v !== ans)).slice(0, 3);
   const opts = [ans, ...others].sort((x, y) => x - y);
   G.cur = { a, b, d, ans };
-  const na = a.ours ? 'our school' : 'the ' + POI_SHORT[a.t], nb = b.ours ? 'our school' : 'the ' + POI_SHORT[b.t];
+  const na = a.ours ? 'WFA' : 'the ' + POI_SHORT[a.t], nb = b.ours ? 'WFA' : 'the ' + POI_SHORT[b.t];
   abMark(a, 'A', '#2e7d32', cap1(na.replace(/^the /, ''))); abMark(b, 'B', '#c62828', cap1(nb.replace(/^the /, '')));
   fitBox(Math.min(a.x, b.x) - 500, Math.min(a.y, b.y) - 500, Math.abs(a.x - b.x) + 1000, Math.abs(a.y - b.y) + 1000, 1.15);
   setPanel(gridHeader() + `
