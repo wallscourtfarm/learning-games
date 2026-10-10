@@ -156,13 +156,14 @@ const TOPICS = [
   {
     id:'mars', title:'Mars rover', img:'images/mars-rover.jpg',
     who:[
-      {id:'rover', det:'the', t:'rover'},
+      {id:'rover', det:'the', t:'Mars rover'},
       {id:'arm', det:'the', t:'robot arm'},
       {id:'dust', det:'the', t:'dust'}
     ],
     doing:[
       {id:'drives', t:'drives', needs:'none', who:['rover']},
       {id:'scoops', t:'scoops up', needs:'what', who:['rover','arm']},
+      {id:'picks', t:'picks up', needs:'what', who:['rover','arm']},
       {id:'digs', t:'digs', who:['rover','arm']},
       {id:'rolls', t:'rolls', needs:'none', who:['rover']},
       {id:'swirls', t:'swirls', needs:'none', who:['dust']},
@@ -170,8 +171,9 @@ const TOPICS = [
       {id:'takes', t:'takes', needs:'what', who:['rover']}
     ],
     what:[
-      {id:'rock', t:'a rock', doing:['scoops','carries']},
+      {id:'rock', t:'a rock', doing:['scoops','carries','picks']},
       {id:'dust', t:'some red dust', doing:['scoops','carries']},
+      {id:'samples', t:'a rock sample', doing:['picks','carries','scoops']},
       {id:'photo', t:'a photo', doing:['takes']},
       {id:'hole', t:'a hole', doing:['digs']}
     ],
@@ -189,7 +191,7 @@ const TOPICS = [
     ],
     how:[
       {id:'slowly', t:'slowly', doing:['drives','rolls','scoops','digs','swirls']},
-      {id:'carefully', t:'carefully', doing:['scoops','digs','carries','drives','takes']},
+      {id:'carefully', t:'carefully', doing:['scoops','digs','carries','drives','takes','picks']},
       {id:'noisily', t:'noisily', doing:['drives','digs','rolls']},
       {id:'gently', t:'gently', doing:['scoops','carries','swirls']}
     ],

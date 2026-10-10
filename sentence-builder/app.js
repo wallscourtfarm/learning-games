@@ -8,7 +8,7 @@
  * Nothing about the child is stored; only teacher settings, on this device. Picture word
  * banks live in content.js; the sentence engine (parts, text, sense check) in engine.js.
  */
-const VERSION = '10.10.26c';
+const VERSION = '10.10.26d';
 
 const CAT = {
   who:      {label:'who',      icon:'who',      q:() => 'Who or what is in the picture?'},
@@ -35,7 +35,9 @@ const STEPS = {
   6:{title:'Step 6', sub:'Fronted adverbial + comma', front:true,
      mini:[['when','After lunch'],['lit',','],['who','the astronaut'],['doing','eats'],['what','an apple']]},
   7:{title:'Step 7', sub:'Add more about the who (relative clause)', rel:true,
-     mini:[['who','The astronaut'],['lit',','],['subord','who'],['doing','smiles'],['lit',','],['doing','floats']]}
+     mini:[['who','The astronaut'],['lit',','],['subord','who'],['doing','smiles'],['lit',','],['doing','floats']]},
+  F:{title:'✨ Free build', sub:'Start with a simple sentence, then add anything, in any order', free:true,
+     mini:[['who','The Mars rover'],['doing','picks up'],['what','a rock'],['lit','+ …']]}
 };
 const MAX_STEP = 7;
 const GOAL = 5;   // sentences at one step before suggesting the next
@@ -49,10 +51,11 @@ const FIXES = {
 };
 
 /* ---------- settings (teacher, this device only) ---------- */
-const DEFAULTS = {extras:2, voice:true, rate:0.85, readCards:true, step:1};
+const DEFAULTS = {extras:2, features:3, voice:true, rate:0.85, readCards:true, step:1};
 let settings = {...DEFAULTS};
 try { Object.assign(settings, JSON.parse(localStorage.getItem('wfa_sb_settings') || '{}')); } catch(e) {}
 if (!STEPS[settings.step]) settings.step = 1;
+if (!settings.features) settings.features = 3;
 function saveSettings(){ try { localStorage.setItem('wfa_sb_settings', JSON.stringify(settings)); } catch(e) {} }
 
 /* ---------- state ---------- */
@@ -73,7 +76,7 @@ let coachMsg = null;
 let fx = null;           // fix-it state
 let moveOpen = false;    // 'Move it' panel showing
 let moveSel = null;      // which position the child last tried
-const made = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, fix:0};   // this session only
+const made = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, F:0, fix:0, write:0};   // this session only
 
 const $ = q => document.querySelector(q);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
@@ -157,7 +160,7 @@ function showHome(){
     const mini = st.mini.map(([c, t]) => `<span class="c-${c}${c === 'doing' ? ' dark' : ''}">${esc(t)}</span>`).join('')
       + '<span class="dot">.</span>';
     b.innerHTML = `<h3>${st.title}</h3><p>${st.sub}</p><div class="mini">${mini}</div>`;
-    b.onclick = () => { step = +n; settings.step = step; saveSettings(); showHome(); };
+    b.onclick = () => { step = isNaN(+n) ? n : +n; settings.step = step; saveSettings(); showHome(); };
     sc.appendChild(b);
   });
   const tt = $('#topicTabs'); tt.innerHTML = '';
@@ -178,11 +181,14 @@ function showHome(){
     b.onclick = () => startFix(id);
     fg.appendChild(b);
   });
+  const wc = $('#writeCard'); if (wc) wc.onclick = () => startWrite(null);
   $('#fixNote').textContent = `Fix it sentences use the ${topic.label} pictures.`;
 }
 
 function showBuildScreen(p, tag){
   pic = p;
+  document.querySelector('.pic-panel').hidden = false;
+  document.getElementById('build').classList.remove('nopic');
   $('#home').hidden = true; $('#build').hidden = false; $('#homeBtn').hidden = false;
   $('#stepTag').hidden = false; $('#stepTag').innerHTML = tag;
   $('#pic').src = p.img; $('#picTitle').textContent = p.title;
@@ -202,7 +208,8 @@ function start(p){
 
 const joinStep = () => !!STEPS[step].joins;
 // Steps 2-3 practise what/where, so one is required; at Step 1 and Steps 4+ it is optional.
-const coreDone = () => s.who && s.doing && (step === 1 || step >= 4 || s.what || s.where);
+const isFree = () => step === 'F';
+const coreDone = () => s.who && s.doing && (step === 1 || step >= 4 || isFree() || s.what || s.where);
 const extrasCount = () => EXTRAS.filter(k => s[k]).length;
 const building = () => phase === 'core' || phase === 'core2';
 // Does this phase end with the child adding the full stop? (Not the first idea at Steps 4-5.)
@@ -264,7 +271,7 @@ function chooseRel(key, val){
       render(); return;
     }
   }
-  if (key === 'punct'){ s.relPunct = val; phase = 'ready'; changed(); render(); return; }
+  if (key === 'punct'){ s.relPunct = val; if (isFree()){ changed(); fr.phase = 'menu'; fr.needJudge = true; render(); return; } phase = 'ready'; changed(); render(); return; }
   if (s.rel[key] && s.rel[key].id && val.id === s.rel[key].id) s.rel[key] = null; else s.rel[key] = val;
   if (key === 'doing'){ s.rel.what = null; s.rel.where = null; }
   changed(); render();
@@ -315,6 +322,11 @@ function judge(yes){
   }
   if (yes && !prob){
     problemSlot = null;
+    if (phase === 'core' && isFree()){
+      enterFree();
+      coachMsg = {cls:'good', ic:'🌟', html:'Your core sentence makes sense, so it is now locked. Now choose a tool below to add to it, one thing at a time.'};
+      render(); return;
+    }
     if (phase === 'core' && STEPS[step].extras){
       phase = 'extras';
       coachMsg = {cls:'good', ic:'🌟', html:`Brilliant, your core sentence makes sense! It is now locked. Add up to <b>${settings.extras}</b> extra${plural(settings.extras)} to make it more interesting, and keep it making sense.`};
@@ -349,6 +361,8 @@ function judge(yes){
 
 function render(){
   if (mode === 'fix') return renderFix();
+  if (mode === 'free') return renderFree();
+  if (mode === 'write') return renderWrite();
   renderLine(); renderTools(); renderCoach(); renderBank();
 }
 
@@ -987,6 +1001,577 @@ function renderFixBank(){
   }
 }
 
+/* ================= FREE BUILD =================
+ * Start with a core sentence (built exactly as at Step 2), then add any tool in any order:
+ * describe, how, when, where, extra information about the who, a second idea, or move a
+ * part. Every change is read back and judged before the next tool unlocks, and the number
+ * of features is capped by the teacher (too many features muddle a sentence).
+ */
+let fr = null;   // {phase:'menu'|'pick'|'rel'|'join'|'second'|'move'|'done', pick, needJudge, movePart, moveSel}
+
+function enterFree(){
+  mode = 'free';
+  s.pos = {}; s.second = null; s.whereAdded = false;
+  fr = {phase:'menu', needJudge:false};
+  heard = false; problemSlot = null; stripped = false;
+}
+
+const FREE_TOOLS = {
+  describe:{icon:'describe', label:() => `Describe ${np(s.who)}`, ok:() => !s.describe && s.who.det},
+  how:     {icon:'how',      label:() => 'How?', ok:() => !s.how},
+  when:    {icon:'when',     label:() => 'When?', ok:() => !s.when},
+  where:   {icon:'where',    label:() => 'Where?', ok:() => !s.where},
+  rel:     {icon:'subord',   label:() => `More about ${np(s.who)} (who / which)`, ok:() => !s.rel},
+  second:  {icon:'coord',    label:() => 'A second idea (and, but, because…)', ok:() => !s.second},
+};
+function freeFeatures(){
+  const f = [];
+  if (s.describe) f.push('describe');
+  if (s.how) f.push('how');
+  if (s.when) f.push('when');
+  if (s.where && s.whereAdded) f.push('where');
+  if (s.rel && s.relPunct) f.push('rel');
+  if (s.second && !s.second.draft) f.push('second');
+  // moving a part to the front rearranges the sentence; it doesn't add a feature
+  return f;
+}
+const subJoin = j => j && JOINS[j].kind === 'subord';
+
+// Tokens for the free sentence, honouring positions in st.pos:
+//   how: 'mid' (after the what, default) | 'before' (before the doing word) | 'front' | 'split' (bad: between doing and what)
+//   when/where: 'end' (default) | 'front'      second: 'end' (default) | 'front' | 'split' (bad: between who and doing)
+function freeTokens(st, opts = {}){
+  const P = st.pos || {}, core = opts.core;
+  const who = [];
+  if (st.who){
+    if (st.describe && st.who.det && !core) who.push({kind:'lit', t:st.who.det, feat:'describe'}, {kind:'describe', card:st.describe, t:st.describe.t, feat:'describe'}, {kind:'who', card:st.who, t:st.who.t});
+    else who.push({kind:'who', card:st.who, t:np(st.who)});
+  }
+  const rel = [];
+  if (st.rel && !core && (st.rel.pron || st.rel.doing)){
+    const [o, c] = st.relPunct === 'brackets' ? ['(', ')'] : st.relPunct === 'commas' ? [',', ','] : [null, null];
+    if (o) rel.push({kind:'punct', t:o, feat:'rel'});
+    if (st.rel.pron) rel.push({kind:'relw', t:st.rel.pron, feat:'rel'});
+    ['doing','what','where'].forEach(k => { if (st.rel[k]) rel.push({kind:k, card:st.rel[k], t:st.rel[k].t, feat:'rel', rel:true}); });
+    if (c) rel.push({kind:'punct', t:c, feat:'rel'});
+  }
+  const unit = k => st[k] ? [{kind:k, card:st[k], t:st[k].t, feat: (k === 'where' && !st.whereAdded) ? null : k}] : [];
+  const how = core ? [] : unit('how'), when = core ? [] : unit('when');
+  const where = core && st.whereAdded ? [] : unit('where');
+  let sec = [];
+  if (st.second && !core){
+    const j = st.second.join;
+    sec = j === 'stop' ? [{kind:'punct', t:'.', feat:'second'}] : [{kind:'join', t:JOINS[j].t, jid:j, feat:'second'}];
+    sec.push(...parts(st.second.c).map(p => ({...p, feat:'second', sec:true})));
+  }
+  const isFront = k => !core && P[k] === 'front';
+  const out = [];
+  let front = null;
+  ['how','when','where','second'].forEach(k => { if (isFront(k)) front = k; });
+  if (front){
+    const u = front === 'how' ? how : front === 'when' ? when : front === 'where' ? where : sec;
+    out.push(...u.map(x => ({...x, front:true})), {kind:'punct', t:',', feat:'front'});
+  }
+  out.push(...who);
+  if (!core && P.second === 'split') out.push(...sec);
+  out.push(...rel);
+  if (!core && P.how === 'before') out.push(...how);
+  out.push(...unit('doing'));
+  if (!core && P.how === 'split') out.push(...how);
+  out.push(...unit('what'));
+  if (!core && (!P.how || P.how === 'mid')) out.push(...how);
+  if (front !== 'where') out.push(...where);
+  if (front !== 'when') out.push(...when);
+  if (!core && (!P.second || P.second === 'end')) out.push(...sec);
+  if (!opts.noStop && st.stop) out.push({kind:'stop', t:'.'});
+  return out;
+}
+
+function freeProblem(){
+  let prob = check(s, 'all', 2);
+  if (prob) return prob;
+  if (s.rel && s.rel.doing){
+    const r = check({who:s.who, doing:s.rel.doing, what:s.rel.what, where:s.rel.where}, 'core', 2);
+    if (r) return {slot:'rel', msg:r.msg.replace(/Try a different <b>\w+<\/b> block\.|Add a what block\.|Take the <b>what<\/b> away, or try a different doing block\./, 'Tap the extra information to take it away.')};
+  }
+  if (s.second && s.second.c.who){
+    const r = check(s.second.c, 'core', 4);
+    if (r) return {slot:'second', msg:r.msg.replace(/Try a different <b>\w+<\/b> block\.|Add a what block\./, 'Tap the second idea to change it.')};
+  }
+  return null;
+}
+
+function freeJudge(yes){
+  const prob = freeProblem();
+  if (yes && !prob){
+    fr.needJudge = false; problemSlot = null;
+    if (s.second && s.second.draft) s.second.draft = false;
+    const n = freeFeatures().length;
+    coachMsg = {cls:'good', ic:'🌟', html:`It still makes sense! You have used <b>${n}</b> of <b>${settings.features}</b> features. ${n >= settings.features ? 'That is plenty: too many features can muddle a sentence. Press <b>I\'ve finished</b>.' : 'Add another, or press <b>I\'ve finished</b>.'}`};
+  } else if (yes){
+    problemSlot = prob.slot; heard = false;
+    coachMsg = {cls:'think', ic:'👂', html:prob.msg + ' Or tap the part you added to take it away.'};
+  } else {
+    heard = false;
+    if (prob){ problemSlot = prob.slot; coachMsg = {cls:'think', ic:'👍', html:'Good listening! ' + prob.msg}; }
+    else coachMsg = {cls:'think', ic:'👍', html:'Good thinking. Tap the part you added to take it away, then try something else.'};
+  }
+  render();
+}
+
+function removeFeat(f){
+  if (f === 'describe') s.describe = null;
+  if (f === 'how'){ s.how = null; delete s.pos.how; }
+  if (f === 'when'){ s.when = null; delete s.pos.when; }
+  if (f === 'where'){ s.where = null; s.whereAdded = false; delete s.pos.where; }
+  if (f === 'rel'){ s.rel = null; s.relPunct = null; }
+  if (f === 'second'){ s.second = null; delete s.pos.second; }
+  if (f === 'front') Object.keys(s.pos).forEach(k => { if (s.pos[k] === 'front') delete s.pos[k]; });
+  fr.phase = 'menu'; problemSlot = null; heard = false; stripped = false;
+  // after taking something away, the child reads it again before carrying on
+  fr.needJudge = true;
+  coachMsg = {cls:'', ic:'↩️', html:'Taken away. Read it again: does it make sense now?'};
+  render();
+}
+
+function renderFree(){
+  const line = $('#line'); line.innerHTML = '';
+  line.classList.toggle('covered', covered);
+  const tk = freeTokens(s, {core: stripped}).filter(x => x.kind !== 'stop');
+  let capNext = true;
+  const canEdit = fr.phase === 'menu';
+  tk.forEach((p, i) => {
+    const isWord = !['punct','stop'].includes(p.kind);
+    const t = isWord && capNext ? cap(p.t) : p.t;
+    if (isWord) capNext = false;
+    if (p.t === '.') capNext = true;
+    const tap = canEdit && p.feat ? () => removeFeat(p.feat) : canEdit ? () => { coachMsg = {cls:'', ic:'🔒', html:'That is part of your core sentence, so it is locked. Tap a part you added to take it away.'}; render(); } : false;
+    if (p.kind === 'lit'){ const l = el('span', 'lit', esc(t)); l.dataset.i = i; line.appendChild(l); return; }
+    if (p.kind === 'punct'){ const m = markEl(p.t, i, p.feat === 'front' ? 'added' : ''); if (tap) m.onclick = tap; line.appendChild(m); return; }
+    if (p.kind === 'join'){ line.appendChild(joinEl(p.jid, i, {onTap: tap || false})); return; }
+    if (p.kind === 'relw'){
+      const b = el('button', 'chip join-chip j-subord' + (problemSlot === 'rel' ? ' problem' : ''), `<img src="icons/subord.png" alt=""><span class="w">${esc(t)}</span><span class="lab">extra info</span>`);
+      b.dataset.i = i; if (tap) b.onclick = tap; line.appendChild(b); return;
+    }
+    const label = p.front ? `${p.kind} · fronted` : p.rel ? `${p.kind} · extra info` : p.sec ? `${p.kind} · 2nd idea` : null;
+    const c = chipEl(p.kind, t, i, {label, locked: !p.feat, extra:false, slot: p.rel ? 'rel' : p.sec ? 'second' : null, onTap: tap});
+    if (p.feat && canEdit) c.classList.add('removable');
+    line.appendChild(c);
+  });
+  // the second idea while it is being built
+  if (fr.phase === 'second'){
+    const c = s.second.c;
+    ['who','doing'].forEach(k => { if (!c[k]) line.appendChild(chipEl(k, k + '?', null, {empty:true, active:true, label: k + ' · 2nd idea'})); });
+  }
+  line.appendChild(el('span', 'stop', '.'));
+  renderFreeTools(); renderFreeCoach(); renderFreeBank();
+}
+
+function readFree(opts = {}){ speakTokens(freeTokens(s, opts), () => { heard = true; render(); }); }
+
+function renderFreeTools(){
+  const t = $('#lineTools'); t.innerHTML = '';
+  const add = (html, cls, fn, dis) => { const b = el('button', 'btn ' + (cls || ''), html); b.onclick = fn; b.disabled = !!dis; t.appendChild(b); return b; };
+  if (fr.phase === 'done'){
+    if (canSpeak()) add('🔊 Read it to me', '', () => readFree());
+    add(stripped ? '👀 Show it all' : '🔍 Check the core', '', () => { stripped = !stripped; render(); if (stripped) readFree({core:true}); });
+    add(covered ? '👀 Show me again' : '🙈 Cover it and write', '', () => { covered = !covered; render(); });
+    add('➕ Make another', 'primary', () => start(pic));
+    add('🖼️ Next picture', '', () => { const ps = topic.pictures; start(ps[(ps.indexOf(pic) + 1) % ps.length]); });
+    return;
+  }
+  const secondReady = fr.phase === 'second' && s.second.c.who && s.second.c.doing;
+  if (fr.needJudge || secondReady){
+    if (canSpeak()) add('🔊 Read it to me', heard ? '' : 'primary pulse', () => readFree());
+    add('✅ It makes sense', 'good', () => { if (secondReady){ fr.phase = 'menu'; fr.needJudge = true; } freeJudge(true); }, canSpeak() && !heard);
+    add('🤔 Not yet', 'think', () => freeJudge(false), canSpeak() && !heard);
+  }
+  if (fr.phase === 'menu' && !fr.needJudge){
+    add(stripped ? '👀 Show it all' : '🔍 Check the core', '', () => {
+      stripped = !stripped; render();
+      if (stripped){ coachMsg = {cls:'', ic:'🔍', html:`Without everything you added, the core sentence says: <q>${esc(textOf(freeTokens(s, {core:true})).text)}</q> It still makes sense on its own.`}; renderFreeCoach(); readFree({core:true}); }
+      else { coachMsg = null; renderFreeCoach(); }
+    });
+    add('✅ I\'ve finished', 'primary', () => { fr.phase = 'done'; made.F++; stripped = false;
+      coachMsg = {cls:'good', ic:'🌟', html:`Great sentence, with ${freeFeatures().length} feature${plural(freeFeatures().length)} added to a core that makes sense. ✏️ Now write it in your book.`}; render(); });
+  }
+  if (fr.phase !== 'menu' && !secondReady) add('✖ Cancel', '', () => {
+    if (fr.phase === 'rel') s.rel = null;
+    if (fr.phase === 'second' || fr.phase === 'join') s.second = null;
+    fr.phase = 'menu'; coachMsg = null; render();
+  });
+  add('↺ Start again', '', () => start(pic));
+}
+
+function renderFreeCoach(){
+  const c = $('#coach');
+  let m = coachMsg;
+  if (!m){
+    if (fr.needJudge) m = {ic:'🔊', html: canSpeak() ? 'Press <b>Read it to me</b>. Does it still make sense?' : 'Read it aloud quietly. Does it still make sense?'};
+    else if (fr.phase === 'menu') m = {ic:'🧰', html:`Choose a tool to add to your sentence. You have used <b>${freeFeatures().length}</b> of <b>${settings.features}</b> features. Tap anything you added to take it away.`};
+    else if (fr.phase === 'pick') m = {ic:'👉', html:`Choose a <b>${CAT[fr.pick].label}</b> block.`};
+    else if (fr.phase === 'join') m = {ic:'🔗', html:'How will the second idea join on?'};
+    else if (fr.phase === 'second') m = {ic:'👉', html:'Build your second idea: <b>who</b>, then <b>doing</b>, then a what or a where if you want one.'};
+    else if (fr.phase === 'move') m = {ic:'🔀', html:'Choose a part to move. Tap each place to hear it.'};
+  }
+  if (fr.phase === 'done' && !coachMsg) m = {cls:'good', ic:'✏️', html:'Now write it in your book.'};
+  c.className = 'coach ' + (m && m.cls ? m.cls : '');
+  let extra = '';
+  if (fr.phase === 'done'){ const n = made.F; extra = `<div class="stars">${'⭐'.repeat(Math.min(n, GOAL))}${'☆'.repeat(Math.max(0, GOAL - n))}</div>`; }
+  c.innerHTML = m ? `<span class="ic">${m.ic}</span><div>${m.html}${extra}</div>` : '';
+  c.hidden = !m;
+}
+
+function movableParts(){
+  const out = [];
+  if (s.how) out.push('how');
+  if (s.when) out.push('when');
+  if (s.where) out.push('where');
+  if (s.second && !s.second.draft && subJoin(s.second.join)) out.push('second');
+  return out;
+}
+
+function freeMoveOptions(k){
+  const P = {...s.pos};
+  Object.keys(P).forEach(x => { if (P[x] === 'front' && x !== k) delete P[x]; });   // only one thing at the front
+  const opt = (v, good, note) => ({v, good, note, tokens: freeTokens({...s, pos:{...P, [k]:v}}, {noStop:true})});
+  if (k === 'how'){
+    const o = [opt('front', true, 'When it moves to the <b>front</b>, it needs a <b>comma</b> after it.')];
+    if (/ly$/.test(s.how.t)) o.push(opt('before', true, 'A how word can sit just <b>before the doing</b> word.'));
+    if (s.what) o.push(opt('split', false, 'It gets between the <b>doing</b> word and the <b>what</b>. It does not work there.'));
+    o.push(opt('mid', true, s.what ? 'It can come after the <b>what</b>.' : 'It can come after the <b>doing</b> word.'));
+    return o;
+  }
+  if (k === 'second') return [
+    opt('front', true, `The <b>${JOINS[s.second.join].t}</b> part can go at the <b>front</b>. Then it needs a <b>comma</b> after it.`),
+    opt('split', false, 'It splits the <b>who</b> from the <b>doing</b> word. It does not work there.'),
+    opt('end', true, 'It can go at the <b>end</b>.')];
+  return [opt('front', true, 'When it moves to the <b>front</b>, it needs a <b>comma</b> after it.'), opt('end', true, 'It can go at the <b>end</b>.')];
+}
+
+function renderFreeBank(){
+  const b = $('#bank'); b.innerHTML = '';
+  if (fr.phase === 'done' || fr.needJudge) return;
+  if (fr.phase === 'menu'){
+    const used = freeFeatures().length, full = used >= settings.features;
+    const g = cardGroup(b, '', `🧰 Tools <span class="count">Features: ${used} of ${settings.features}</span>`, []);
+    const row = g.querySelector('.cards');
+    Object.entries(FREE_TOOLS).forEach(([k, tl]) => {
+      if (!tl.ok()) return;
+      const btn = plainCard('tool-card', `${icon(tl.icon)}<span>${esc(tl.label())}</span>`, () => {
+        if (k === 'rel'){ fr.phase = 'rel'; s.rel = {}; s.relPunct = null; }
+        else if (k === 'second'){ fr.phase = 'join'; }
+        else { fr.phase = 'pick'; fr.pick = k; }
+        coachMsg = null; render();
+      });
+      if (full) btn.disabled = true;
+      row.appendChild(btn);
+    });
+    if (movableParts().length){
+      row.appendChild(plainCard('tool-card', `<span style="font-size:1.4rem">🔀</span><span>Move a part</span>`, () => { fr.phase = 'move'; fr.movePart = null; fr.moveSel = null; coachMsg = null; render(); }));
+    }
+    if (full) g.appendChild(el('p', 'note', `That is ${settings.features} features. Too many features can muddle a sentence. You can take one away, move a part, or finish.`));
+    return;
+  }
+  if (fr.phase === 'pick'){
+    const cat = fr.pick;
+    let list = pic[cat] || [];
+    cardGroup(b, icon(CAT[cat].icon), cat === 'describe' ? `Describe ${esc(np(s.who))}:` : esc(CAT[cat].q(s)), list.map(card => wordCard(cat, card, false, () => {
+      if (settings.readCards && canSpeak()) say(card.t);
+      s[cat] = card; if (cat === 'where') s.whereAdded = true;
+      fr.phase = 'menu'; fr.needJudge = true; heard = false; coachMsg = null; render();
+    })));
+    return;
+  }
+  if (fr.phase === 'rel') return relBank(b);
+  if (fr.phase === 'join'){
+    cardGroup(b, icon('coord'), 'How does the second idea join on?', ['stop','and','but','so','because','when','if'].map(id => {
+      const j = JOINS[id];
+      return plainCard(`join-card j-${j.kind}`, `<span class="jw">${id === 'stop' ? '⏺ Full stop' : esc(j.t)}</span><small>${esc(j.help)}</small>`, () => {
+        if (settings.readCards && canSpeak() && id !== 'stop') say(j.t);
+        s.second = {join:id, c:blank(), draft:true}; fr.phase = 'second'; coachMsg = null; heard = false; render();
+      });
+    }));
+    return;
+  }
+  if (fr.phase === 'second'){
+    const c = s.second.c;
+    const next = !c.who ? ['who'] : !c.doing ? ['doing'] : ['what','where'];
+    next.forEach(cat => {
+      let list = pic[cat] || [];
+      cardGroup(b, icon(CAT[cat].icon), cat === 'who' ? 'Who or what is in the second idea?' : esc(CAT[cat].q(c)) + (cat === 'what' || cat === 'where' ? ' (you can skip this)' : ''),
+        list.map(card => wordCard(cat, card, c[cat] && c[cat].id === card.id, () => {
+          if (settings.readCards && canSpeak()) say(cat === 'who' ? np(card) : card.t);
+          c[cat] = c[cat] && c[cat].id === card.id ? null : card; heard = false; coachMsg = null; render();
+        })));
+    });
+    return;
+  }
+  if (fr.phase === 'move'){
+    const partsList = movableParts();
+    const label = k => k === 'second' ? `${JOINS[s.second.join].t}…` : s[k].t;
+    cardGroup(b, '', 'Which part do you want to move?', partsList.map(k => plainCard(`card c-${k === 'second' ? 'join-card j-subord' : k}` + (fr.movePart === k ? ' chosen' : ''), esc(label(k)), () => { fr.movePart = k; fr.moveSel = null; render(); })));
+    if (fr.movePart){
+      const box = el('div', 'bank-group');
+      box.appendChild(el('div', 'bank-q', `<span>🔀 Where can <q>${esc(label(fr.movePart))}</q> go? Tap each one to hear it.</span>`));
+      const curPos = s.pos[fr.movePart] || (fr.movePart === 'how' ? 'mid' : 'end');
+      freeMoveOptions(fr.movePart).forEach((o, oi) => {
+        const sel = fr.moveSel === oi;
+        const row = el('button', 'move-opt' + (sel ? ' sel ' + (o.good ? 'good' : 'bad') : ''));
+        row.innerHTML = `<div class="mini move-mini">${stripHtml(o.tokens)}</div>` + (o.v === curPos ? '<span class="tag-now">your sentence</span>' : '')
+          + (sel ? `<div class="verdict">${o.good ? '✅ It still makes sense. ' : '🤔 Listen: does that make sense? '}${o.note}</div>` : '');
+        row.onclick = () => { fr.moveSel = oi; render(); say(textOf([...o.tokens, {t:'.'}]).text); };
+        box.appendChild(row);
+        if (sel && o.good && o.v !== curPos){
+          const use = el('button', 'btn good', '👍 Use this order');
+          use.style.margin = '0 0 10px';
+          use.onclick = () => {
+            Object.keys(s.pos).forEach(x => { if (s.pos[x] === 'front' && x !== fr.movePart) delete s.pos[x]; });
+            s.pos[fr.movePart] = o.v; fr.phase = 'menu'; fr.needJudge = true; heard = false;
+            coachMsg = {cls:'', ic:'🔀', html:'Moved. Read it again: does it still make sense?'}; render();
+          };
+          box.appendChild(use);
+        }
+      });
+      b.appendChild(box);
+    }
+  }
+}
+
+/* ================= CHECK MY WRITING =================
+ * The child types their own sentence(s). The tool reads it back exactly as written (a run-on
+ * is read in one breath, so they can hear it), then shows each idea in colour and asks
+ * questions about run-ons, comma splices, a who with no doing word, half sentences, long
+ * "and" chains, capital letters and full stops. One-tap fixes edit the child's own text.
+ * Nothing typed is stored.
+ */
+let wr = {text:'', result:null, loaded:false, loading:false, pic:null};
+
+function loadScript(src){
+  return new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = src; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); });
+}
+async function loadChecker(){
+  if (wr.loaded || wr.loading) return;
+  wr.loading = true;
+  try {
+    await loadScript('lib/verbs.js?v=' + VERSION);
+    await loadScript('writing.js?v=' + VERSION);
+    wr.loaded = true;
+    loadScript('lib/wink-pos-tagger.bundle.js?v=' + VERSION).then(() => { if (wr.result) runCheck(); }).catch(() => {});   // optional, improves accuracy
+  } catch(e) { wr.failed = true; }
+  wr.loading = false;
+  render();
+}
+
+function startWrite(p){
+  mode = 'write'; pic = null;
+  wr.pic = p || null; wr.result = null; coachMsg = null; covered = false;
+  $('#home').hidden = true; $('#build').hidden = false; $('#homeBtn').hidden = false;
+  $('#stepTag').hidden = false; $('#stepTag').innerHTML = '<b>📝 Check my writing</b>';
+  if (wr.pic){ $('#pic').src = wr.pic.img; $('#picTitle').textContent = wr.pic.title; }
+  document.querySelector('.pic-panel').hidden = !wr.pic;
+  document.getElementById('build').classList.toggle('nopic', !wr.pic);
+  try { history.replaceState(null, '', '?mode=write' + (wr.pic ? `&pic=${topic.id}.${wr.pic.id}` : '')); } catch(e) {}
+  loadChecker();
+  render();
+  window.scrollTo(0, 0);
+}
+
+function runCheck(){
+  wr.result = WR.analyse(wr.text);
+  wr.checkedText = wr.text;
+  made.write++;
+  render();
+}
+
+// Edit the child's text at a token boundary inside sentence `si`.
+function applyFix(fn){
+  wr.text = fn(wr.text); const ta = $('#wrText'); if (ta) ta.value = wr.text;
+  runCheck();
+}
+const capAt = (txt, at) => txt.slice(0, at) + txt.charAt(at).toUpperCase() + txt.slice(at + 1);
+function fixStopBefore(sen, tokIdx){             // full stop before token, capital on it
+  const at = sen.offs[tokIdx][0];
+  applyFix(txt => { let before = txt.slice(0, at).replace(/[\s,;]+$/, ''); return capAt(before + '. ' + txt.slice(at), before.length + 2); });
+}
+function fixCommaToStop(sen, commaTok, nextTok){
+  const [a, b] = sen.offs[commaTok], n = sen.offs[nextTok][0];
+  applyFix(txt => capAt(txt.slice(0, a) + '. ' + txt.slice(n), a + 2));
+}
+function fixCommaBefore(sen, tokIdx){
+  const at = sen.offs[tokIdx][0];
+  applyFix(txt => { const before = txt.slice(0, at).replace(/\s+$/, ''); return before + ', ' + txt.slice(at); });
+}
+function fixRelToMain(sen, relIdea){             // "the mars rover, which is a robot." -> "the mars rover is a robot."
+  const relTok = relIdea.start; const a = sen.offs[relTok][0], b = sen.offs[relTok][1];
+  applyFix(txt => { let before = txt.slice(0, a).replace(/[\s,(]+$/, ''); let after = txt.slice(b).replace(/^\s+/, ''); return before + ' ' + after; });
+}
+function fixCapital(sen){ applyFix(txt => capAt(txt, sen.offs[0][0])); }
+function fixStopEnd(sen){ const e = sen.offs[sen.offs.length - 1][1]; applyFix(txt => txt.slice(0, e) + '.' + txt.slice(e)); }
+function fixAndToStop(sen, andTok){
+  const [a, b] = sen.offs[andTok];
+  applyFix(txt => { const before = txt.slice(0, a).replace(/[\s,]+$/, ''); const after = txt.slice(b).replace(/^\s+/, ''); return capAt(before + '. ' + after, before.length + 2); });
+}
+
+const ideaText = (sen, x) => {
+  const end = x.verb != null ? x.verb : x.start;
+  return sen.tokens.slice(x.start, end + 1).filter(t => !/^[.,!?;]$/.test(t)).join(' ');
+};
+const whoText = (sen, x) => {
+  const out = [];
+  for (let k = x.start; k < sen.tokens.length; k++){ const t = sen.tokens[k]; if (/^[.,!?;(]$/.test(t) || /^(who|which|that|whose)$/i.test(t)) break; out.push(t); }
+  return out.join(' ');
+};
+
+// Message for one problem, plus optional fix button.
+function problemCard(sen, pr, si){
+  const box = el('div', 'wr-problem');
+  let msg = '', fix = null;
+  const q = t => `<q>${esc(t)}</q>`;
+  if (pr.type === 'runon'){
+    const prev = sen.ideas.filter(x => x.kind !== 'rel' && x.start < pr.idea.start).pop();
+    const then = /^then$/i.test(sen.tokens[pr.idea.start - 1] || '');
+    msg = `I can hear <b>two ideas</b> here: ${prev ? q(ideaText(sen, prev)) + ' and ' : ''}${q(ideaText(sen, pr.idea))}. They need a <b>full stop</b> between them, or a <b>joining word</b> (and, but, so, because…).` + (then ? ' <i>"Then" is not a joining word on its own.</i>' : '');
+    fix = ['Put a full stop before ' + q(sen.tokens[pr.idea.start]), () => fixStopBefore(sen, pr.idea.start)];
+  } else if (pr.type === 'splice'){
+    msg = `A <b>comma</b> can't join two ideas. ${q(ideaText(sen, pr.idea))} is a new idea. Use a <b>full stop</b> or a <b>joining word</b>.`;
+    fix = ['Change the comma to a full stop', () => fixCommaToStop(sen, pr.at, pr.idea.start)];
+  } else if (pr.type === 'fragment-rel'){
+    const rel = sen.ideas.find(x => x.kind === 'rel');
+    const who = whoText(sen, pr.idea);
+    msg = `We know <b>who</b>: ${q(who)}, and some extra information about it: ${q(sen.tokens.slice(rel.start, rel.verb != null ? rel.verb + 1 : rel.start + 1).join(' ') + '…')}. But what does ${q(who)} <b>do</b>? Add a doing part after the extra information, or take away ${q(sen.tokens[rel.start])} to make it a sentence.`;
+    fix = [`Take away "${sen.tokens[rel.start]}"`, () => fixRelToMain(sen, rel)];
+  } else if (pr.type === 'fragment'){
+    const ing = /ing$/i.test(sen.tokens[pr.idea.start]);
+    msg = ing ? `Who is ${q(sen.tokens[pr.idea.start].toLowerCase())}? A sentence needs a <b>who</b> and a <b>doing</b> word, e.g. <q>The fox was ${esc(sen.tokens[pr.idea.start].toLowerCase())}…</q>`
+              : `I can't find a <b>doing</b> word. ${q(whoText(sen, pr.idea) || sen.tokens.join(' '))}… what happens? A sentence needs a <b>who</b> and a <b>doing</b> word.`;
+  } else if (pr.type === 'half'){
+    msg = `This is only <b>half</b> a sentence: ${q(ideaText(sen, pr.idea) + '…')} What happened? Add the other half, e.g. <q>${esc(cap(sen.tokens.filter(t => !/^[.!?]$/.test(t)).join(' ')))}, …</q>`;
+  } else if (pr.type === 'subcomma'){
+    const sub = sen.ideas.find(x => x.kind === 'sub');
+    msg = `This sentence starts with ${q(sub ? ideaText(sen, sub) + '…' : '')}. When a sentence starts like that, put a <b>comma</b> after that part.`;
+    fix = ['Add the comma before ' + q(sen.tokens[pr.idea.start]), () => fixCommaBefore(sen, pr.idea.start)];
+  } else if (pr.type === 'ands'){
+    msg = `That's <b>${pr.count} ideas</b> joined with <b>and</b>. That's a lot to hear in one go. Could some of them be new sentences? Tap an <b>and</b> below to change it to a full stop.`;
+  } else if (pr.type === 'capital'){
+    msg = 'A sentence starts with a <b>capital letter</b>.';
+    fix = ['Add the capital letter', () => fixCapital(sen)];
+  } else if (pr.type === 'stop'){
+    msg = 'A sentence ends with a <b>full stop</b> (or ? or !).';
+    fix = ['Add a full stop', () => fixStopEnd(sen)];
+  }
+  box.innerHTML = `<span class="ic">${pr.type === 'capital' || pr.type === 'stop' ? '✏️' : '🤔'}</span><div>${msg}</div>`;
+  if (fix){ const b = el('button', 'btn', '🔧 ' + fix[0]); b.onclick = fix[1]; box.querySelector('div').appendChild(b); }
+  return box;
+}
+
+// One sentence as a strip: each idea gets its own soft colour; its who is orange, its doing word yellow.
+function sentenceStrip(sen, si){
+  const wrap = el('div', 'wr-strip');
+  const ideaOf = new Array(sen.tokens.length).fill(-1);
+  const roles = new Array(sen.tokens.length).fill('');
+  let ci = 0;
+  sen.ideas.forEach((x, k) => {
+    const next = sen.ideas.slice(k + 1).find(y => y.start > x.start);
+    const end = next ? next.start : sen.tokens.length;
+    for (let i = x.start; i < end; i++) ideaOf[i] = x.kind === 'rel' ? 100 + k : (x.kind === 'main' || x.kind === 'sub' || x.kind === 'wh' ? ci : ci);
+    if (x.kind !== 'rel'){
+      if (x.verb != null){ for (let i = x.start; i < x.verb; i++) if (!roles[i] && !/^[,(]$/.test(sen.tokens[i])) roles[i] = 'w-who'; roles[x.verb] = 'w-doing'; }
+      ci++;
+    } else if (x.verb != null) roles[x.verb] = 'w-doing rel';
+    if (x.joinAt != null) roles[x.joinAt] = 'w-join';
+  });
+  // a rel clause ends at the next comma
+  sen.ideas.filter(x => x.kind === 'rel').forEach(x => {
+    for (let i = x.start; i < sen.tokens.length; i++){ if (i > x.start && sen.tokens[i] === ',') break; ideaOf[i] = 'rel'; }
+  });
+  const gaps = new Map();
+  sen.problems.forEach(pr => { if (pr.type === 'runon') gaps.set(pr.idea.start, 'runon'); if (pr.type === 'splice') gaps.set(pr.at, 'splice'); if (pr.type === 'subcomma') gaps.set(pr.idea.start, 'subcomma'); });
+  const ands = sen.problems.some(p => p.type === 'ands');
+  sen.tokens.forEach((tk, i) => {
+    if (gaps.get(i) === 'runon' || gaps.get(i) === 'subcomma'){
+      const g = el('button', 'wr-gap', gaps.get(i) === 'runon' ? '▾ <small>full stop?</small>' : '▾ <small>comma?</small>');
+      g.onclick = () => gaps.get(i) === 'runon' ? fixStopBefore(sen, i) : fixCommaBefore(sen, i);
+      wrap.appendChild(g);
+    }
+    const id = ideaOf[i];
+    const cls = 'wr-w ' + (id === 'rel' ? 'idea-rel' : id >= 0 ? 'idea-' + (id % 4) : '') + ' ' + roles[i] + (gaps.get(i) === 'splice' ? ' wr-bad' : '');
+    const w = el(ands && /^and$/i.test(tk) ? 'button' : 'span', cls, esc(tk));
+    if (ands && /^and$/i.test(tk)){ w.classList.add('wr-and'); w.onclick = () => fixAndToStop(sen, i); }
+    w.dataset.s = si; w.dataset.t = i;
+    wrap.appendChild(w);
+  });
+  return wrap;
+}
+
+function readSentenceText(sen, si){
+  const start = sen.offs[0][0], end = sen.offs[sen.offs.length - 1][1];
+  const txt = wr.checkedText.slice(start, end);
+  const words = [...document.querySelectorAll(`.wr-w[data-s="${si}"]`)];
+  say(txt, ci => {
+    const abs = start + ci;
+    const k = sen.offs.findIndex(([a, b]) => abs >= a && abs < b);
+    words.forEach(w => w.classList.toggle('speaking', +w.dataset.t === k));
+  }, () => words.forEach(w => w.classList.remove('speaking')));
+}
+
+function renderWrite(){
+  const line = $('#line'); line.innerHTML = '';
+  const tools = $('#lineTools'); tools.innerHTML = '';
+  const bank = $('#bank'); bank.innerHTML = '';
+  // the writing box
+  const ta = el('textarea', 'wr-text');
+  ta.id = 'wrText'; ta.rows = 4; ta.placeholder = 'Type your sentence here…'; ta.value = wr.text;
+  ta.setAttribute('autocapitalize', 'off'); ta.setAttribute('spellcheck', 'false');
+  ta.oninput = () => { wr.text = ta.value; };
+  line.appendChild(ta);
+  const add = (html, cls, fn, dis) => { const b = el('button', 'btn ' + (cls || ''), html); b.onclick = fn; b.disabled = !!dis; tools.appendChild(b); return b; };
+  if (canSpeak()) add('🔊 Read it to me', 'primary', () => { if (wr.text.trim()) say(wr.text); });
+  add('🔍 Check my sentences', 'good', () => { if (wr.text.trim() && wr.loaded) runCheck(); }, !wr.loaded);
+  add('🧹 Clear', '', () => { wr.text = ''; wr.result = null; render(); });
+  if (!wr.pic) add('🖼️ Choose a picture', '', () => { wr.choosing = !wr.choosing; render(); });
+  else add('✖ No picture', '', () => startWrite(null));
+
+  const c = $('#coach');
+  c.hidden = false; c.className = 'coach';
+  if (wr.failed) c.innerHTML = '<span class="ic">⚠️</span><div>The checker could not load. Check the internet connection and reload the page.</div>';
+  else if (!wr.loaded) c.innerHTML = '<span class="ic">⏳</span><div>Getting the checker ready…</div>';
+  else if (!wr.result) c.innerHTML = `<span class="ic">📝</span><div>Write your sentence${wr.pic ? ' about the picture' : ''}. Press <b>Read it to me</b> and listen: does it make sense? Then press <b>Check my sentences</b>.</div>`;
+  else if (wr.text !== wr.checkedText) c.innerHTML = '<span class="ic">✏️</span><div>You changed your writing. Press <b>Check my sentences</b> again.</div>';
+  else {
+    const all = wr.result.sentences.flatMap(x => x.problems);
+    c.className = 'coach ' + (all.length ? 'think' : 'good');
+    const nIdeas = wr.result.sentences.reduce((a, x) => a + x.ideas.filter(i => i.kind !== 'rel').length, 0);
+    c.innerHTML = all.length
+      ? `<span class="ic">🔎</span><div>I found <b>${wr.result.sentences.length}</b> sentence${plural(wr.result.sentences.length)} and <b>${nIdeas}</b> idea${plural(nIdeas)}. Each colour is one idea: the <span class="wr-w w-who">who</span> and the <span class="wr-w w-doing">doing word</span> are marked. Look at the questions below.</div>`
+      : `<span class="ic">🌟</span><div>Each sentence has a who and a doing word, and the ideas are joined or separated. Now read it aloud one more time: <b>does it make sense?</b></div>`;
+  }
+  if (wr.choosing && !wr.pic){
+    const g = el('div', 'bank-group');
+    g.appendChild(el('div', 'bank-q', '<span>Choose a picture to write about</span>'));
+    const grid = el('div', 'pic-grid mini-grid');
+    TOPICS.forEach(tp => tp.pictures.forEach(p => {
+      const b = el('button', 'pic-card', `<img src="${p.img}" alt="" loading="lazy"><div>${esc(p.title)}</div>`);
+      b.onclick = () => { wr.choosing = false; topic = tp; startWrite(p); };
+      grid.appendChild(b);
+    }));
+    g.appendChild(grid); bank.appendChild(g);
+  }
+  if (wr.result && wr.text === wr.checkedText){
+    wr.result.sentences.forEach((sen, si) => {
+      const card = el('div', 'bank-group wr-card');
+      const head = el('div', 'bank-q', `<span>Sentence ${si + 1}</span>`);
+      if (canSpeak()){ const rb = el('button', 'btn small', '🔊'); rb.onclick = () => readSentenceText(sen, si); head.appendChild(rb); }
+      card.appendChild(head);
+      card.appendChild(sentenceStrip(sen, si));
+      if (!sen.problems.length) card.appendChild(el('div', 'wr-ok', '✅ I can hear a who and a doing word. Does it make sense when you read it aloud?'));
+      sen.problems.forEach(pr => card.appendChild(problemCard(sen, pr, si)));
+      bank.appendChild(card);
+    });
+    bank.appendChild(el('p', 'note', 'The checker looks for patterns, so it can sometimes be wrong. You decide: read it aloud.'));
+  }
+}
+
 /* ---------- teacher settings ---------- */
 function openSettings(){
   const m = $('#modalBox');
@@ -995,6 +1580,7 @@ function openSettings(){
     <h2>⚙️ Teacher settings</h2>
     <p><a class="btn primary" href="print.html" target="_blank" rel="noopener">🖨️ Printable resources</a></p>
     <div class="row"><label>Extras allowed (Step 3 and Fix it)</label>${seg('extras', [[1,'1'],[2,'2'],[3,'3']])}</div>
+    <div class="row"><label>Features allowed (Free build)</label>${seg('features', [[2,'2'],[3,'3'],[4,'4'],[5,'5']])}</div>
     <div class="row"><label>Read aloud</label>${seg('voice', [[true,'On'],[false,'Off']])}</div>
     <div class="row"><label>Reading speed</label>${seg('rate', [[0.7,'Slow'],[0.85,'Steady'],[1,'Normal']])}</div>
     <div class="row"><label>Say each block when tapped</label>${seg('readCards', [[true,'On'],[false,'Off']])}</div>
@@ -1008,6 +1594,8 @@ function openSettings(){
       <li><b>Fronted adverbials (Step 6).</b> The sentence must make sense first. Then the child puts a when, where or how at the front (an existing where can be moved), and must add the comma themselves.</li>
       <li><b>Relative clauses (Step 7).</b> After the core makes sense, the child adds extra information about the who: <i>who</i> for a person, <i>which</i> for a thing (the tool explains if they pick the other), one more doing block, then two commas or brackets. Check the core hides it again.</li>
       <li><b>Move it.</b> When a sentence at Step 3, 5 or 6 makes sense, <b>Move it</b> shows every place its when / where / how or its because/when/if part can go, adds the comma when it moves to the front, and includes one place it cannot go for contrast. Each position is read aloud. The child can choose the order they want to write.</li>
+      <li><b>Free build.</b> The child builds a core sentence that makes sense, then adds any tool in any order: describe, how, when, where, extra information about the who, a second idea, or moving a part. After every change they hear it read back and judge it before the next tool unlocks. The number of features is capped above, because too many features muddle a sentence.</li>
+      <li><b>Check my writing.</b> The child types their own sentence. It is read back exactly as written (a run-on is read in one breath, so they can hear it). Each idea is shown in its own colour with its who and doing word, and the tool asks about run-ons, comma splices, a who with no doing word ("The Mars rover, which is a robot."), half sentences, long "and" chains, capital letters and full stops. One-tap fixes change their own text. It is a pattern checker, so it can be wrong: the child still reads it aloud and decides. Nothing typed is stored.</li>
       <li><b>Fix it.</b> Sentences are made from the picture's word cards, so there is always a new one: run-on, comma splice, missing comma after a fronted adverbial, "and… and…" chains, and too many extras.</li>
       <li><b>Steps are by need, not year group.</b> After ${GOAL} sentences at a step the child is told to ask you about moving on. You decide.</li>
     </ul>
@@ -1033,7 +1621,8 @@ $('#modal').onclick = e => { if (e.target.id === 'modal') $('#modal').hidden = t
 
 (function boot(){
   const p = new URLSearchParams(location.search);
-  const st = +p.get('step'); if (STEPS[st]) step = st;
+  const sp = p.get('step'); const st = isNaN(+sp) ? sp : +sp; if (STEPS[st]) step = st;
+  if (p.get('mode') === 'write'){ startWrite(); return; }
   const [tid, pid] = (p.get('pic') || '').split('.');
   const t = TOPICS.find(x => x.id === tid);
   if (t) topic = t;
