@@ -17,26 +17,17 @@ from content import ITEMS, WORLD_SEA_ANCHORS, UK_SEA_ANCHORS, COUNTY_GROUPS, LOC
 RAW = sys.argv[1]
 OUT = sys.argv[2]
 
-# ---------------------------------------------------------------- Robinson
-ROB = [  # lat, X, Y  (Snyder's table)
-    (0, 1.0000, 0.0000), (5, 0.9986, 0.0620), (10, 0.9954, 0.1240), (15, 0.9900, 0.1860),
-    (20, 0.9822, 0.2480), (25, 0.9730, 0.3100), (30, 0.9600, 0.3720), (35, 0.9427, 0.4340),
-    (40, 0.9216, 0.4958), (45, 0.8962, 0.5571), (50, 0.8679, 0.6176), (55, 0.8350, 0.6769),
-    (60, 0.7986, 0.7346), (65, 0.7597, 0.7903), (70, 0.7186, 0.8435), (75, 0.6732, 0.8936),
-    (80, 0.6213, 0.9394), (85, 0.5722, 0.9761), (90, 0.5322, 1.0000)]
+# ---------------------------------------------------------------- Gall-Peters (equal-area cylindrical, standard parallels 45°)
+# The function keeps its old name, rob(), so the rest of the build is unchanged.
 WW = 8000.0                                   # world map width in units
-R = WW / (2 * math.pi * 0.8487)
-WH = 2 * 1.3523 * R
+R = WW / (2 * math.pi * math.cos(math.radians(45)))
+WH = 2 * R / math.cos(math.radians(45))
 
 
 def rob(lon, lat):
-    a = min(abs(lat), 90.0)
-    i = min(int(a // 5), 17)
-    t = (a - ROB[i][0]) / 5.0
-    X = ROB[i][1] + (ROB[i + 1][1] - ROB[i][1]) * t
-    Y = ROB[i][2] + (ROB[i + 1][2] - ROB[i][2]) * t
-    x = 0.8487 * R * X * math.radians(lon)
-    y = 1.3523 * R * Y * (1 if lat >= 0 else -1)
+    lat = max(-90.0, min(90.0, lat))
+    x = R * math.radians(lon) * math.cos(math.radians(45))
+    y = R * math.sin(math.radians(lat)) / math.cos(math.radians(45))
     return WW / 2 + x, WH / 2 - y
 
 

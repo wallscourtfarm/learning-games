@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '10.10.26f';
+const VERSION = '10.10.26g';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -91,24 +91,17 @@ function dirName(a, b, four) {
   return DIR8[Math.round(br / 45) % 8];
 }
 
-/* ------------------------------------------------------------ Robinson projection (matches build) */
-const ROB = [[0, 1, 0], [5, .9986, .062], [10, .9954, .124], [15, .99, .186], [20, .9822, .248], [25, .973, .31], [30, .96, .372], [35, .9427, .434], [40, .9216, .4958], [45, .8962, .5571], [50, .8679, .6176], [55, .835, .6769], [60, .7986, .7346], [65, .7597, .7903], [70, .7186, .8435], [75, .6732, .8936], [80, .6213, .9394], [85, .5722, .9761], [90, .5322, 1]];
-const WR = D.world.R, WW = D.world.w, WH = D.world.h;
+/* ------------------------------------------------------------ Gall-Peters projection (matches build) */
+// Equal-area: every country is shown at its true size compared with the others.
+// (Functions keep their old names, rob/robInv, so the rest of the app is unchanged.)
+const WR = D.world.R, WW = D.world.w, WH = D.world.h, C45 = Math.cos(Math.PI / 4);
 function rob(lon, lat) {
-  const a = Math.min(Math.abs(lat), 90), i = Math.min(Math.floor(a / 5), 17), t = (a - ROB[i][0]) / 5;
-  const X = ROB[i][1] + (ROB[i + 1][1] - ROB[i][1]) * t, Y = ROB[i][2] + (ROB[i + 1][2] - ROB[i][2]) * t;
-  return { x: WW / 2 + .8487 * WR * X * lon * Math.PI / 180, y: WH / 2 - 1.3523 * WR * Y * Math.sign(lat || 0) };
+  return { x: WW / 2 + WR * lon * Math.PI / 180 * C45, y: WH / 2 - WR * Math.sin(clamp(lat, -90, 90) * Math.PI / 180) / C45 };
 }
 function robInv(x, y) {
-  const Y = Math.abs(WH / 2 - y) / (1.3523 * WR);
-  if (Y > 1) return null;
-  let lat = 90;
-  for (let i = 0; i < 18; i++) if (Y <= ROB[i + 1][2]) { const t = (Y - ROB[i][2]) / (ROB[i + 1][2] - ROB[i][2]); lat = ROB[i][0] + 5 * t; break; }
-  const a = lat, i = Math.min(Math.floor(a / 5), 17), t = (a - ROB[i][0]) / 5;
-  const X = ROB[i][1] + (ROB[i + 1][1] - ROB[i][1]) * t;
-  const lon = (x - WW / 2) / (.8487 * WR * X) * 180 / Math.PI;
-  if (Math.abs(lon) > 180) return null;
-  return { lat: y > WH / 2 ? -lat : lat, lon };
+  const s = (WH / 2 - y) * C45 / WR, lon = (x - WW / 2) / (WR * C45) * 180 / Math.PI;
+  if (Math.abs(s) > 1 || Math.abs(lon) > 180) return null;
+  return { lat: Math.asin(s) * 180 / Math.PI, lon };
 }
 function km(a, b) {                           // great-circle distance between {lat,lon}
   const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
@@ -172,7 +165,10 @@ function goTo(cx, cy, k, ms = 600) {
   anim = requestAnimationFrame(step);
 }
 function fitBox(x, y, w, h, pad = 1.2, ms) { goTo(x + w / 2, y + h / 2, fitK(Math.max(w, 1), Math.max(h, 1)) * pad, ms); }
-function home(ms) { fitBox(V.b.x, V.b.y, V.b.w, V.b.h, 1.02, ms); }
+function home(ms) {                          // whole map, leaving room for the buttons along the top
+  const top = 64, k = Math.max(V.b.w / V.W, V.b.h / Math.max(100, V.H - top)) * 1.02;
+  goTo(V.b.x + V.b.w / 2, V.b.y + V.b.h / 2 - top / 2 * k, k, ms);
+}
 
 // pointer handling: drag to pan, pinch / wheel to zoom, tap to interact
 const ptrs = new Map(); let drag = null, pinch = null;
@@ -539,7 +535,7 @@ function mapLabel(id) {
   return { school: 'OS: WFA', gorge: 'OS: Avon Gorge', penyfan: 'OS: Pen y Fan' }[id.split(':')[1]] || 'OS map';
 }
 function setAttrib() {
-  const a = S.map === 'world' || S.map === 'merc' ? 'Map data: Natural Earth' :
+  const a = S.map === 'world' ? 'Map data: Natural Earth · Gall-Peters projection (true sizes)' : S.map === 'merc' ? 'Map data: Natural Earth · Mercator projection' :
     S.map === 'uk' ? 'Contains OS data © Crown copyright and database right 2024 · Source: Office for National Statistics (OGL) · Natural Earth' :
       `© OpenStreetMap contributors · Heights: OS Terrain 50 © Crown copyright · OS-style map, British National Grid square ${cur().L.sq || 'ST'}`;
   $('#attrib').textContent = a + ' · Version ' + VERSION;
@@ -822,7 +818,7 @@ function isHit(it, p) {
     case 'ocean': return !worldLandAt(p) && worldOceanAt(p) === it.ref;
     case 'latline': { const ll = robInv(p.x, p.y); return !!ll && Math.abs(ll.lat - it.lat) < 3.5; }
     case 'lonline': { const ll = robInv(p.x, p.y); return !!ll && Math.abs(ll.lon - it.lon) < 4; }
-    case 'pole': { const ll = robInv(p.x, p.y); return !!ll && (it.lat > 0 ? ll.lat > 78 : ll.lat < -76); }
+    case 'pole': { const ll = robInv(p.x, p.y); return !!ll && (it.lat > 0 ? ll.lat > 70 : ll.lat < -72); }
     case 'hemi': { const ll = robInv(p.x, p.y); if (!ll) return false; return { N: ll.lat > 0, S: ll.lat < 0, E: ll.lon > 0, W: ll.lon < 0 }[it.ref]; }
     case 'ukcountry': return inPaths(m.ctry.filter(e => e.dataset.n === it.ref), p);
     case 'region': return inPaths(m.regs.filter(e => e.dataset.n === it.ref), p);
@@ -1844,11 +1840,8 @@ const mercY = lat => { const f = clamp(lat, -85, 85) * Math.PI / 180; return MW 
 const mercX = lon => (lon + 180) / 360 * MW;
 const mercInv = (x, y) => ({ lon: x / MW * 360 - 180, lat: (2 * Math.atan(Math.exp((MW / 2 - y) * 2 * Math.PI / MW)) - Math.PI / 2) * 180 / Math.PI });
 function robInvClamped(x, y) {
-  const Y = Math.min(1, Math.abs(WH / 2 - y) / (1.3523 * WR));
-  let lat = 90;
-  for (let i = 0; i < 18; i++) if (Y <= ROB[i + 1][2]) { lat = ROB[i][0] + 5 * (Y - ROB[i][2]) / (ROB[i + 1][2] - ROB[i][2]); break; }
-  const i = Math.min(Math.floor(lat / 5), 17), X = ROB[i][1] + (ROB[i + 1][1] - ROB[i][1]) * (lat - ROB[i][0]) / 5;
-  return { lat: y > WH / 2 ? -lat : lat, lon: clamp((x - WW / 2) / (.8487 * WR * X) * 180 / Math.PI, -180, 180) };
+  const sn = clamp((WH / 2 - y) * C45 / WR, -1, 1);
+  return { lat: Math.asin(sn) * 180 / Math.PI, lon: clamp((x - WW / 2) / (WR * C45) * 180 / Math.PI, -180, 180) };
 }
 function buildMerc() {
   const g = E('g'), top = mercY(84), bot = mercY(-80);
@@ -1877,7 +1870,7 @@ function sizeStart() {
   ov.replaceChildren();
   ghost = null; GL = null;
   setPanel(globeHeader() + `<div class="qcard"><p class="q">Pick a shape, then <b>drag it</b> around the map.</p>
-    <p class="hint" style="margin:0">This is a Mercator map, like many wall maps and online maps. It stretches places near the North and South Poles, so they look much bigger than they really are. As you drag a shape towards the Equator, it shrinks to its true size compared with the land there.</p></div>
+    <p class="hint" style="margin:0">This is a Mercator map, like many wall maps and online maps. (Our main world map uses the Gall-Peters projection, which shows every country at its true size.) It stretches places near the North and South Poles, so they look much bigger than they really are. As you drag a shape towards the Equator, it shrinks to its true size compared with the land there.</p></div>
     <div class="chips">${Object.entries(SIZE_SHAPES).map(([k, [n]]) => `<button class="chip" data-sh="${k}">${n}</button>`).join('')}</div>
     <div id="fbox"></div>`);
   wireGlobeHeader();
