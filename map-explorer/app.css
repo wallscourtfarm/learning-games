@@ -250,8 +250,9 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 #map.zoomed #w-gratlab .minor { display: inline; }
 .cs { transform-box: view-box; }
 .land { stroke: #8a8a7a; stroke-width: .7; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
-.land.hl, .ukc.hl, .ukr.hl, .ukcty.hl { fill: #ffd54a !important; stroke: #b07d00; stroke-width: 2.5; }
-.land.sel, .ukc.sel, .ukr.sel, .ukcty.sel { fill: #ffe98a !important; stroke: #d39a00; stroke-width: 2.5; }
+/* highlighted places keep their own colour, just darker, so France stays green like the rest of Europe */
+.land.hl, .land.sel { filter: brightness(.72) saturate(1.6); stroke: #14222b; stroke-width: 3; }
+.ukr.hl, .ukr.sel, .ukcty.hl, .ukcty.sel { fill: rgba(20, 45, 70, .25) !important; stroke: #14222b; stroke-width: 3; }
 .lbl text, text.lbl { paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; font-weight: 800; fill: #23313b; }
 .mk circle.dot { stroke: #fff; stroke-width: 2.5; }
 .mk text { paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; font-weight: 900; fill: #1b2a33; }
@@ -302,3 +303,14 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
   #print .pa li { font-size: 12pt; line-height: 1.7; }
   #print .pf { font-size: 9pt; color: #555; margin-top: 8mm; }
 }
+
+/* search */
+#searchBox { font: inherit; font-size: 22px; font-weight: 800; min-height: 58px; border-radius: 16px; border: 3px solid var(--blue); padding: 0 16px; width: 100%; min-width: 340px; }
+#searchRes { display: flex; flex-direction: column; gap: 6px; }
+#pop .opt.sres { min-height: 56px; font-size: 19px; gap: 12px; }
+#pop .opt.sres img { height: 26px; border: 1px solid #ccd; border-radius: 3px; }
+#pop .opt.sres .nf { width: 35px; text-align: center; }
+#pop .opt.sres span { display: flex; flex-direction: column; align-items: flex-start; }
+#pop .opt.sres small { margin: 0; font-size: 14px; opacity: .75; }
+#pop .nores { margin: 4px 2px; font-size: 16px; font-weight: 700; color: #4a6577; }
+#pop .goto { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

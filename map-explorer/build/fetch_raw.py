@@ -34,7 +34,7 @@ def get(url, path=None, data=None):
 
 def fetch_world():
     ne = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/'
-    for f in ['ne_50m_admin_0_countries', 'ne_50m_populated_places_simple', 'ne_50m_lakes', 'ne_10m_time_zones']:
+    for f in ['ne_50m_admin_0_countries', 'ne_50m_populated_places_simple', 'ne_10m_populated_places_simple', 'ne_50m_lakes', 'ne_10m_time_zones']:
         get(ne + f + '.geojson', f + '.geojson')
     get('https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_boundaries.json', 'PB2002_boundaries.json')
     # biomes: RESOLVE Ecoregions 2017 (CC-BY 4.0), about 150 MB
@@ -65,6 +65,22 @@ RIVERS = {'avon': ('River Avon', 'river', '51.30,-2.75,51.65,-1.90'),
           'ouse': ('River Ouse', 'river', '53.65,-1.40,54.10,-0.70'),
           'tyne': ('River Tyne', 'river', '54.85,-2.30,55.05,-1.40'),
           'guc': ('Grand Union Canal', 'canal', '51.45,-2.00,52.70,-0.20')}
+
+
+def fetch_towns():
+    """UK towns and cities (OpenStreetMap), fetched in tiles because the server times out on the whole UK."""
+    tiles = [(49.8, -8.3, 53.0, -2.0), (49.8, -2.0, 53.0, 1.8), (53.0, -8.3, 56.0, -2.0), (53.0, -2.0, 56.0, 1.8), (56.0, -8.3, 60.9, 1.8)]
+    els = {}
+    for t in tiles:
+        q = f'[out:json][timeout:120];node[place~"^(city|town)$"]({t[0]},{t[1]},{t[2]},{t[3]});out;'
+        for attempt in range(5):
+            try:
+                for e in json.loads(overpass(q, None))['elements']:
+                    els[e['id']] = e
+                break
+            except Exception as ex:
+                print('retry', t, ex); time.sleep(30)
+    json.dump({'elements': list(els.values())}, open(os.path.join(RAW, 'uk_towns.json'), 'w'))
 
 
 def fetch_rivers():
@@ -132,9 +148,10 @@ def fetch_terrain():
 
 
 if __name__ == '__main__':
-    parts = sys.argv[2:] or ['world', 'uk', 'rivers', 'local', 'terrain']
+    parts = sys.argv[2:] or ['world', 'uk', 'rivers', 'towns', 'local', 'terrain']
     if 'world' in parts: fetch_world()
     if 'uk' in parts: fetch_uk()
     if 'rivers' in parts: fetch_rivers()
-    if 'local' in parts: fetch_local([p for p in parts if p not in ('world', 'uk', 'rivers', 'local', 'terrain')])
+    if 'towns' in parts: fetch_towns()
+    if 'local' in parts: fetch_local([p for p in parts if p not in ('world', 'uk', 'rivers', 'towns', 'local', 'terrain')])
     if 'terrain' in parts: fetch_terrain()

@@ -203,7 +203,18 @@ def build_world():
                     run.append((lon, lat))
                 if len(run) > 1: plates.append(run)
     pd = ''.join(geom_d(rob_geom(LineString(r)).simplify(1.2), 1) for r in plates)
-    return dict(w=WW, h=round(WH, 1), R=R, countries=countries, parts=parts, lakes=''.join(lakes), anchors=anchors, caps=caplist, plates=pd)
+    # large cities for search (one million people or more), apart from UK ones (those are on the UK map)
+    cities = []
+    pp = os.path.join(RAW, 'ne_10m_populated_places_simple.geojson')
+    if os.path.exists(pp):
+        capset = {(c[0], c[1]) for c in caplist}
+        for f in load('ne_10m_populated_places_simple.geojson')['features']:
+            p = f['properties']
+            if p['pop_max'] >= 1000000 and p['adm0_a3'] != 'GBR':
+                cn = countries.get(p['adm0_a3'], {}).get('n', p['adm0name'])
+                if (p['name'], cn) not in capset:
+                    cities.append([p['name'], cn, round(p['latitude'], 3), round(p['longitude'], 3), p['adm0_a3']])
+    return dict(w=WW, h=round(WH, 1), R=R, countries=countries, parts=parts, lakes=''.join(lakes), anchors=anchors, caps=caplist, plates=pd, cities=cities)
 
 
 # ================================================================ UK
@@ -277,6 +288,23 @@ def build_uk():
             x, y = uk_xy(e, n)
             anchors.append([name, round(x, 1), round(y, 1)])
     out['anchors'] = anchors
+    # UK towns and cities for search (OpenStreetMap place=city/town), kept only if they are inside the UK
+    tf = os.path.join(RAW, 'uk_towns.json')
+    towns = []
+    if os.path.exists(tf):
+        ukg = unary_union([shape(f['geometry']) for f in load('Countries_December_2023_Boundaries_UK_BUC.geojson')['features']]).buffer(800)
+        seen = set()
+        for e in json.load(open(tf))['elements']:
+            nm = e.get('tags', {}).get('name:en') or e.get('tags', {}).get('name')
+            if not nm or 'lat' not in e:
+                continue
+            ee, nn = to_bng.transform(e['lon'], e['lat'])
+            if not ukg.contains(Point(ee, nn)) or (nm, round(ee, -3)) in seen:
+                continue
+            seen.add((nm, round(ee, -3)))
+            x, y = uk_xy(ee, nn)
+            towns.append([nm, round(x, 1), round(y, 1), 1 if e['tags'].get('place') == 'city' else 0])
+    out['towns'] = towns
     return out
 
 

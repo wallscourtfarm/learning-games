@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '10.10.26k';
+const VERSION = '10.10.26l';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -336,6 +336,7 @@ const KIND_TXT = {
   hemi: 'half of the Earth', region: 'a region of England', county: 'a county', river: 'a river or canal', line: 'a long feature', point: 'a place',
 };
 function kindText(it) {
+  if (it.kt) return it.kt;
   if (it.k === 'point') return it.cap ? 'a capital city' : it.phys ? 'a physical feature' : it.res ? 'a place where natural resources are dug from the ground' : it.id === 'school' ? 'our school, WFA' : /city|ton$|ham$|ool$|eds$|ield$|stle$/.test(it.n) || ['bristol', 'exeter', 'bath', 'manchester', 'birmingham', 'liverpool', 'leeds', 'sheffield', 'newcastle', 'mumbai', 'newyork', 'rio', 'singapore', 'sydney'].includes(it.id) ? 'a city' : 'a landmark';
   if (it.k === 'line') return it.phys ? 'a mountain range or hills' : 'a landmark';
   return KIND_TXT[it.k] || 'a place';
@@ -619,9 +620,26 @@ function buildViewBar() {
     if (ours) add('WFA', () => fitBox(ours.x - 700, ours.y - 700, 1400, 1400));
     for (const [n, [e, nn]] of Object.entries(m.L.views || {})) add(n, () => fitBox(e - m.L.e0 - 700, m.L.n1 - nn - 700, 1400, 1400));
   }
-  const b = H('<button>🔎 Go to ▾</button>');
-  b.onclick = e => openPop(e.currentTarget, `<h3>Go to</h3>${opts.map(([t], i) => `<button class="opt" data-v="${i}">${esc(t)}</button>`).join('')}`,
-    p => p.querySelectorAll('[data-v]').forEach(x => x.onclick = () => { closePop(); opts[+x.dataset.v][1](); }));
+  const b = H('<button>🔎 Search / Go to ▾</button>');
+  b.onclick = e => {
+    openPop(e.currentTarget, `<input id="searchBox" type="search" placeholder="Search: country, county, city…" autocomplete="off" spellcheck="false">
+      <div id="searchRes"></div>
+      <h3 style="margin-top:6px">Go to</h3><div class="goto">${opts.map(([t], i) => `<button class="opt" data-v="${i}">${esc(t)}</button>`).join('')}</div>`,
+    p => {
+      p.querySelectorAll('[data-v]').forEach(x => x.onclick = () => { closePop(); opts[+x.dataset.v][1](); });
+      const box = p.querySelector('#searchBox'), out = p.querySelector('#searchRes');
+      let found = [];
+      const show = () => {
+        found = searchPlaces(box.value);
+        out.innerHTML = box.value.trim() && !found.length ? '<p class="nores">No places found. Try a country, county, region, town or city.</p>'
+          : found.map((r, i) => `<button class="opt sres" data-r="${i}">${r.flag ? `<img src="flags/${r.flag}.svg" alt="">` : '<span class="nf">📍</span>'}<span><b>${esc(r.n)}</b><small>${esc(r.sub)}</small></span></button>`).join('');
+        out.querySelectorAll('[data-r]').forEach(x => x.onclick = () => { closePop(); cardTitle = 'You searched for…'; found[+x.dataset.r].act(); });
+      };
+      box.oninput = show;
+      box.onkeydown = ev => { if (ev.key === 'Enter' && found[0]) { closePop(); cardTitle = 'You searched for…'; found[0].act(); } };
+      setTimeout(() => box.focus(), 50);
+    });
+  };
   bar.appendChild(b);
 }
 function fitLL(bb, ms) {
@@ -1135,8 +1153,10 @@ function showItemCard(it) {
   rows.push(['Year group', it.y.length ? 'Year ' + it.y.join(', ') : '—']);
   showCard(it.n, kindText(it)[0].toUpperCase() + kindText(it).slice(1), rows, it.f, flagFor(it));
 }
+let cardTitle = null;                         // set by search so the card says "You searched for…"
 function showCard(title, sub, rows, fact, flag) {
-  setPanel(`<div class="info"><p class="ptitle">You tapped…</p>${flag ? flagImg(flag, 90, 'Flag of ' + title) : ''}<h2>${esc(title)}</h2><div class="sub">${esc(sub)}</div>
+  const head = cardTitle || 'You tapped…'; cardTitle = null;
+  setPanel(`<div class="info"><p class="ptitle">${head}</p>${flag ? flagImg(flag, 90, 'Flag of ' + title) : ''}<h2>${esc(title)}</h2><div class="sub">${esc(sub)}</div>
     ${rows.length ? `<dl>${rows.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>` : ''}</div>${factHTML(fact)}
     <button class="btn sec" id="backExplore">Back</button>`);
   $('#backExplore').onclick = () => { clearHL(); exploreStart(); };
@@ -1330,7 +1350,7 @@ function findReveal(afterTries) {
     if (!['hemi', 'latline', 'lonline'].includes(it.k)) fitBox(x0, y0, x1 - x0, y1 - y0, 1.4);
   } else if (t && t.box && !['hemi'].includes(it.k)) fitBox(t.box[0], t.box[1], t.box[2], t.box[3], 1.6);
   scrollEnd();
-  $('#fbox').innerHTML = `<div class="fb bad"><span class="em">Here it is!</span>${esc(cap1(theName(it)))} is shown in yellow.${flagFor(it) ? '<br>' + flagImg(flagFor(it), 60, 'Flag of ' + it.n) : ''}</div>${factHTML(it.f)}`;
+  $('#fbox').innerHTML = `<div class="fb bad"><span class="em">Here it is!</span>${esc(cap1(theName(it)))} is highlighted on the map.${flagFor(it) ? '<br>' + flagImg(flagFor(it), 60, 'Flag of ' + it.n) : ''}</div>${factHTML(it.f)}`;
   findButtonsNext();
 }
 function findButtonsNext() {
@@ -2103,6 +2123,103 @@ function printSheet() {
   setTimeout(() => window.print(), 150);
 }
 
+/* ------------------------------------------------------------ search for a place */
+const norm = t => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+let searchIndex = null;
+function buildSearchIndex() {
+  const out = [], add = (n, sub, rank, act, flag) => out.push({ n, sub, rank, act, flag, key: norm(n) });
+  for (const [code, c] of Object.entries(D.world.countries)) add(c.n, 'Country · ' + (code === 'RUS' ? 'Europe and Asia' : c.c), 0, () => searchCountry(code), c.f);
+  for (const it of ITEMS) {
+    if (it.k === 'country' || it.k === 'ukcountry' || it.k === 'county' || it.k === 'region') continue;
+    add(it.n, cap1(kindText(it).replace(/^an? /, '')) + (it.m === 'uk' ? ' · UK' : ''), it.k === 'continent' || it.k === 'ocean' ? 0 : 3, () => searchItem(it), flagFor(it));
+  }
+  const itemNames = new Set(ITEMS.map(i => norm(i.n)));
+  for (const [n, cn, lat, lon] of D.world.caps) if (!itemNames.has(norm(n))) add(n, 'Capital city · ' + cn, 2, () => searchCity(n, cn, lat, lon, true));
+  for (const [n, cn, lat, lon] of D.world.cities) if (!itemNames.has(norm(n))) add(n, 'City · ' + cn, 6, () => searchCity(n, cn, lat, lon, false));
+  for (const c of D.uk.countries) add(c.n, 'Country in the United Kingdom', 0, () => searchUK('ukcountry', c.n), UK_FLAGS[c.n]);
+  for (const r of D.uk.regions) add(r.n, 'Region of England', 1, () => searchUK('region', r.n));
+  for (const c of D.uk.counties) add(c.n, 'County · England', 1, () => searchUK('county', c.n));
+  for (const [n, x, y, city] of D.uk.towns) if (!itemNames.has(norm(n))) add(n, (city ? 'City' : 'Town') + ' · UK', city ? 2 : 4, () => searchTown(n, x, y, city));
+  for (const L of D.local) {
+    add(L.name, 'OS-style map', 5, () => { goMap('local:' + L.id); home(); exploreStart(); });
+    for (const p of L.places) add(p.t, 'Place on the ' + L.name + ' OS map', 7, () => searchLocal(L.id, p.x, p.y));
+    for (const p of L.names) add(p.t, 'On the ' + L.name + ' OS map', 8, () => searchLocal(L.id, p.x, p.y));
+  }
+  return out;
+}
+function searchPlaces(q) {
+  const k = norm(q); if (!k) return [];
+  searchIndex ||= buildSearchIndex();
+  const res = [];
+  for (const e of searchIndex) {
+    let s = e.key === k ? 0 : e.key.startsWith(k) ? 1 : (' ' + e.key).includes(' ' + k) ? 2 : e.key.includes(k) ? 3 : -1;
+    if (s >= 0) res.push([s * 10 + e.rank, e]);
+  }
+  res.sort((a, b) => a[0] - b[0] || a[1].n.length - b[1].n.length);
+  const seen = new Set();
+  return res.map(r => r[1]).filter(e => { const id = e.key + '|' + e.sub; if (seen.has(id)) return false; seen.add(id); return true; }).slice(0, 8);
+}
+function goMap(id) {
+  if (S.mode !== 'explore') { S.mode = 'explore'; save(); document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === 'explore')); }
+  if (S.map !== id) showMap(id); else refreshDyn();
+  ov.replaceChildren(); clearHL();
+}
+function zoomToBox(box, minSize) {
+  let [x, y, w, h] = box; const c = [x + w / 2, y + h / 2];
+  w = Math.max(w, minSize); h = Math.max(h, minSize);
+  fitBox(c[0] - w / 2, c[1] - h / 2, w, h, 1.5);
+}
+function searchCountry(code) {
+  goMap('world');
+  const m = cur(), parts = m.parts.filter(e => e.dataset.code === code), c = D.world.countries[code];
+  parts.forEach(e => e.classList.add('sel'));
+  const big = parts.reduce((a, b) => (b.getBBox().width * b.getBBox().height > a.getBBox().width * a.getBBox().height ? b : a));
+  const bb = big.getBBox(); zoomToBox([bb.x, bb.y, bb.width, bb.height], 500);
+  const it = ITEMS.find(i => i.m === 'world' && i.k === 'country' && i.ref === code), cont = parts[0].dataset.cont;
+  showCard(c.n, code === 'RUS' ? 'A country in Europe and Asia' : 'A country in ' + (cont === 'Islands' ? 'the ocean' : cont), [['Continent', code === 'RUS' ? 'Europe and Asia' : c.c], ['Capital city', c.cap || '—']], it && it.f, c.f);
+}
+function searchItem(it) {
+  goMap(it.m === 'uk' ? 'uk' : 'world');
+  highlightItem(it, 'sel');
+  const t = targetPoint(it, { x: V.b.w / 2, y: V.b.h / 2 });
+  if (t && t.box && !['hemi', 'latline', 'lonline'].includes(it.k)) zoomToBox(t.box, it.m === 'uk' ? 240 : 700);
+  showItemCard(it);
+}
+function searchCity(n, cn, lat, lon, cap) {
+  goMap('world');
+  const q = rob(lon, lat), it = { id: '_s', n, k: 'point', m: 'world', xy: [q.x, q.y], cap, y: [] };
+  const g = E('g', { class: 'hlx' }, ov); drawMarker(g, it, { label: true }); E('circle', { class: 'pulse', r: 16 }, cs(g, q.x, q.y));
+  zoomToBox([q.x, q.y, 1, 1], 900);
+  const code = Object.keys(D.world.countries).find(k => D.world.countries[k].n === cn);
+  showCard(n, (cap ? 'The capital city of ' : 'A city in ') + cn, [['Country', cn], ['Hemisphere', (lat >= 0 ? 'Northern' : 'Southern') + ' and ' + (lon >= 0 ? 'eastern' : 'western')], ['Latitude and longitude', `about ${deg(Math.round(lat), 'N', 'S')}, ${deg(Math.round(lon), 'E', 'W')}`]], '', code ? D.world.countries[code].f : null);
+}
+function searchUK(kind, n) {
+  goMap('uk');
+  const it = { k: kind, ref: n, n, m: 'uk' };
+  highlightItem(it, 'sel');
+  const t = targetPoint(it); if (t && t.box) zoomToBox(t.box, 200);
+  const real = ITEMS.find(i => i.m === 'uk' && i.k === kind && i.ref === n);
+  const m = cur(), l = t ? DPt(t.x, t.y) : null, country = l && m.ctry.find(e => e.isPointInFill(l));
+  showCard(n, kind === 'county' ? 'A county in England' : kind === 'region' ? 'A region of England' : 'A country in the United Kingdom',
+    kind === 'ukcountry' ? [] : [['Country', country ? country.dataset.n : 'England']], (real && real.f || '') + (n === 'Northern Ireland' ? ' ' + NI_NOTE : ''), kind === 'ukcountry' ? UK_FLAGS[n] : null);
+}
+function searchTown(n, x, y, city) {
+  goMap('uk');
+  const it = { id: '_s', n, k: 'point', m: 'uk', xy: [x, y], y: [] };
+  const g = E('g', { class: 'hlx' }, ov); drawMarker(g, it, { label: true }); E('circle', { class: 'pulse', r: 16 }, cs(g, x, y));
+  zoomToBox([x, y, 1, 1], 260);
+  const m = cur(), pt = DPt(x, y);
+  const country = m.ctry.find(e => e.isPointInFill(pt)), county = m.ctys.find(e => e.isPointInFill(pt)), region = m.regs.find(e => e.isPointInFill(pt));
+  const rows = [['Country', country ? country.dataset.n : 'United Kingdom']];
+  if (region) rows.push(['Region', region.dataset.n]);
+  if (county) rows.push(['County', county.dataset.n]);
+  showCard(n, `A ${city ? 'city' : 'town'} in ${country ? country.dataset.n : 'the United Kingdom'}`, rows, '', country ? UK_FLAGS[country.dataset.n] : null);
+}
+function searchLocal(id, x, y) {
+  goMap('local:' + id);
+  goTo(x, y, Math.max(V.minK, 1500 / Math.min(V.W, V.H)), 0);
+  localExplore({ x, y });
+}
 /* ------------------------------------------------------------ mode switching */
 function startMode() {
   document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === S.mode));

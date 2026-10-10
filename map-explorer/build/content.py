@@ -188,7 +188,7 @@ ITEMS = [
          f='Ireland shares an island with Northern Ireland. Its capital is Dublin.'),
     dict(id='e-russia', n='Russia', k='country', ref='RUS', y=[3, 5], m='world',
          f='Russia is the largest country in the world. It is in both Europe and Asia. The Ural Mountains mark the border between them.'),
-    dict(id='scandi', n='Scandinavia', k='group', refs=['NOR', 'SWE', 'DNK'], y=[3], m='world',
+    dict(id='scandi', n='Scandinavia', kt='a group of countries in northern Europe', k='group', refs=['NOR', 'SWE', 'DNK'], y=[3], m='world',
          f='Scandinavia is Norway, Sweden and Denmark. With Finland and Iceland they are called the Nordic countries.'),
     dict(id='britisles', n='British Isles', k='group', refs=['GBR', 'IRL', 'IMN'], y=[3], m='world',
          f='The British Isles are the islands of Great Britain, Ireland and many smaller islands around them.'),
@@ -374,7 +374,7 @@ ITEMS = [
          f='Mount St Helens is an active volcano in the United States. It erupted in 1980 and its top was blown off.'),
     dict(id='oldfaithful', n='Old Faithful', k='point', p=[44.4605, -110.8281], tol=250, y=[6], m='world', phys=True,
          f='Old Faithful is a geyser in Yellowstone National Park, USA. It shoots hot water into the air many times a day.'),
-    dict(id='sanandreas', n='San Andreas Fault', k='line', line=[[40.3, -124.3], [38.0, -122.8], [36.8, -121.4], [35.3, -119.8], [34.4, -118.5], [33.9, -116.7], [33.3, -115.7]], tol=200, y=[6], m='world', phys=True,
+    dict(id='sanandreas', n='San Andreas Fault', kt='a fault line (where two tectonic plates meet)', k='line', line=[[40.3, -124.3], [38.0, -122.8], [36.8, -121.4], [35.3, -119.8], [34.4, -118.5], [33.9, -116.7], [33.3, -115.7]], tol=200, y=[6], m='world', phys=True,
          f='The San Andreas Fault in California is where two tectonic plates slide past each other, causing earthquakes.'),
 
     # ---------------- added after a second pass through the curriculum ----------------
@@ -402,7 +402,7 @@ ITEMS = [
     dict(id='loughneagh', n='Lough Neagh', k='point', p=[54.62, -6.40], tol=18, y=[1], m='uk', phys=True,
          f='Lough Neagh in Northern Ireland is the largest lake in the United Kingdom.'),
     # Year 2: contrasting study, Guizhou in south-west China
-    dict(id='guizhou', n='Guizhou (south-west China)', k='point', p=[26.8, 106.8], tol=450, y=[2], m='world',
+    dict(id='guizhou', n='Guizhou (south-west China)', kt='a province (region) of China', k='point', p=[26.8, 106.8], tol=450, y=[2], m='world',
          f='Guizhou is a mountainous province in south-west China. It is warm and rainy, with steep limestone hills, rivers and rice terraces.'),
     dict(id='guiyang', n='Guiyang', k='point', p=[26.647, 106.630], tol=250, y=[2], m='world',
          f='Guiyang is the biggest city in Guizhou, in south-west China.'),
@@ -411,7 +411,7 @@ ITEMS = [
     # Year 3: contrasting study, the east coast of Spain
     dict(id='valencia', n='Valencia', k='point', p=[39.4699, -0.3763], tol=150, y=[3], m='world',
          f='Valencia is a big city on the Mediterranean coast of eastern Spain. Oranges grow on the farmland around it.'),
-    dict(id='costablanca', n='Costa Blanca', k='point', p=[38.54, -0.12], tol=150, y=[3], m='world',
+    dict(id='costablanca', n='Costa Blanca', kt='a stretch of coast', k='point', p=[38.54, -0.12], tol=150, y=[3], m='world',
          f='The Costa Blanca ("White Coast") is a sunny part of Spain\'s Mediterranean coast, with sandy beaches. Many tourists go there.'),
     dict(id='barcelona', n='Barcelona', k='point', p=[41.3874, 2.1686], tol=150, y=[3], m='world',
          f='Barcelona is Spain\'s second biggest city, on the Mediterranean coast in the north-east of the country.'),
@@ -425,9 +425,9 @@ ITEMS = [
     dict(id='greenwich', n='Royal Observatory, Greenwich', k='point', p=[51.4769, -0.0005], tol=6, y=[4, 5], m='uk',
          f='The Prime Meridian (0° longitude) runs through the Royal Observatory in Greenwich. Greenwich Mean Time (GMT) is measured from here.'),
     # Year 4: contrasting study, Peru and Brazil
-    dict(id='amazonriver', n='River Amazon', k='line', line=[[-4.4, -73.5], [-3.7, -70.0], [-3.1, -60.0], [-2.4, -55.0], [-1.5, -51.5], [-0.2, -49.8]], tol=200, y=[4, 5], m='world', phys=True,
+    dict(id='amazonriver', n='River Amazon', kt='a river', k='line', line=[[-4.4, -73.5], [-3.7, -70.0], [-3.1, -60.0], [-2.4, -55.0], [-1.5, -51.5], [-0.2, -49.8]], tol=200, y=[4, 5], m='world', phys=True,
          f='The River Amazon flows across South America from the Andes to the Atlantic Ocean. It carries more water than any other river.'),
-    dict(id='amazonforest', n='Amazon rainforest', k='point', p=[-4.0, -62.0], tol=900, y=[4, 5], m='world', phys=True,
+    dict(id='amazonforest', n='Amazon rainforest', kt='a rainforest', k='point', p=[-4.0, -62.0], tol=900, y=[4, 5], m='world', phys=True,
          f='The Amazon rainforest is the largest tropical rainforest in the world. Most of it is in Brazil. It is hot and wet all year.'),
     dict(id='machupicchu', n='Machu Picchu', k='point', p=[-13.1631, -72.5450], tol=200, y=[4], m='world',
          f='Machu Picchu is an Inca city built high in the Andes mountains of Peru about 600 years ago.'),
