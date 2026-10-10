@@ -1,13 +1,14 @@
 /* Sentence Builder — core first, then add.
  * Build mode: children build a core sentence (who + doing, then what/where), hear it read
- * back, judge whether it makes sense, and only then add more: extras (Step 3, capped by the
- * teacher) or a second idea joined with and/but/so (Step 4) or because/when/if (Step 5).
- * Fix-it mode: generated run-on, comma-splice, "and… and… and…" and overloaded sentences
- * for children to repair.
+ * back, judge whether it makes sense, and only then add more:
+ *   Step 3 extras (capped by the teacher) · Steps 4-5 a second idea with a joining word ·
+ *   Step 6 a fronted adverbial + comma · Step 7 a relative clause in commas or brackets.
+ * Fix it mode: generated run-on, comma-splice, missing-comma, "and… and…" and overloaded
+ * sentences for children to repair.
  * Nothing about the child is stored; only teacher settings, on this device. Picture word
- * banks live in content.js.
+ * banks live in content.js; the sentence engine (parts, text, sense check) in engine.js.
  */
-const VERSION = '10.10.26b';
+const VERSION = '10.10.26c';
 
 const CAT = {
   who:      {label:'who',      icon:'who',      q:() => 'Who or what is in the picture?'},
@@ -20,17 +21,6 @@ const CAT = {
 };
 const EXTRAS = ['describe','how','when'];
 
-// Joining words. 'stop' means "end the sentence and start a new one".
-const JOINS = {
-  stop:    {t:'.',       kind:'stop',   help:'two separate sentences'},
-  and:     {t:'and',     kind:'coord',  help:'adds another idea'},
-  but:     {t:'but',     kind:'coord',  help:'something different or surprising'},
-  so:      {t:'so',      kind:'coord',  help:'what happens because of the first idea'},
-  because: {t:'because', kind:'subord', help:'gives the reason'},
-  when:    {t:'when',    kind:'subord', help:'tells you the time it happens'},
-  if:      {t:'if',      kind:'subord', help:'it only happens if…'}
-};
-
 const STEPS = {
   1:{title:'Step 1', sub:'Who + doing',
      mini:[['who','The astronaut'],['doing','floats']]},
@@ -41,16 +31,21 @@ const STEPS = {
   4:{title:'Step 4', sub:'Join two ideas: and, but, so', joins:['stop','and','but','so'],
      mini:[['who','The rocket'],['doing','blasts off'],['coord','so'],['who','the crowd'],['doing','cheers']]},
   5:{title:'Step 5', sub:'Join two ideas: because, when, if', joins:['because','when','if'],
-     mini:[['who','The crowd'],['doing','cheers'],['subord','because'],['who','the rocket'],['doing','blasts off']]}
+     mini:[['who','The crowd'],['doing','cheers'],['subord','because'],['who','the rocket'],['doing','blasts off']]},
+  6:{title:'Step 6', sub:'Fronted adverbial + comma', front:true,
+     mini:[['when','After lunch'],['lit',','],['who','the astronaut'],['doing','eats'],['what','an apple']]},
+  7:{title:'Step 7', sub:'Add more about the who (relative clause)', rel:true,
+     mini:[['who','The astronaut'],['lit',','],['subord','who'],['doing','smiles'],['lit',','],['doing','floats']]}
 };
-const MAX_STEP = 5;
+const MAX_STEP = 7;
 const GOAL = 5;   // sentences at one step before suggesting the next
 
 const FIXES = {
-  runon: {title:'Run-on sentence', icon:'🏃', sub:'Two ideas squashed together with no full stop'},
-  comma: {title:'Comma splice',    icon:'✂️', sub:'A comma trying to join two ideas'},
-  and:   {title:'And… and… and…',  icon:'🔗', sub:'Too many ideas joined with and'},
-  extras:{title:'Too many extras', icon:'🎒', sub:'So many extras the sentence is muddled'}
+  runon:  {title:'Run-on sentence', icon:'🏃', sub:'Two ideas squashed together with no full stop'},
+  comma:  {title:'Comma splice',    icon:'✂️', sub:'A comma trying to join two ideas'},
+  and:    {title:'And… and… and…',  icon:'🔗', sub:'Too many ideas joined with and'},
+  extras: {title:'Too many extras', icon:'🎒', sub:'So many extras the sentence is muddled'},
+  nocomma:{title:'Missing comma',   icon:'👆', sub:'A fronted adverbial with no comma after it'}
 };
 
 /* ---------- settings (teacher, this device only) ---------- */
@@ -65,10 +60,10 @@ let mode = 'build';      // build | fix
 let step = settings.step;
 let topic = TOPICS[0];
 let pic = null;
-let s = null;            // the clause being built
+let s = null;            // the clause being built (+ front / rel at Steps 6-7)
 let first = null;        // Steps 4-5: the locked first idea
 let join = null;         // Steps 4-5: the joining word id
-let phase = 'core';      // core | extras | join | core2 | done
+let phase = 'core';      // core | extras | join | core2 | front | comma | rel | ready | done
 let heard = false;       // read back since the last change?
 let stripped = false;    // extras hidden
 let covered = false;
@@ -76,97 +71,45 @@ let problemSlot = null;
 let editing = null;      // a filled block the child has tapped to change
 let coachMsg = null;
 let fx = null;           // fix-it state
-const made = {1:0, 2:0, 3:0, 4:0, 5:0, fix:0};   // this session only
+let moveOpen = false;    // 'Move it' panel showing
+let moveSel = null;      // which position the child last tried
+const made = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, fix:0};   // this session only
 
 const $ = q => document.querySelector(q);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
-const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const cap = t => t ? t[0].toUpperCase() + t.slice(1) : t;
-const rnd = a => a[Math.floor(Math.random() * a.length)];
-const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-const blank = () => ({who:null, doing:null, what:null, where:null, describe:null, how:null, when:null, stop:false});
 const plural = n => n === 1 ? '' : 's';
-function whoPhrase(st){
-  if (!st.who) return 'they';
-  const d = st.describe ? st.describe.t + ' ' : '';
-  return `${st.who.det} ${d}${st.who.t}`;
-}
+const newClause = () => ({...blank(), front:null, frontComma:false, rel:null, relPunct:null});
 
-/* ---------- sentence parts in order ---------- */
-// The [describe] who doing what [how] where [when]
-function parts(st, opts = {}){
-  const hideExtras = opts.core;
-  const out = [];
-  if (st.who){
-    const ds = st.describes || (st.describe ? [st.describe] : []);
-    if (ds.length && !hideExtras){
-      out.push({kind:'lit', t:st.who.det});
-      ds.forEach(d => out.push({kind:'describe', card:d, t:d.t}));
-      out.push({kind:'who', card:st.who, t:st.who.t});
-    } else out.push({kind:'who', card:st.who, t:`${st.who.det} ${st.who.t}`});
-  }
-  if (st.doing) out.push({kind:'doing', card:st.doing, t:st.doing.t});
-  if (st.what) out.push({kind:'what', card:st.what, t:st.what.t});
-  if (!hideExtras) (st.hows || (st.how ? [st.how] : [])).forEach(h => out.push({kind:'how', card:h, t:h.t}));
-  if (st.where) out.push({kind:'where', card:st.where, t:st.where.t});
-  if (st.when && !hideExtras) out.push({kind:'when', card:st.when, t:st.when.t});
-  return out;
-}
-
-// Turns a list of tokens into spoken/written text. Punctuation tokens ('.' ',') attach to the
-// word before; the word after a full stop gets a capital letter. Returns text + char ranges.
-function textOf(tokens){
-  let text = '', ranges = [], capNext = true;
-  tokens.forEach((tk, i) => {
-    let t = tk.t;
-    const punct = t === '.' || t === ',';
-    if (!punct && capNext) t = cap(t);
-    if (!punct && text) text += ' ';
-    ranges.push([text.length, text.length + t.length, i]);
-    text += t;
-    capNext = t === '.';
-  });
-  return {text, ranges};
-}
-
-// All tokens for the sentence being built (both ideas at Steps 4-5).
+/* ---------- tokens for the sentence being built ---------- */
 function buildTokens(opts = {}){
+  if (s.moved && !opts.core) return [...s.moved, ...(s.stop ? [{kind:'stop', t:'.'}] : [])];
   const tk = [];
   if (first){
     parts(first).forEach(p => tk.push({...p, clause:0}));
     if (join) tk.push({kind:'join', t:JOINS[join].t, clause:-1});
   }
-  if (phase !== 'join') parts(s, opts).forEach(p => tk.push({...p, clause:1}));
+  if (phase !== 'join'){
+    const core = parts(s, opts).map(p => ({...p, clause:1}));
+    if (s.front && !opts.core){
+      tk.push({kind:'front', cat:s.front.cat, card:s.front.card, t:s.front.card.t, extra:true});
+      if (s.frontComma) tk.push({kind:'punct', t:',', extra:true});
+    }
+    if (s.rel && !opts.core){
+      const at = core.findIndex(p => p.kind === 'who') + 1;
+      const r = s.rel, ins = [];
+      const [open, close] = s.relPunct === 'brackets' ? ['(', ')'] : s.relPunct === 'commas' ? [',', ','] : [null, null];
+      if (open) ins.push({kind:'punct', t:open, extra:true});
+      if (r.pron) ins.push({kind:'relw', t:r.pron, extra:true});
+      if (r.doing) ins.push({kind:'doing', card:r.doing, t:r.doing.t, rel:true, extra:true});
+      if (r.what) ins.push({kind:'what', card:r.what, t:r.what.t, rel:true, extra:true});
+      if (r.where) ins.push({kind:'where', card:r.where, t:r.where.t, rel:true, extra:true});
+      if (close) ins.push({kind:'punct', t:close, extra:true});
+      core.splice(at, 0, ...ins);
+    }
+    tk.push(...core);
+  }
   if (s.stop) tk.push({kind:'stop', t:'.'});
   return tk;
-}
-
-/* ---------- the sense check ---------- */
-// Returns the first problem as {slot, msg}, or null. Never says "wrong": it asks the child
-// to listen again and points at the block to change.
-const fits = (card, key, val) => !card[key] || !val || card[key].includes(val.id);
-function check(st, scope){
-  const who = st.who, doing = st.doing;
-  const listen = t => `Listen again: <q>${esc(t)}</q>.`;
-  if (doing && !fits(doing, 'who', who))
-    return {slot:'doing', msg:`${listen(cap(whoPhrase(st)) + ' ' + doing.t)} Does that make sense? Try a different <b>doing</b> block.`};
-  if (doing && doing.needs === 'what' && !st.what){
-    if (step === 1) return {slot:'doing', msg:`<q>${esc(cap(whoPhrase(st)))} ${esc(doing.t)}…</q> ${esc(doing.t)} what? This doing word needs a <b>what</b> after it. Try a doing word that makes sense on its own.`};
-    return {slot:'what', msg:`<q>${esc(cap(whoPhrase(st)))} ${esc(doing.t)}…</q> ${esc(doing.t)} what? This doing word needs a <b>what</b>. Add a what block.`};
-  }
-  if (doing && doing.needs === 'none' && st.what)
-    return {slot:'what', msg:`${listen(doing.t + ' ' + st.what.t)} Does that go together? Take the <b>what</b> away, or try a different doing block.`};
-  if (st.what && !fits(st.what, 'doing', doing))
-    return {slot:'what', msg:`${listen(doing.t + ' ' + st.what.t)} Does that go together? Try a different <b>what</b> block.`};
-  if (st.where && (!fits(st.where, 'who', who) || !fits(st.where, 'doing', doing)))
-    return {slot:'where', msg:`${listen(cap(whoPhrase(st)) + ' ' + doing.t + ' ' + st.where.t)} Does that make sense? Try a different <b>where</b> block.`};
-  if (scope === 'all'){
-    if (st.describe && !fits(st.describe, 'who', who))
-      return {slot:'describe', msg:`${listen(cap(whoPhrase(st)))} Does that word describe it? Try a different <b>describe</b> block.`};
-    if (st.how && (!fits(st.how, 'doing', doing) || !fits(st.how, 'who', who)))
-      return {slot:'how', msg:`${listen(doing.t + ' ' + st.how.t)} Does that go together? Try a different <b>how</b> block.`};
-  }
-  return null;
 }
 
 /* ---------- read aloud ---------- */
@@ -235,6 +178,7 @@ function showHome(){
     b.onclick = () => startFix(id);
     fg.appendChild(b);
   });
+  $('#fixNote').textContent = `Fix it sentences use the ${topic.label} pictures.`;
 }
 
 function showBuildScreen(p, tag){
@@ -248,22 +192,22 @@ function showBuildScreen(p, tag){
 /* ---------- build ---------- */
 function start(p){
   mode = 'build';
-  s = blank(); first = null; join = null;
+  s = newClause(); first = null; join = null;
   phase = 'core'; heard = false; stripped = false; covered = false; problemSlot = null; coachMsg = null; editing = null;
+  moveOpen = false; moveSel = null;
   showBuildScreen(p, `<b>${STEPS[step].title}</b><span class="sub">: ${esc(STEPS[step].sub)}</span>`);
   try { history.replaceState(null, '', `?step=${step}&pic=${topic.id}.${p.id}`); } catch(e) {}
   render();
 }
 
 const joinStep = () => !!STEPS[step].joins;
-// Step 2-3 practise what/where, so one is required; at Steps 4-5 they are optional again.
-const coreDone = () => s.who && s.doing && (step === 1 || joinStep() || s.what || s.where);
+// Steps 2-3 practise what/where, so one is required; at Step 1 and Steps 4+ it is optional.
+const coreDone = () => s.who && s.doing && (step === 1 || step >= 4 || s.what || s.where);
 const extrasCount = () => EXTRAS.filter(k => s[k]).length;
 const building = () => phase === 'core' || phase === 'core2';
 // Does this phase end with the child adding the full stop? (Not the first idea at Steps 4-5.)
 const needsStop = () => phase === 'core2' || (phase === 'core' && !joinStep());
 
-// Which category should the child fill next while building an idea?
 function nextSlots(){
   if (editing) return [editing];
   if (!s.who) return ['who'];
@@ -272,10 +216,10 @@ function nextSlots(){
   return ['what', 'where'];
 }
 
-function changed(){ editing = null; heard = false; problemSlot = null; coachMsg = null; covered = false; }
+function changed(){ if (s) s.moved = null; moveOpen = false; moveSel = null; editing = null; heard = false; problemSlot = null; coachMsg = null; covered = false; }
 
 function choose(cat, card){
-  if (settings.readCards && canSpeak()) say(cat === 'who' ? `${card.det} ${card.t}` : card.t);
+  if (settings.readCards && canSpeak()) say(cat === 'who' ? np(card) : card.t);
   if (phase === 'extras' && EXTRAS.includes(cat)){
     if (s[cat] && s[cat].id === card.id) s[cat] = null;
     else if (!s[cat] && extrasCount() >= settings.extras){ coachMsg = {cls:'think', ic:'✋', html:`That's ${settings.extras} extra${plural(settings.extras)} already. Too many extras can muddle a sentence! Tap an extra in your sentence to take it away first.`}; render(); return; }
@@ -291,9 +235,41 @@ function choose(cat, card){
 function chooseJoin(id){
   if (settings.readCards && canSpeak() && id !== 'stop') say(JOINS[id].t);
   join = id;
-  if (phase === 'join'){ phase = 'core2'; s = blank(); }
+  if (phase === 'join'){ phase = 'core2'; s = newClause(); }
   changed(); render();
 }
+
+/* Step 6: fronted adverbial */
+function chooseFront(cat, card){
+  if (settings.readCards && canSpeak()) say(card.t);
+  if (cat === 'where' && s.where && s.where.id === card.id){ s.where = null; s.frontMoved = card; }
+  s.front = {cat, card};
+  phase = 'comma'; changed(); render();
+}
+function clearFront(){
+  if (s.frontMoved){ s.where = s.frontMoved; s.frontMoved = null; }
+  s.front = null; s.frontComma = false; phase = 'front'; changed(); render();
+}
+
+/* Step 7: relative clause */
+function chooseRel(key, val){
+  if (settings.readCards && canSpeak()) say(typeof val === 'string' ? val : val.t);
+  s.rel = s.rel || {};
+  if (key === 'pron'){
+    const right = s.who.person ? 'who' : 'which';
+    if (val !== right){
+      coachMsg = {cls:'think', ic:'🤔', html: s.who.person
+        ? `<b>${esc(cap(np(s.who)))}</b> is a person, so we use <b>who</b>.`
+        : `<b>${esc(cap(np(s.who)))}</b> is not a person, so we use <b>which</b>.`};
+      render(); return;
+    }
+  }
+  if (key === 'punct'){ s.relPunct = val; phase = 'ready'; changed(); render(); return; }
+  if (s.rel[key] && s.rel[key].id && val.id === s.rel[key].id) s.rel[key] = null; else s.rel[key] = val;
+  if (key === 'doing'){ s.rel.what = null; s.rel.where = null; }
+  changed(); render();
+}
+function clearRel(){ s.rel = null; s.relPunct = null; phase = 'rel'; changed(); render(); }
 
 function tapChip(kind, clause){
   if (phase === 'done' && !STEPS[step].extras) return;
@@ -306,8 +282,10 @@ function tapChip(kind, clause){
     coachMsg = editing ? {cls:'', ic:'🔄', html:'Choose a different joining word.'} : null;
     render(); return;
   }
+  if (kind === 'front') return clearFront();
+  if (kind === 'rel') return clearRel();
   if (!building() && !EXTRAS.includes(kind)){
-    coachMsg = {cls:'', ic:'🔒', html:'Your core sentence is locked because it makes sense. You can change the extras. To change the core, press <b>Start again</b>.'};
+    coachMsg = {cls:'', ic:'🔒', html:'Your core sentence is locked because it makes sense. To change it, press <b>Start again</b>.'};
     render(); return;
   }
   if (building()){
@@ -322,20 +300,38 @@ function tapChip(kind, clause){
   changed(); render();
 }
 
+function finish(extraMsg){
+  phase = 'done'; made[step]++;
+  coachMsg = {cls:'good', ic:'🌟', html:`Yes! That makes sense.${extraMsg || ''} ✏️ Now write it in your book, with capital letters and full stops.`};
+}
+
 function judge(yes){
-  const prob = check(s, phase === 'extras' ? 'all' : 'core');
+  let prob = check(s, phase === 'extras' ? 'all' : 'core', step);
+  if (!prob && phase === 'ready' && s.front && !frontFits(s, s.front))
+    prob = {slot:'front', msg:`Listen again: <q>${esc(textOf(buildTokens()).text)}</q> Does the fronted adverbial go with the rest? Tap it to choose a different one.`};
+  if (!prob && phase === 'ready' && s.rel){
+    const r = check({who:s.who, doing:s.rel.doing, what:s.rel.what, where:s.rel.where}, 'core', 2);
+    if (r) prob = {slot:'rel', msg:r.msg.replace(/Try a different <b>\w+<\/b> block\.|Add a what block\.|Take the <b>what<\/b> away, or try a different doing block\./, 'Tap the extra information to build it again.')};
+  }
   if (yes && !prob){
     problemSlot = null;
     if (phase === 'core' && STEPS[step].extras){
       phase = 'extras';
       coachMsg = {cls:'good', ic:'🌟', html:`Brilliant, your core sentence makes sense! It is now locked. Add up to <b>${settings.extras}</b> extra${plural(settings.extras)} to make it more interesting, and keep it making sense.`};
     } else if (phase === 'core' && joinStep()){
-      first = s; s = blank(); phase = 'join'; heard = false;
+      first = s; s = newClause(); phase = 'join'; heard = false;
       coachMsg = {cls:'good', ic:'🌟', html:'Great first idea! It is now locked. Next, choose a <b>joining word</b> to add a second idea.'};
+    } else if (phase === 'core' && STEPS[step].front){
+      phase = 'front'; heard = false;
+      coachMsg = {cls:'good', ic:'🌟', html:'Your sentence makes sense, so it is now locked. Now put a <b>when</b>, <b>where</b> or <b>how</b> at the front of it.'};
+    } else if (phase === 'core' && STEPS[step].rel){
+      phase = 'rel'; heard = false;
+      coachMsg = {cls:'good', ic:'🌟', html:`Your sentence makes sense, so it is now locked. Now add some extra information about <b>${esc(np(s.who))}</b>.`};
     } else {
-      phase = 'done'; made[step]++;
-      const how = phase === 'done' && first ? (join === 'stop' ? ' Two ideas, two sentences.' : ` Two ideas, joined with <b>${JOINS[join].t}</b>.`) : '';
-      coachMsg = {cls:'good', ic:'🌟', html:`Yes! That makes sense.${how} ✏️ Now write it in your book, with capital letters and full stops.`};
+      const how = first ? (join === 'stop' ? ' Two ideas, two sentences.' : ` Two ideas, joined with <b>${JOINS[join].t}</b>.`)
+        : s.front ? ' The comma shows where the fronted adverbial ends.'
+        : s.rel ? ` The ${s.relPunct === 'brackets' ? 'brackets hold' : 'commas hold'} the extra information.` : '';
+      finish(how);
     }
   } else if (yes && prob){
     problemSlot = prob.slot; heard = false;
@@ -344,6 +340,8 @@ function judge(yes){
     heard = false;
     if (prob){ problemSlot = prob.slot; coachMsg = {cls:'think', ic:'👍', html:'Good listening! ' + prob.msg}; }
     else if (first) coachMsg = {cls:'think', ic:'👍', html:'Good thinking. Tap a block in your second idea to change it, or tap the <b>joining word</b> to choose a different one.'};
+    else if (s.front) coachMsg = {cls:'think', ic:'👍', html:'Good thinking. Tap the <b>fronted adverbial</b> to choose a different one.'};
+    else if (s.rel) coachMsg = {cls:'think', ic:'👍', html:'Good thinking. Tap the <b>extra information</b> to build it again.'};
     else coachMsg = {cls:'think', ic:'👍', html:'Good thinking. Tap the block you want to change, then choose a new one.'};
   }
   render();
@@ -359,15 +357,16 @@ function chipEl(kind, text, i, opts = {}){
   const b = el('button', `chip c-${kind}`);
   b.style.setProperty('--slot', `var(--${kind})`);
   if (i != null) b.dataset.i = i;
-  b.innerHTML = `<img src="icons/${c.icon}.png" alt=""><span class="w">${esc(text)}</span><span class="lab">${c.label}</span>`;
+  b.innerHTML = `<img src="icons/${c.icon}.png" alt=""><span class="w">${esc(text)}</span><span class="lab">${opts.label || c.label}</span>`;
   if (opts.empty){ b.classList.add('empty'); b.disabled = true; }
   if (opts.optional) b.classList.add('optional');
   if (opts.active) b.classList.add('active');
-  if (EXTRAS.includes(kind)) b.classList.add('extra');
-  if (stripped && EXTRAS.includes(kind)) b.classList.add('hiddenx');
-  const locked = opts.locked != null ? opts.locked : (!building() && !EXTRAS.includes(kind));
+  const isExtra = opts.extra != null ? opts.extra : EXTRAS.includes(kind);
+  if (isExtra) b.classList.add('extra');
+  if (stripped && isExtra) b.classList.add('hiddenx');
+  const locked = opts.locked != null ? opts.locked : (!building() && !isExtra);
   if (!opts.empty && locked) b.classList.add('locked');
-  if (problemSlot === kind && !opts.locked) b.classList.add('problem');
+  if (problemSlot && (problemSlot === kind || problemSlot === opts.slot) && !opts.locked) b.classList.add('problem');
   if (!opts.empty && opts.onTap !== false) b.onclick = opts.onTap || (() => tapChip(kind));
   return b;
 }
@@ -384,6 +383,12 @@ function joinEl(id, i, opts = {}){
   return b;
 }
 
+function markEl(t, i, cls){
+  const m = el('span', 'stop mark ' + (cls || ''), esc(t));
+  if (i != null) m.dataset.i = i;
+  return m;
+}
+
 // Appends the slots for the idea being built: filled chips plus empty dashed slots.
 function appendBuildSlots(line, startIdx, capFirst){
   const order = step === 1 ? ['who','doing'] : ['who','doing','what','where'];
@@ -391,7 +396,7 @@ function appendBuildSlots(line, startIdx, capFirst){
   let i = startIdx;
   order.forEach(k => {
     if (phase !== 'join' && s[k]){
-      const t = k === 'who' ? `${s.who.det} ${s.who.t}` : s[k].t;
+      const t = k === 'who' ? np(s.who) : s[k].t;
       const c = chipEl(k, i === startIdx && capFirst ? cap(t) : t, i); if (editing === k) c.classList.add('active');
       line.appendChild(c); i++;
     } else {
@@ -421,16 +426,44 @@ function renderLine(){
         line.appendChild(el('span', 'lit faint', '…'));
       }
     }
-  } else {
-    // extras / done: render from tokens so describe/how/when sit in the right places
-    const tk = buildTokens().filter(t => t.kind !== 'stop');
-    tk.forEach((p, i) => {
-      const t = (i === 0 || (tk[i - 1] && tk[i - 1].t === '.')) ? cap(p.t) : p.t;
-      if (p.kind === 'lit'){ const l = el('span', 'lit', esc(t)); l.dataset.i = i; line.appendChild(l); }
-      else if (p.kind === 'join') line.appendChild(joinEl(join, i, {onTap:false}));
-      else line.appendChild(chipEl(p.kind, t, i, p.clause === 0 ? {locked:true, onTap:() => tapChip(p.kind, 0)} : {}));
-    });
+    line.appendChild(el('span', 'stop' + (s.stop ? '' : ' empty'), '.'));
+    return;
   }
+  // after the core: render from tokens so everything sits in the right place
+  const tk = buildTokens().filter(t => t.kind !== 'stop');
+  if (phase === 'front'){
+    line.appendChild(chipEl('when', 'when, where or how?', null, {empty:true, active:true, label:'fronted adverbial'}));
+    line.appendChild(markEl(',', null, 'empty'));
+  }
+  let capNext = phase !== 'front';
+  const tappable = phase !== 'done';
+  tk.forEach((p, i) => {
+    const isWord = !['punct','stop'].includes(p.kind);
+    const t = isWord && capNext ? cap(p.t) : p.t;
+    if (isWord) capNext = false;
+    if (p.t === '.') capNext = true;
+    if (p.kind === 'lit'){ const l = el('span', 'lit', esc(t)); l.dataset.i = i; line.appendChild(l); }
+    else if (p.kind === 'join') line.appendChild(joinEl(join, i, {onTap:false}));
+    else if (p.kind === 'punct') line.appendChild(markEl(p.t, i, 'extra' + (stripped ? ' hiddenx' : '')));
+    else if (p.kind === 'front'){
+      line.appendChild(chipEl(p.cat, t, i, {label:`${p.cat} · fronted`, extra:true, slot:'front', onTap: tappable ? () => tapChip('front') : false}));
+      if (phase === 'comma') line.appendChild(markEl(',', null, 'empty active'));
+    }
+    else if (p.kind === 'relw'){
+      const b = el('button', 'chip join-chip j-subord extra' + (stripped ? ' hiddenx' : '') + (problemSlot === 'rel' ? ' problem' : ''),
+        `<img src="icons/subord.png" alt=""><span class="w">${esc(t)}</span><span class="lab">extra info</span>`);
+      b.dataset.i = i; if (tappable) b.onclick = () => tapChip('rel');
+      line.appendChild(b);
+    }
+    else if (p.rel) line.appendChild(chipEl(p.kind, t, i, {extra:true, slot:'rel', label:`${p.kind} · extra info`, onTap: tappable ? () => tapChip('rel') : false}));
+    else line.appendChild(chipEl(p.kind, t, i, p.clause === 0 ? {locked:true, onTap:() => tapChip(p.kind, 0)} : {}));
+    // empty placeholders while the relative clause is being started
+    if (phase === 'rel' && p.kind === 'who' && !s.rel){
+      line.appendChild(markEl(',', null, 'empty'));
+      line.appendChild(chipEl('doing', 'who / which…?', null, {empty:true, active:true, label:'extra info'}));
+      line.appendChild(markEl(',', null, 'empty'));
+    }
+  });
   line.appendChild(el('span', 'stop' + (s.stop ? '' : ' empty'), '.'));
 }
 
@@ -438,13 +471,14 @@ function renderTools(){
   const t = $('#lineTools'); t.innerHTML = '';
   const add = (html, cls, fn, dis) => { const b = el('button', 'btn ' + (cls || ''), html); b.onclick = fn; b.disabled = !!dis; t.appendChild(b); return b; };
   const ready = coreDone() && (needsStop() ? s.stop : true);
-  if ((building() && ready) || (phase === 'extras' && extrasCount() > 0)){
+  if ((building() && ready) || (phase === 'extras' && extrasCount() > 0) || phase === 'ready'){
     if (canSpeak()) add('🔊 Read it to me', heard ? '' : 'primary pulse', () => readSentence());
     add('✅ It makes sense', 'good', () => judge(true), canSpeak() && !heard);
     add('🤔 Not yet', 'think', () => judge(false), canSpeak() && !heard);
   }
-  if (phase === 'extras' || (phase === 'done' && STEPS[step].extras)){
-    add(stripped ? '👀 Show the extras' : '🔍 Check the core', '', () => {
+  const hasExtras = phase === 'extras' || phase === 'ready' || (phase === 'done' && (STEPS[step].extras || s.front || s.rel));
+  if (hasExtras){
+    add(stripped ? '👀 Show it all' : '🔍 Check the core', '', () => {
       stripped = !stripped; render();
       if (stripped){
         coachMsg = {cls:'', ic:'🔍', html:`Without the extras, your core sentence says: <q>${esc(textOf(buildTokens({core:true})).text)}</q> It still makes sense on its own. The extras just add detail.`};
@@ -454,6 +488,7 @@ function renderTools(){
   }
   if (phase === 'done'){
     if (canSpeak()) add('🔊 Read it to me', '', () => readSentence());
+    if (moveGroups().length) add(moveOpen ? '✖ Close Move it' : '🔀 Move it', moveOpen ? '' : 'primary', () => { moveOpen = !moveOpen; moveSel = null; render(); });
     add(covered ? '👀 Show me again' : '🙈 Cover it and write', '', () => { covered = !covered; render(); });
     add('➕ Make another', 'primary', () => start(pic));
     add('🖼️ Next picture', '', () => { const ps = topic.pictures; start(ps[(ps.indexOf(pic) + 1) % ps.length]); });
@@ -470,12 +505,23 @@ function renderCoach(){
       const second = phase === 'core2' ? ' in your second idea' : '';
       if (!s.who) m = {ic:'👀', html: phase === 'core2' ? 'Now build your second idea. Start with <b>who</b>.' : 'Look at the picture. Start with <b>who</b>: tap a who block below.'};
       else if (!s.doing) m = {ic:'👉', html:`Now choose a <b>doing</b> block${second}.`};
-      else if (step > 1 && !joinStep() && !s.what && !s.where) m = {ic:'👉', html:'Now add a <b>what</b> or a <b>where</b> (or both).'};
+      else if (step > 1 && step < 4 && !s.what && !s.where) m = {ic:'👉', html:'Now add a <b>what</b> or a <b>where</b> (or both).'};
       else if (needsStop() && !s.stop) m = {ic:'⏺️', html:'Finish your sentence with a <b>full stop</b>.'};
       else if (canSpeak() && !heard) m = {ic:'🔊', html:'Press <b>Read it to me</b> and listen carefully.'};
       else m = {ic:'🤔', html:canSpeak() ? 'Does it make sense?' : 'Read it aloud quietly to yourself. Does it make sense?'};
     } else if (phase === 'join'){
       m = {ic:'🔗', html:'Choose a <b>joining word</b> for your second idea.'};
+    } else if (phase === 'front'){
+      m = {ic:'⬅️', html:'Choose a <b>fronted adverbial</b>: when, where or how it happens. It goes at the front of the sentence.'};
+    } else if (phase === 'comma'){
+      m = {ic:'👆', html:'A fronted adverbial needs a <b>comma</b> after it. Add the comma.'};
+    } else if (phase === 'rel'){
+      const r = s.rel || {};
+      if (!r.pron) m = {ic:'➕', html:`Add extra information about <b>${esc(np(s.who))}</b>. Start with <b>who</b> or <b>which</b>.`};
+      else if (!r.doing) m = {ic:'👉', html:`What else is ${esc(np(s.who))} doing? Choose a <b>doing</b> block.`};
+      else m = {ic:'✌️', html:'Extra information sits inside <b>two commas</b> or <b>brackets</b>. Choose one. You can add a what or a where first.'};
+    } else if (phase === 'ready'){
+      m = {ic:'🔊', html: canSpeak() ? 'Press <b>Read it to me</b>. Does it still make sense?' : 'Read it aloud quietly. Does it still make sense?'};
     } else if (phase === 'extras'){
       if (!heard && extrasCount() > 0) m = {ic:'🔊', html:'Read it again with your extras. Does it still make sense?'};
       else m = {ic:'➕', html:`Add up to <b>${settings.extras}</b> extra${plural(settings.extras)}. You have used <b>${extrasCount()}</b>.`};
@@ -493,94 +539,220 @@ function renderCoach(){
   c.hidden = !m;
 }
 
-function joinBank(b){
+function cardGroup(b, iconHtml, q, cards){
   const g = el('div', 'bank-group');
-  g.appendChild(el('div', 'bank-q', `<img src="icons/${STEPS[step].joins[0] === 'because' ? 'subord' : 'coord'}.png" alt=""><span>How does the second idea join on?</span>`));
-  const cards = el('div', 'cards');
-  STEPS[step].joins.forEach(id => {
-    const j = JOINS[id];
-    const btn = el('button', `card join-card j-${j.kind}` + (join === id ? ' chosen' : ''),
-      `<span class="jw">${id === 'stop' ? '⏺ Full stop' : esc(j.t)}</span><small>${esc(j.help)}</small>`);
-    btn.onclick = () => chooseJoin(id);
-    cards.appendChild(btn);
+  g.appendChild(el('div', 'bank-q', `${iconHtml}<span>${q}</span>`));
+  const row = el('div', 'cards');
+  cards.forEach(x => row.appendChild(x));
+  g.appendChild(row); b.appendChild(g);
+  return g;
+}
+const icon = n => `<img src="icons/${n}.png" alt="">`;
+function wordCard(cat, card, chosen, fn){
+  const btn = el('button', `card c-${cat}` + (chosen ? ' chosen' : ''), esc(cat === 'who' ? np(card) : card.t));
+  btn.onclick = fn; return btn;
+}
+function plainCard(cls, html, fn){ const b = el('button', 'card ' + cls, html); b.onclick = fn; return b; }
+
+function joinBank(b){
+  cardGroup(b, icon(STEPS[step].joins[0] === 'because' ? 'subord' : 'coord'), 'How does the second idea join on?',
+    STEPS[step].joins.map(id => {
+      const j = JOINS[id];
+      return plainCard(`join-card j-${j.kind}` + (join === id ? ' chosen' : ''),
+        `<span class="jw">${id === 'stop' ? '⏺ Full stop' : esc(j.t)}</span><small>${esc(j.help)}</small>`, () => chooseJoin(id));
+    }));
+}
+
+function frontBank(b){
+  const groups = [
+    ['when', 'When does it happen?', pic.when],
+    ['where', s.where ? 'Where? (move it to the front)' : 'Where does it happen?', s.where ? [s.where] : pic.where.filter(w => fits(w, 'who', s.who) && fits(w, 'doing', s.doing))],
+    ['how', 'How does it happen?', pic.how]
+  ];
+  groups.forEach(([cat, q, list]) => {
+    if (!list.length) return;
+    cardGroup(b, icon(cat), q, list.map(card => wordCard(cat, {...card, t:cap(card.t)}, false, () => chooseFront(cat, card))));
   });
-  g.appendChild(cards);
-  b.appendChild(g);
+}
+
+function relBank(b){
+  const r = s.rel || {};
+  if (!r.pron){
+    cardGroup(b, icon('subord'), `Which word starts the extra information about ${esc(np(s.who))}?`, [
+      plainCard('join-card j-subord', '<span class="jw">who</span><small>for a person</small>', () => chooseRel('pron', 'who')),
+      plainCard('join-card j-subord', '<span class="jw">which</span><small>for a thing or an animal</small>', () => chooseRel('pron', 'which'))
+    ]);
+    return;
+  }
+  if (!r.doing){
+    const list = pic.doing.filter(d => fits(d, 'who', s.who) && d.id !== s.doing.id);
+    cardGroup(b, icon('doing'), `What else is ${esc(np(s.who))} doing?`, list.map(card => wordCard('doing', card, false, () => chooseRel('doing', card))));
+    return;
+  }
+  if (r.doing.needs !== 'none'){
+    const whats = pic.what.filter(w => fits(w, 'doing', r.doing) && fits(w, 'who', s.who));
+    if (whats.length) cardGroup(b, icon('what'), r.doing.needs === 'what' ? `${esc(r.doing.t)}… what?` : 'What? (you can skip this)',
+      whats.map(card => wordCard('what', card, r.what && r.what.id === card.id, () => chooseRel('what', card))));
+  }
+  if (!(r.doing.needs === 'what' && !r.what)){
+    const wheres = pic.where.filter(w => fits(w, 'who', s.who) && fits(w, 'doing', r.doing) && (!s.where || w.id !== s.where.id));
+    if (wheres.length && !r.what) cardGroup(b, icon('where'), 'Where? (you can skip this)',
+      wheres.map(card => wordCard('where', card, r.where && r.where.id === card.id, () => chooseRel('where', card))));
+    cardGroup(b, icon('comma'), 'Put the extra information inside…', [
+      plainCard('stop-card', 'two commas&nbsp; , &nbsp;,', () => chooseRel('punct', 'commas')),
+      plainCard('stop-card', 'brackets&nbsp; ( &nbsp;)', () => chooseRel('punct', 'brackets'))
+    ]);
+  }
 }
 
 function renderBank(){
   const b = $('#bank'); b.innerHTML = '';
-  if (phase === 'done') return;
+  if (phase === 'done' && moveOpen) return moveBank(b);
+  if (phase === 'done' || phase === 'ready') return;
   if (phase === 'join' || editing === 'join') return joinBank(b);
+  if (phase === 'front') return frontBank(b);
+  if (phase === 'comma'){
+    cardGroup(b, icon('comma'), 'Add the comma after the fronted adverbial.', [
+      plainCard('stop-card', '<b>,</b>&nbsp; Comma', () => { s.frontComma = true; phase = 'ready'; changed(); render(); })
+    ]);
+    return;
+  }
+  if (phase === 'rel') return relBank(b);
   const cats = building() ? nextSlots() : EXTRAS;
   cats.forEach(cat => {
-    const g = el('div', 'bank-group');
-    const q = el('div', 'bank-q', `<img src="icons/${CAT[cat].icon}.png" alt=""><span>${esc(CAT[cat].q(s))}</span>`);
-    if (phase === 'extras' && cat === 'describe') q.querySelector('span').textContent = `Describe ${whoPhrase({...s, describe:null})}:`;
-    g.appendChild(q);
-    const cards = el('div', 'cards');
-    (pic[cat] || []).forEach(card => {
-      const btn = el('button', `card c-${cat}` + (s[cat] && s[cat].id === card.id ? ' chosen' : ''), esc(cat === 'who' ? `${card.det} ${card.t}` : card.t));
+    const q = phase === 'extras' && cat === 'describe' ? `Describe ${esc(np(s.who))}:` : esc(CAT[cat].q(s));
+    let list = pic[cat] || [];
+    if (phase === 'extras' && cat === 'describe' && !s.who.det) list = [];   // no "the" to put it after
+    if (!list.length) return;
+    const g = cardGroup(b, icon(CAT[cat].icon), q, list.map(card => {
+      const btn = wordCard(cat, card, s[cat] && s[cat].id === card.id, () => choose(cat, card));
       if (phase === 'extras' && !s[cat] && extrasCount() >= settings.extras) btn.disabled = true;
-      btn.onclick = () => choose(cat, card);
-      cards.appendChild(btn);
-    });
+      return btn;
+    }));
     if (editing === cat && (cat === 'what' || cat === 'where')){
       const x = el('button', 'btn', '✖ Take it away');
       x.style.marginLeft = '4px';
       x.onclick = () => { s[cat] = null; if (!coreDone()) s.stop = false; changed(); render(); };
-      cards.appendChild(x);
+      g.querySelector('.cards').appendChild(x);
     }
-    g.appendChild(cards);
-    b.appendChild(g);
   });
   if (phase === 'extras'){
     const q = b.querySelector('.bank-q');
     if (q) q.appendChild(el('span', 'count', `Extras: ${extrasCount()} of ${settings.extras}`));
   }
   if (building() && needsStop() && coreDone() && !s.stop){
-    const g = el('div', 'bank-group');
-    g.appendChild(el('div', 'bank-q', `<img src="icons/fullstop.png" alt=""><span>Finished? Add a full stop.</span>`));
-    const btn = el('button', 'card stop-card', '⏺ Full stop');
-    btn.onclick = () => { s.stop = true; changed(); render(); };
-    g.appendChild(btn);
-    b.appendChild(g);
+    cardGroup(b, icon('fullstop'), 'Finished? Add a full stop.', [
+      plainCard('stop-card', '⏺ Full stop', () => { s.stop = true; changed(); render(); })
+    ]);
   }
+}
+
+/* ================= MOVE IT ================= */
+// Shows where a movable part (a when / where / how, a fronted adverbial, or a because/when/if
+// clause) can go in the sentence, with the comma it needs at the front, plus one place it
+// cannot go, for contrast. Each position is read aloud when tapped.
+
+const strip = list => list.map(({mv, ...rest}) => rest);
+const COMMA = () => ({kind:'punct', t:',', mv:true});
+
+// One movable part inside one clause's tokens.
+function moveGroupFor(cat, list, unit){
+  const rest = list.filter(p => !unit.includes(p));
+  const u = unit.map(p => ({...p, kind:cat, mv:true}));
+  const di = rest.findIndex(p => p.kind === 'doing');
+  const wi = rest.findIndex(p => p.kind === 'what');
+  const opts = [];
+  opts.push({tokens:[...u, COMMA(), ...rest], good:true, note:'When it moves to the <b>front</b>, it needs a <b>comma</b> after it.'});
+  if (cat === 'how' && /ly$/.test(unit[0].t) && di >= 0)
+    opts.push({tokens:[...rest.slice(0, di), ...u, ...rest.slice(di)], good:true, note:'A how word can sit just <b>before the doing</b> word.'});
+  if (cat === 'how' && di >= 0){
+    const after = wi >= 0 ? wi + 1 : di + 1;
+    opts.push({tokens:[...rest.slice(0, after), ...u, ...rest.slice(after)], good:true, note:`It can come straight after the ${wi >= 0 ? '<b>what</b>' : '<b>doing</b> word'}.`});
+    if (wi >= 0) opts.push({tokens:[...rest.slice(0, di + 1), ...u, ...rest.slice(di + 1)], good:false, note:'It gets between the <b>doing</b> word and the <b>what</b>. It does not work there.'});
+  }
+  // a how word after a when sounds clumsy ("…after lunch carefully"), so don't offer it
+  if (!(cat === 'how' && rest.length && rest[rest.length - 1].kind === 'when'))
+    opts.push({tokens:[...rest, ...u], good:true, note:'It can go at the <b>end</b>.'});
+  return {cat, label: textOf(unit).text.toLowerCase(), opts};
+}
+
+function moveGroups(){
+  if (phase !== 'done') return [];
+  const groups = [];
+  if (step === 3){
+    const list = parts(s);
+    ['when','how','where'].forEach(cat => {
+      const unit = list.filter(p => p.kind === cat);
+      if (unit.length) groups.push(moveGroupFor(cat, list, unit));
+    });
+  }
+  if (step === 6 && s.front){
+    const f = {kind:s.front.cat, card:s.front.card, t:s.front.card.t};
+    const list = [f, ...parts(s)];
+    groups.push(moveGroupFor(s.front.cat, list, [f]));
+  }
+  if (step === 5 && first && join){
+    const A = parts(first);
+    const unit = [{kind:'join', t:JOINS[join].t, mv:true}, ...parts(s).map(p => ({...p, mv:true}))];
+    const wi = A.findIndex(p => p.kind === 'who');
+    groups.push({cat:'subord', label:`${JOINS[join].t}…`, opts:[
+      {tokens:[...unit, COMMA(), ...A], good:true, note:`The <b>${JOINS[join].t}</b> part can go at the <b>front</b>. Then it needs a <b>comma</b> after it.`},
+      {tokens:[...A.slice(0, wi + 1), ...unit, ...A.slice(wi + 1)], good:false, note:'It splits the <b>who</b> from the <b>doing</b> word. It does not work there.'},
+      {tokens:[...A, ...unit], good:true, note:'It can go at the <b>end</b>.'}
+    ]});
+  }
+  // drop duplicates and mark the child's current order
+  const now = textOf(strip(buildTokens()).filter(p => p.kind !== 'stop')).text;
+  groups.forEach(g => {
+    const seen = new Set();
+    g.opts = g.opts.filter(o => { const k = textOf(o.tokens).text; if (seen.has(k)) return false; seen.add(k); o.key = k; o.current = k === now; return true; });
+  });
+  return groups;
+}
+
+// A sentence strip: each token in its colour, the moving part outlined.
+function stripHtml(tokens){
+  const {text, ranges} = textOf([...tokens, {t:'.'}]);
+  return ranges.map(([a, b, i]) => {
+    const tk = tokens[i] || {kind:'stop'};
+    const w = esc(text.slice(a, b));
+    const sp = i > 0 && !['.', ',', ')'].includes(text.slice(a, b)) && tokens[i - 1] && tokens[i - 1].t !== '(' ? ' ' : '';
+    if (['punct','stop','lit'].includes(tk.kind)) return `${sp}<span class="sp-mark${tk.mv ? ' mv' : ''}">${w}</span>`;
+    if (tk.kind === 'join') return `${sp}<span class="sp-join${tk.mv ? ' mv' : ''}">${w}</span>`;
+    return `${sp}<span class="c-${tk.kind}${tk.kind === 'doing' ? ' dark' : ''}${tk.mv ? ' mv' : ''}">${w}</span>`;
+  }).join('');
+}
+
+function moveBank(b){
+  const groups = moveGroups();
+  groups.forEach((g, gi) => {
+    const box = el('div', 'bank-group');
+    box.appendChild(el('div', 'bank-q', `<span>🔀 Where else can <q>${esc(g.label)}</q> go? Tap each one to hear it.</span>`));
+    g.opts.forEach((o, oi) => {
+      const id = gi + ':' + oi;
+      const row = el('button', 'move-opt' + (moveSel === id ? ' sel' : '') + (moveSel === id ? (o.good ? ' good' : ' bad') : ''));
+      row.innerHTML = `<div class="mini move-mini">${stripHtml(o.tokens)}</div>` + (o.current ? '<span class="tag-now">your sentence</span>' : '')
+        + (moveSel === id ? `<div class="verdict">${o.good ? '✅ It still makes sense. ' : '🤔 Listen: does that make sense? '}${o.note}</div>` : '');
+      row.onclick = () => { moveSel = id; render(); say(textOf([...o.tokens, {t:'.'}]).text); };
+      box.appendChild(row);
+      if (moveSel === id && o.good && !o.current){
+        const use = el('button', 'btn good', '👍 Use this order');
+        use.style.margin = '0 0 10px';
+        use.onclick = () => { s.moved = strip(o.tokens); moveSel = null; heard = false;
+          coachMsg = {cls:'good', ic:'🔀', html:'Same sentence, new order, and it still makes sense. ✏️ Write this version in your book.'}; render(); };
+        box.appendChild(use);
+      }
+    });
+    b.appendChild(box);
+  });
 }
 
 /* ================= FIX-IT MODE ================= */
 
-// A random clause from the picture's word bank that passes the sense check.
-function genClause(p, avoidWho){
-  for (let n = 0; n < 200; n++){
-    const st = blank();
-    const whos = p.who.filter(w => !avoidWho || !avoidWho.includes(w.id));
-    st.who = rnd(whos.length ? whos : p.who);
-    const doings = p.doing.filter(d => fits(d, 'who', st.who));
-    if (!doings.length) continue;
-    st.doing = rnd(doings);
-    const whats = p.what.filter(w => fits(w, 'doing', st.doing));
-    const wheres = p.where.filter(w => fits(w, 'who', st.who) && fits(w, 'doing', st.doing));
-    if (st.doing.needs === 'what'){ if (!whats.length) continue; st.what = rnd(whats); }
-    else if (st.doing.needs !== 'none' && whats.length && Math.random() < .5) st.what = rnd(whats);
-    if (!st.what && wheres.length && Math.random() < .6) st.where = rnd(wheres);
-    if (check(st, 'core')) continue;
-    return st;
-  }
-  return null;
-}
-
-// Word tiles for one clause: [{t, clause}] — splits multi-word blocks into single words.
-function wordTiles(st, clause){
-  const out = [];
-  parts(st).forEach(p => p.t.split(' ').forEach(w => out.push({t:w, clause})));
-  return out;
-}
-
 function startFix(type, p){
   mode = 'fix';
   p = p || rnd(topic.pictures);
-  heard = false; covered = false; coachMsg = null; problemSlot = null;
+  heard = false; covered = false; coachMsg = null; problemSlot = null; stripped = false;
   fx = {type, stage:'find', tries:0};
   if (type === 'runon' || type === 'comma'){
     const a = genClause(p), b = genClause(p, [a.who.id]);
@@ -588,10 +760,15 @@ function startFix(type, p){
     fx.words = [...wordTiles(a, 0), ...(type === 'comma' ? [{t:',', clause:-1}] : []), ...wordTiles(b, 1)];
     fx.split = fx.words.findIndex(w => w.clause === 1);
     fx.fix = null;
+  } else if (type === 'nocomma'){
+    const g = genFronted(p);
+    fx.clause = g.clause; fx.front = g.front;
+    const fw = g.front.card.t.split(' ').map(t => ({t, clause:0}));
+    fx.words = [...fw, ...wordTiles(g.clause, 1)];
+    fx.split = fw.length - 1;   // the comma goes after this word
   } else if (type === 'and'){
     const n = p.who.length >= 3 ? 4 : 3;
-    const cs = []; const used = [];
-    const seen = new Set();
+    const cs = [], used = [], seen = new Set();
     for (let i = 0, tries = 0; i < n && tries < 300; tries++){
       const c = genClause(p, used.length < p.who.length ? used : null);
       const key = c.who.id + '|' + c.doing.id;          // never the same idea twice
@@ -603,63 +780,50 @@ function startFix(type, p){
     fx.stage = 'fix';
   } else if (type === 'extras'){
     fx.stage = 'fix';
-    fx.clause = overloaded(p);
+    fx.clause = overloaded(p, settings.extras);
   }
   showBuildScreen(p, `<b>${FIXES[type].icon} Fix it</b><span class="sub">: ${esc(FIXES[type].title)}</span>`);
   try { history.replaceState(null, '', `?fix=${type}&pic=${topic.id}.${p.id}`); } catch(e) {}
   render();
 }
 
-// A core clause stuffed with extras: two describes, two hows (if the bank allows) and a when.
-function overloaded(p){
-  for (let n = 0; n < 200; n++){
-    const st = genClause(p);
-    const ds = shuffle(p.describe.filter(d => fits(d, 'who', st.who))).slice(0, 2);
-    const hs = shuffle(p.how.filter(h => fits(h, 'doing', st.doing) && fits(h, 'who', st.who))).slice(0, 2);
-    const total = ds.length + hs.length + 1;
-    if (total < settings.extras + 2 || (ds.length < 2 && hs.length < 2)) continue;
-    st.describes = ds; st.hows = hs; st.when = rnd(p.when);
-    return st;
-  }
-  return genClause(p);
-}
-const xCount = st => (st.describes || []).length + (st.hows || []).length + (st.when ? 1 : 0);
-
-function fixTokens(){
-  if (fx.type === 'runon' || fx.type === 'comma'){
-    if (fx.stage === 'find') return [...fx.words.map(w => ({t:w.t})), {t:'.'}];
-    const tk = [];
-    parts(fx.clauses[0]).forEach(p => tk.push(p));
+function fixTokens(opts = {}){
+  const t = fx.type;
+  if ((t === 'runon' || t === 'comma' || t === 'nocomma') && fx.stage === 'find') return [...fx.words.map(w => ({t:w.t})), {t:'.'}];
+  if (t === 'runon' || t === 'comma'){
+    const tk = [...parts(fx.clauses[0])];
     if (fx.fix) tk.push({kind:'join', t:JOINS[fx.fix].t});
-    else if (fx.type === 'comma') tk.push({kind:'comma', t:','});
-    parts(fx.clauses[1]).forEach(p => tk.push(p));
-    tk.push({t:'.'});
+    else if (t === 'comma') tk.push({kind:'comma', t:','});
+    tk.push(...parts(fx.clauses[1]), {t:'.'});
     return tk;
   }
-  if (fx.type === 'and'){
+  if (t === 'nocomma') return [{kind:'front', cat:fx.front.cat, t:fx.front.card.t}, {kind:'punct', t:','}, ...parts(fx.clause), {t:'.'}];
+  if (t === 'and'){
     const tk = [];
     fx.clauses.forEach((c, i) => {
       if (i) tk.push({kind:'join', t:JOINS[fx.joins[i - 1]].t, j:i - 1});
-      parts(c).forEach(p => tk.push(p));
+      tk.push(...parts(c));
     });
     tk.push({t:'.'});
     return tk;
   }
-  return [...parts(fx.clause), {t:'.'}];
+  return [...parts(fx.clause, opts), {t:'.'}];
 }
 
 function renderFix(){
   const line = $('#line'); line.innerHTML = '';
   line.classList.toggle('covered', covered);
   const tk = fixTokens();
-  const body = tk[tk.length - 1].t === '.' ? tk.slice(0, -1) : tk;
+  const body = tk.slice(0, -1);
   let capNext = true;
   body.forEach((p, i) => {
-    const t = capNext ? cap(p.t) : p.t;
-    capNext = p.t === '.';
-    if (fx.type !== 'extras' && fx.stage === 'find'){
-      // plain word tiles: the child taps where the second idea starts
-      if (p.t === ','){ const c = el('span', 'stop comma-mark', ','); c.dataset.i = i; line.appendChild(c); return; }
+    const isWord = p.t !== ',' && p.t !== '.';
+    const t = isWord && capNext ? cap(p.t) : p.t;
+    if (isWord) capNext = false;
+    if (p.t === '.') capNext = true;
+    if (fx.type !== 'extras' && fx.type !== 'and' && fx.stage === 'find'){
+      // plain word tiles
+      if (p.t === ','){ line.appendChild(markEl(',', i, 'comma-mark')); return; }
       const w = el('button', 'word' + (fx.hint && i === fx.split ? ' hint' : ''), esc(t));
       w.dataset.i = i; w.onclick = () => tapWord(i);
       line.appendChild(w); return;
@@ -674,9 +838,11 @@ function renderFix(){
       const c = el('button', 'chip join-chip j-comma active', `<img src="icons/comma.png" alt=""><span class="w">,</span><span class="lab">comma</span>`);
       c.dataset.i = i; c.disabled = true; line.appendChild(c); return;
     }
+    if (p.kind === 'punct'){ line.appendChild(markEl(p.t, i, 'added')); return; }
+    if (p.kind === 'front'){ line.appendChild(chipEl(p.cat, t, i, {label:`${p.cat} · fronted`, locked:false, extra:false, onTap:false})); return; }
     if (p.kind === 'lit'){ const l = el('span', 'lit', esc(t)); l.dataset.i = i; line.appendChild(l); return; }
     const isX = EXTRAS.includes(p.kind);
-    const c = chipEl(p.kind, t, i, {locked: fx.type === 'extras' && !isX && !stripped,
+    const c = chipEl(p.kind, t, i, {locked: fx.type === 'extras' && !isX,
       onTap: fx.type === 'extras' && isX && fx.stage !== 'done' ? () => removeExtra(p.kind, p.card) : false});
     if (fx.type === 'extras' && isX && fx.stage !== 'done') c.classList.add('removable');
     line.appendChild(c);
@@ -694,14 +860,17 @@ function renderFix(){
 
 function tapWord(i){
   if (i === fx.split){
-    fx.stage = 'fix'; fx.hint = false; heard = false;
-    coachMsg = {cls:'good', ic:'🌟', html: fx.type === 'comma'
-      ? 'Yes! That is where the second idea starts. A <b>comma</b> is not strong enough to join two ideas. Choose a fix below.'
+    fx.hint = false; heard = false; fx.stage = 'fix';
+    coachMsg = {cls:'good', ic:'🌟', html:
+        fx.type === 'nocomma' ? 'Yes! The fronted adverbial ends there, so the <b>comma</b> goes after it. Listen to the fixed sentence.'
+      : fx.type === 'comma' ? 'Yes! That is where the second idea starts. A <b>comma</b> is not strong enough to join two ideas. Choose a fix below.'
       : 'Yes! That is where the second idea starts. Two ideas need a <b>full stop</b> or a <b>joining word</b> between them. Choose a fix below.'};
   } else {
     fx.tries++;
     if (fx.tries >= 2) fx.hint = true;
-    coachMsg = {cls:'think', ic:'👂', html:'Not quite. Listen again and find the <b>second who</b>: who else is doing something?' + (fx.hint ? ' Look at the glowing word.' : '')};
+    coachMsg = {cls:'think', ic:'👂', html:(fx.type === 'nocomma'
+      ? 'Not quite. Listen again: which words tell you <b>when</b>, <b>where</b> or <b>how</b>? Tap the <b>last word</b> of them.'
+      : 'Not quite. Listen again and find the <b>second who</b>: who else is doing something?') + (fx.hint ? ' Look at the glowing word.' : '')};
   }
   render();
 }
@@ -725,6 +894,7 @@ function removeExtra(kind, card){
 // Is the fix done? Returns null if fine, or a message.
 function fixProblem(){
   if (fx.type === 'runon' || fx.type === 'comma') return fx.fix ? null : 'Choose a fix first.';
+  if (fx.type === 'nocomma') return null;
   if (fx.type === 'and'){
     let run = 1, most = 1;
     fx.joins.forEach(j => { run = j === 'and' ? run + 1 : 1; most = Math.max(most, run); });
@@ -747,7 +917,7 @@ function fixJudge(yes){
     heard = false; coachMsg = {cls:'think', ic:'👂', html:prob};
   } else {
     heard = false;
-    coachMsg = {cls:'think', ic:'👍', html: prob || (fx.type === 'and' ? 'Good thinking. Tap an <b>and</b> to change it.' : fx.type === 'extras' ? 'Good thinking. Tap an extra to take it away.' : 'Good thinking. Choose a different fix.')};
+    coachMsg = {cls:'think', ic:'👍', html: prob || (fx.type === 'and' ? 'Good thinking. Tap an <b>and</b> to change it.' : fx.type === 'extras' ? 'Good thinking. Tap an extra to take it away.' : fx.type === 'nocomma' ? 'Listen again. The comma shows where the fronted adverbial ends.' : 'Good thinking. Choose a different fix.')};
   }
   render();
 }
@@ -767,7 +937,8 @@ function renderFixTools(){
     }
     if (fx.type === 'extras') add(stripped ? '👀 Show the extras' : '🔍 Check the core', '', () => {
       stripped = !stripped; render();
-      if (stripped){ coachMsg = {cls:'', ic:'🔍', html:`The core sentence is <q>${esc(textOf([...parts(fx.clause, {core:true}), {t:'.'}]).text)}</q> Keep the extras that help, and take away the rest.`}; renderFixCoach(); speakTokens([...parts(fx.clause, {core:true}), {t:'.'}]); }
+      const core = [...parts(fx.clause, {core:true}), {t:'.'}];
+      if (stripped){ coachMsg = {cls:'', ic:'🔍', html:`The core sentence is <q>${esc(textOf(core).text)}</q> Keep the extras that help, and take away the rest.`}; renderFixCoach(); speakTokens(core); }
       else { coachMsg = null; renderFixCoach(); }
     });
   } else {
@@ -782,12 +953,13 @@ function renderFixCoach(){
   const c = $('#coach');
   let m = coachMsg;
   if (!m){
-    if (fx.stage === 'find') m = {ic:'🔎', html: fx.type === 'comma'
-      ? 'This sentence has <b>two ideas</b> joined with just a comma. Listen, then tap the word where the <b>second idea</b> starts.'
+    if (fx.stage === 'find') m = {ic:'🔎', html:
+        fx.type === 'comma' ? 'This sentence has <b>two ideas</b> joined with just a comma. Listen, then tap the word where the <b>second idea</b> starts.'
+      : fx.type === 'nocomma' ? 'This sentence starts with a <b>fronted adverbial</b> but the comma is missing. Listen, then tap the word that the <b>comma</b> should go after.'
       : 'This sentence has <b>two ideas</b> squashed together. Listen, then tap the word where the <b>second idea</b> starts.'};
     else if (fx.type === 'and') m = {ic:'🔗', html:'Too many <b>and</b>s! A sentence should have no more than <b>two</b> ideas. Tap an <b>and</b> to change it to a full stop.'};
     else if (fx.type === 'extras') m = {ic:'🎒', html:`This sentence has so many extras it is muddled. Tap extras to take them away until there are no more than <b>${settings.extras}</b>.`};
-    else if (!fx.fix) m = {ic:'🔧', html:'Choose a fix.'};
+    else if (!fx.fix && fx.type !== 'nocomma') m = {ic:'🔧', html:'Choose a fix.'};
     else m = {ic:'🔊', html: canSpeak() ? 'Listen to your fixed sentence. Does it make sense now?' : 'Read it aloud quietly. Does it make sense now?'};
   }
   if (fx.stage === 'done'){
@@ -803,17 +975,11 @@ function renderFixBank(){
   const b = $('#bank'); b.innerHTML = '';
   if (fx.stage === 'done') return;
   if ((fx.type === 'runon' || fx.type === 'comma') && fx.stage === 'fix'){
-    const g = el('div', 'bank-group');
-    g.appendChild(el('div', 'bank-q', `<img src="icons/coord.png" alt=""><span>How will you fix it?</span>`));
-    const cards = el('div', 'cards');
-    ['stop','and','but','so'].forEach(id => {
+    cardGroup(b, icon('coord'), 'How will you fix it?', ['stop','and','but','so'].map(id => {
       const j = JOINS[id];
-      const btn = el('button', `card join-card j-${j.kind}` + (fx.fix === id ? ' chosen' : ''),
-        `<span class="jw">${id === 'stop' ? '⏺ Full stop' : esc(j.t)}</span><small>${esc(j.help)}</small>`);
-      btn.onclick = () => chooseFix(id);
-      cards.appendChild(btn);
-    });
-    g.appendChild(cards); b.appendChild(g);
+      return plainCard(`join-card j-${j.kind}` + (fx.fix === id ? ' chosen' : ''),
+        `<span class="jw">${id === 'stop' ? '⏺ Full stop' : esc(j.t)}</span><small>${esc(j.help)}</small>`, () => chooseFix(id));
+    }));
   } else if (fx.type === 'extras'){
     const g = el('div', 'bank-group');
     g.appendChild(el('div', 'bank-q', `<span>Tap an extra in the sentence to take it away.</span><span class="count">Extras: ${xCount(fx.clause)} (keep ${settings.extras} or fewer)</span>`));
@@ -827,6 +993,7 @@ function openSettings(){
   const seg = (key, opts) => `<div class="seg" data-k="${key}">${opts.map(([v, l]) => `<button data-v="${v}" class="${String(settings[key]) === String(v) ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   m.innerHTML = `
     <h2>⚙️ Teacher settings</h2>
+    <p><a class="btn primary" href="print.html" target="_blank" rel="noopener">🖨️ Printable resources</a></p>
     <div class="row"><label>Extras allowed (Step 3 and Fix it)</label>${seg('extras', [[1,'1'],[2,'2'],[3,'3']])}</div>
     <div class="row"><label>Read aloud</label>${seg('voice', [[true,'On'],[false,'Off']])}</div>
     <div class="row"><label>Reading speed</label>${seg('rate', [[0.7,'Slow'],[0.85,'Steady'],[1,'Normal']])}</div>
@@ -838,11 +1005,14 @@ function openSettings(){
       <li><b>Some doing words need a what</b> ("holds…what?") and some can't take one ("floats"). The word banks know which, so children meet this idea through listening.</li>
       <li><b>Extras last (Step 3).</b> The core locks once it makes sense. Extras (describe, how, when) are capped at the number above. <b>Check the core</b> hides the extras to show the core still stands on its own.</li>
       <li><b>One idea at a time (Steps 4–5).</b> The first idea must make sense and lock before a joining word is offered. Step 4 gives a full stop, <i>and</i>, <i>but</i> or <i>so</i>; Step 5 gives <i>because</i>, <i>when</i> or <i>if</i>. Each joining word shows what it means. The tool checks each idea; the child judges whether the joining word fits.</li>
-      <li><b>Fix it.</b> Sentences are made from the picture's word cards, so there is always a new one. <b>Run-on</b> and <b>comma splice</b>: find where the second idea starts, then fix it. <b>And… and…</b>: change ands to full stops until no sentence has more than two ideas. <b>Too many extras</b>: take extras away until there are no more than the number above.</li>
+      <li><b>Fronted adverbials (Step 6).</b> The sentence must make sense first. Then the child puts a when, where or how at the front (an existing where can be moved), and must add the comma themselves.</li>
+      <li><b>Relative clauses (Step 7).</b> After the core makes sense, the child adds extra information about the who: <i>who</i> for a person, <i>which</i> for a thing (the tool explains if they pick the other), one more doing block, then two commas or brackets. Check the core hides it again.</li>
+      <li><b>Move it.</b> When a sentence at Step 3, 5 or 6 makes sense, <b>Move it</b> shows every place its when / where / how or its because/when/if part can go, adds the comma when it moves to the front, and includes one place it cannot go for contrast. Each position is read aloud. The child can choose the order they want to write.</li>
+      <li><b>Fix it.</b> Sentences are made from the picture's word cards, so there is always a new one: run-on, comma splice, missing comma after a fronted adverbial, "and… and…" chains, and too many extras.</li>
       <li><b>Steps are by need, not year group.</b> After ${GOAL} sentences at a step the child is told to ask you about moving on. You decide.</li>
     </ul>
     <h3>Setting a child's activity</h3>
-    <p>Open a picture or a Fix it activity, then bookmark the page or save it to the iPad home screen. The address remembers it, e.g. <code>?step=4&amp;pic=space.launch</code> or <code>?fix=runon</code>.</p>
+    <p>Open a picture or a Fix it activity, then bookmark the page or save it to the iPad home screen. The address remembers it, e.g. <code>?step=4&amp;pic=space.launch</code> or <code>?fix=runon&amp;pic=stories.forest</code>.</p>
     <p style="font-size:.9rem;color:#666">No pupil information is stored. Settings are saved on this device only. Version ${VERSION}.</p>
     <div style="text-align:right;margin-top:14px"><button class="btn primary" id="closeSet">Done</button></div>`;
   m.querySelectorAll('.seg').forEach(sg => sg.querySelectorAll('button').forEach(b => b.onclick = () => {
