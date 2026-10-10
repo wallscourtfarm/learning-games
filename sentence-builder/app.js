@@ -8,7 +8,7 @@
  * Nothing about the child is stored; only teacher settings, on this device. Picture word
  * banks live in content.js; the sentence engine (parts, text, sense check) in engine.js.
  */
-const VERSION = '10.10.26g';
+const VERSION = '10.10.26h';
 
 const CAT = {
   who:      {label:'who',      icon:'who',      q:() => 'Who or what is in the picture?'},
@@ -17,7 +17,8 @@ const CAT = {
   where:    {label:'where',    icon:'where',    q:() => 'Where?'},
   describe: {label:'describe', icon:'describe', q:s => `What is ${whoPhrase(s)} like?`},
   how:      {label:'how',      icon:'how',      q:s => `How does ${whoPhrase(s)} do it?`},
-  when:     {label:'when',     icon:'when',     q:() => 'When?'}
+  when:     {label:'when',     icon:'when',     q:() => 'When?'},
+  aux:      {label:'being / having', icon:'aux',  q:() => 'Being / having (optional)'}
 };
 const EXTRAS = ['describe','how','when'];
 
@@ -370,6 +371,7 @@ function tapChip(kind, clause){
     render(); return;
   }
   if (kind === 'front') return clearFront();
+  if (kind === 'aux' && building()){ s.aux = null; changed(); render(); return; }
   if (kind === 'rel') return clearRel();
   if (!building() && !EXTRAS.includes(kind)){
     coachMsg = {cls:'', ic:'🔒', html:'Your core sentence is locked because it makes sense. To change it, press <b>Start again</b>.'};
@@ -489,8 +491,11 @@ function appendBuildSlots(line, startIdx, capFirst){
   const next = phase === 'join' ? [] : nextSlots();
   let i = startIdx;
   order.forEach(k => {
+    if (k === 'doing' && phase !== 'join' && s.aux && s.doing){
+      line.appendChild(chipEl('aux', s.aux, i)); i++;
+    }
     if (phase !== 'join' && s[k]){
-      const t = k === 'who' ? np(s.who) : s[k].t;
+      const t = k === 'who' ? np(s.who) : k === 'doing' ? doingWith(s.doing.t, s.aux) : s[k].t;
       const c = chipEl(k, i === startIdx && capFirst ? cap(t) : t, i); if (editing === k) c.classList.add('active');
       line.appendChild(c); i++;
     } else {
@@ -733,6 +738,15 @@ function renderBank(){
   if (phase === 'extras'){
     const q = b.querySelector('.bank-q');
     if (q) q.appendChild(el('span', 'count', `Extras: ${extrasCount()} of ${settings.extras}`));
+  }
+  if (building() && s.doing && !editing && (step !== 1)){
+    const g = cardGroup(b, icon('aux'), 'Being / having word? (you can skip this)', AUX_WORDS.map(a => {
+      const c = plainCard('aux-card' + (s.aux === a ? ' chosen' : ''), `<span class="dia">${a}</span><small>${esc(doingWith(s.doing.t, a))}</small>`, () => {
+        if (settings.readCards && canSpeak()) say(a + ' ' + doingWith(s.doing.t, a));
+        s.aux = s.aux === a ? null : a; changed(); render();
+      });
+      return c;
+    }));
   }
   if (building() && needsStop() && coreDone() && !s.stop){
     cardGroup(b, icon('fullstop'), 'Finished? Add a full stop.', [
@@ -1156,7 +1170,8 @@ function freeTokens(st, opts = {}){
   if (!core && P.second === 'split') out.push(...sec);
   out.push(...rel);
   if (!core && P.how === 'before') out.push(...how);
-  out.push(...unit('doing'));
+  if (st.aux) out.push({kind:'aux', t:st.aux});
+  if (st.doing) out.push({kind:'doing', card:st.doing, t:doingWith(st.doing.t, st.aux)});
   if (!core && P.how === 'split') out.push(...how);
   out.push(...unit('what'));
   if (!core && (!P.how || P.how === 'mid')) out.push(...how);

@@ -363,6 +363,7 @@ const TOPICS = [
     doing:[
       {id:'holds', t:'holds', needs:'what', who:['knight']},
       {id:'faces', t:'faces', needs:'what', who:['knight','dragon']},
+      {id:'fights', t:'fights', who:['knight','dragon']},
       {id:'roars', t:'roars', needs:'none', who:['dragon']},
       {id:'waves', t:'waves', needs:'none', who:['queen']},
       {id:'watches', t:'watches', needs:'what', who:['queen','dragon','knight']},
@@ -371,8 +372,8 @@ const TOPICS = [
     ],
     what:[
       {id:'shield', t:'a shield', doing:['holds']},
-      {id:'dragon', t:'the dragon', doing:['faces','watches'], who:['knight','queen']},
-      {id:'knight', t:'the knight', doing:['faces','watches'], who:['dragon','queen']}
+      {id:'dragon', t:'the dragon', doing:['faces','watches','fights'], who:['knight','queen']},
+      {id:'knight', t:'the knight', doing:['faces','watches','fights'], who:['dragon','queen']}
     ],
     where:[
       {id:'hill', t:'on the hill', who:['knight','dragon','castle']},
@@ -389,7 +390,7 @@ const TOPICS = [
       {id:'old', t:'old', who:['castle']}
     ],
     how:[
-      {id:'bravely', t:'bravely', doing:['holds','faces','stands']},
+      {id:'bravely', t:'bravely', doing:['holds','faces','stands','fights']},
       {id:'loudly', t:'loudly', doing:['roars']},
       {id:'happily', t:'happily', doing:['waves','smiles']},
       {id:'proudly', t:'proudly', doing:['stands','holds','waves']},

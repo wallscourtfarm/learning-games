@@ -262,3 +262,12 @@ button.wr-and{border:2px solid #c0392b;color:#c0392b;font-family:'Andika',sans-s
 @media (max-width:600px){ .crumb-actions{margin-left:0} }
 .crumb-path .sub{display:none}
 .wr-problem.punct{background:#eef6fd;border-color:#9ccbee}
+
+/* being / having words: the yellow diamond from the colour-coded framework */
+.chip.c-aux{background:var(--doing);color:#3a2c00}
+.chip.c-aux .w{background:#fff;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);padding:8px 26px;font-size:1.35rem}
+.chip.c-aux img{display:none}
+.aux-card{background:var(--doing);color:#3a2c00;display:flex;flex-direction:column;align-items:center;gap:2px}
+.aux-card .dia{background:#fff;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);padding:6px 22px;font-size:1.25rem}
+.aux-card small{font-family:'Nunito',sans-serif;font-size:.85rem;font-weight:800}
+.mini span.c-aux{background:var(--doing);color:#3a2c00}

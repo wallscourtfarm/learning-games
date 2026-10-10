@@ -28,6 +28,60 @@ function whoPhrase(st){
   return np(st.who);
 }
 
+/* ---------- being / having words (is, was, has, had, will) ---------- */
+// Word cards hold the present tense ("fights", "picks up"). These turn it into the form that
+// follows a being/having word: is/was + -ing, has/had + past participle, will + base.
+const AUX_WORDS = ['is','was','has','had','will'];
+const PARTICIPLE = (() => {
+  const m = {};
+  ('be:been have:had do:done go:gone see:seen eat:eaten fall:fallen fly:flown swim:swum run:run sit:sat stand:stood hold:held '+
+   'find:found make:made take:taken give:given write:written ride:ridden drive:driven throw:thrown blow:blown grow:grown '+
+   'know:known draw:drawn break:broken speak:spoken wake:woken freeze:frozen choose:chosen steal:stolen sing:sung ring:rung '+
+   'drink:drunk begin:begun sink:sunk shrink:shrunk swing:swung sting:stung stick:stuck dig:dug spin:spun win:won catch:caught '+
+   'teach:taught bring:brought buy:bought think:thought fight:fought seek:sought keep:kept sleep:slept sweep:swept weep:wept '+
+   'feel:felt leave:left meet:met feed:fed lead:led read:read bleed:bled say:said pay:paid lay:laid tell:told sell:sold '+
+   'hear:heard light:lit shine:shone shoot:shot lose:lost send:sent spend:spent build:built bend:bent lend:lent cut:cut hit:hit '+
+   'put:put set:set let:let shut:shut hurt:hurt cost:cost burst:burst spread:spread split:split quit:quit come:come '+
+   'become:become get:got forget:forgotten hide:hidden bite:bitten strike:struck wear:worn tear:torn beat:beaten mean:meant '+
+   'deal:dealt kneel:knelt creep:crept leap:leapt slide:slid cling:clung fling:flung hang:hung rise:risen arise:arisen '+
+   'shake:shaken forgive:forgiven lie:lain mow:mown sew:sewn sow:sown show:shown swell:swollen grind:ground wind:wound '+
+   'bind:bound sweat:sweated weave:woven tread:trodden').split(' ').forEach(x => { const [a, b] = x.split(':'); m[a] = b; });
+  return m;
+})();
+const IRREG_BASE = {has:'have', does:'do', goes:'go', is:'be'};
+function verbBase(w){
+  if (IRREG_BASE[w]) return IRREG_BASE[w];
+  if (/ies$/.test(w) && w.length > 4) return w.slice(0, -3) + 'y';
+  if (/(ches|shes|sses|xes|zzes|oes)$/.test(w)) return w.slice(0, -2);
+  if (/s$/.test(w) && !/ss$/.test(w)) return w.slice(0, -1);
+  return w;
+}
+const DOUBLE_LAST = new Set('begin forget admit permit refer prefer occur regret upset control patrol compel rebel propel equip kidnap worship'.split(' '));
+// run -> running, sit -> sitting, begin -> beginning; British travel -> travelling
+const cvc = b => DOUBLE_LAST.has(b) || (/^[^aeiou]*[aeiou][bdgklmnprtvz]$/.test(b) && !/(w|x|y)$/.test(b)) || /[^aeiou][aeiou]l$/.test(b) && b.length > 4;
+function ingForm(b){
+  if (b === 'be') return 'being';
+  if (/ie$/.test(b)) return b.slice(0, -2) + 'ying';
+  if (/[^eoy]e$/.test(b)) return b.slice(0, -1) + 'ing';
+  if (cvc(b)) return b + b.slice(-1) + 'ing';
+  return b + 'ing';
+}
+function participle(b){
+  if (PARTICIPLE[b]) return PARTICIPLE[b];
+  if (/e$/.test(b)) return b + 'd';
+  if (/[^aeiou]y$/.test(b)) return b.slice(0, -1) + 'ied';
+  if (cvc(b)) return b + b.slice(-1) + 'ed';
+  return b + 'ed';
+}
+// "picks up" + "was" -> "picking up"
+function doingWith(t, aux){
+  if (!aux) return t;
+  const [head, ...rest] = t.split(' ');
+  const b = verbBase(head);
+  const f = (aux === 'is' || aux === 'was') ? ingForm(b) : (aux === 'has' || aux === 'had') ? participle(b) : b;
+  return [f, ...rest].join(' ');
+}
+
 // Core + extras in order: The [describe] who doing what [how] where [when]
 function parts(st, opts = {}){
   const hideExtras = opts.core;
@@ -40,7 +94,10 @@ function parts(st, opts = {}){
       out.push({kind:'who', card:st.who, t:st.who.t});
     } else out.push({kind:'who', card:st.who, t:np(st.who)});
   }
-  if (st.doing) out.push({kind:'doing', card:st.doing, t:st.doing.t});
+  if (st.doing){
+    if (st.aux) out.push({kind:'aux', t:st.aux});
+    out.push({kind:'doing', card:st.doing, t:doingWith(st.doing.t, st.aux)});
+  }
   if (st.what) out.push({kind:'what', card:st.what, t:st.what.t});
   if (!hideExtras) (st.hows || (st.how ? [st.how] : [])).forEach(h => out.push({kind:'how', card:h, t:h.t}));
   if (st.where) out.push({kind:'where', card:st.where, t:st.where.t});
