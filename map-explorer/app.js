@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '10.10.26s';
+const VERSION = '11.10.26a';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -128,8 +128,13 @@ function orthoInv(X, Y) {
   const lon = GLOBE.lon + Math.atan2(x * Math.sin(c), rho * Math.cos(c) * Math.cos(p0) - y * Math.sin(c) * Math.sin(p0)) / RAD;
   return { lat, lon: ((lon + 540) % 360) - 180 };
 }
-function rob(lon, lat) { return PROJ === 'globe' ? orthoF(lon, lat) : PROJ === 'merc' ? mcF(lon, lat) : gpF(lon, lat); }
-function robInv(x, y) { return PROJ === 'globe' ? orthoInv(x, y) : PROJ === 'merc' ? mcInv(x, y) : gpInv(x, y); }
+// Equal-degree grid map (plate carrée): every degree of latitude and longitude is the same size, as in the
+// Year 5 Locations lessons, so compass directions match what children work out on paper.
+const PC = WW / 360, PH = WW / 2;
+const pcF = (lon, lat) => ({ x: WW / 2 + lon * PC, y: PH / 2 - clamp(lat, -90, 90) * PC });
+const pcInv = (x, y) => { const lon = (x - WW / 2) / PC, lat = (PH / 2 - y) / PC; return Math.abs(lon) > 180 || Math.abs(lat) > 90 ? null : { lat, lon }; };
+function rob(lon, lat) { return PROJ === 'globe' ? orthoF(lon, lat) : PROJ === 'merc' ? mcF(lon, lat) : PROJ === 'pc' ? pcF(lon, lat) : gpF(lon, lat); }
+function robInv(x, y) { return PROJ === 'globe' ? orthoInv(x, y) : PROJ === 'merc' ? mcInv(x, y) : PROJ === 'pc' ? pcInv(x, y) : gpInv(x, y); }
 const onFront = (lon, lat) => PROJ !== 'globe' || !orthoF(lon, lat).back;
 const gpToLL = (x, y) => { const sn = clamp((GH / 2 - y) * C45 / WR, -1, 1); return { lat: Math.asin(sn) / RAD, lon: clamp((x - WW / 2) / (WR * C45) / RAD, -180, 180) }; };
 function llPath(ll) {                          // a line through [lon, lat] points; on the globe it stops at the edge
@@ -209,13 +214,13 @@ function setProjKeep(p) {                     // like setProj('globe') but keeps
 function setProj(p) {
   if (p === PROJ || S.map !== 'world') return;
   const ll = robInv(V.cx, V.cy) || { lat: 20, lon: 0 }, rel = V.k / fitK(V.b.w, V.b.h);
-  PROJ = p; WH = p === 'merc' ? MH : p === 'globe' ? GS : GH;
+  PROJ = p; WH = p === 'merc' ? MH : p === 'globe' ? GS : p === 'pc' ? PH : GH;
   if (p === 'globe') { GLOBE.lon = ll.lon; GLOBE.lat = clamp(ll.lat, -60, 60); delete built['world:globe']; }
   reprojItems();
   showMap('world');
   if (p === 'globe') home(0); else { const q = rob(ll.lon, ll.lat); goTo(q.x, q.y, rel * fitK(V.b.w, V.b.h), 0); }
   startMode();
-  toast(p === 'merc' ? 'Mercator map: look how big Greenland, Russia and Antarctica have become!' : p === 'globe' ? 'Globe: drag to spin the Earth' : 'Gall-Peters map: every country at its true size', 3200);
+  toast(p === 'merc' ? 'Mercator map: look how big Greenland, Russia and Antarctica have become!' : p === 'globe' ? 'Globe: drag to spin the Earth' : p === 'pc' ? 'Grid map: every degree is the same size' : 'Gall-Peters map: every country at its true size', 3200);
 }
 function km(a, b) {                           // great-circle distance between {lat,lon}
   const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
@@ -347,6 +352,7 @@ svg.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.clientX, e.cli
 $('#zIn').onclick = () => { const r = svg.getBoundingClientRect(); zoomAt(r.left + V.W / 2, r.top + V.H / 2, 1 / 1.6); };
 $('#zOut').onclick = () => { const r = svg.getBoundingClientRect(); zoomAt(r.left + V.W / 2, r.top + V.H / 2, 1.6); };
 $('#zHome').onclick = () => home();
+$('#zPause').onclick = () => setPause(true);
 
 /* ------------------------------------------------------------ shared symbols */
 const POI = {
@@ -517,7 +523,7 @@ function styleWorld(m) {
   m.g.querySelector('#w-gratlab').style.display = grid ? '' : 'none';
   m.g.querySelector('#w-tz').style.visibility = tzOn ? '' : 'hidden';
   m.g.querySelector('#w-climate').style.display = L.climate ? '' : 'none';
-  m.g.querySelector('#w-biomes').style.display = L.biomes ? '' : 'none';
+  m.g.querySelector('#w-biomes').style.visibility = L.biomes ? '' : 'hidden';
   if (L.biomes) loadBiomes(m);
   const pl = m.g.querySelector('#w-plates'); if (pl) pl.style.display = L.plates ? '' : 'none';
   m.g.querySelector('#w-lines').style.display = L.lines ? '' : 'none';
@@ -670,7 +676,7 @@ function showMap(id, keepView) {
   $('#symBtn').textContent = id.startsWith('local') ? '📍 Symbols' : '📍 Places';
   $('#symBtn').hidden = $('#layerBtn').hidden = id === 'merc';
   $('#projBtn').hidden = id !== 'world';
-  $('#projBtn').textContent = PROJ === 'merc' ? '🗺️ Mercator ▾' : PROJ === 'globe' ? '🌐 Globe ▾' : '🌍 Gall-Peters ▾';
+  $('#projBtn').textContent = PROJ === 'merc' ? '🗺️ Mercator ▾' : PROJ === 'globe' ? '🌐 Globe ▾' : PROJ === 'pc' ? '📐 Grid map ▾' : '🌍 Gall-Peters ▾';
   buildViewBar();
   const v = views[id];
   if (keepView && v) { V.cx = v.cx; V.cy = v.cy; V.k = v.k; applyView(); }
@@ -688,7 +694,7 @@ function mapLabel(id) {
   return { school: 'OS: WFA', gorge: 'OS: Avon Gorge', penyfan: 'OS: Pen y Fan', london: 'OS: London' }[id.split(':')[1]] || 'OS map';
 }
 function setAttrib() {
-  const a = S.map === 'world' ? (PROJ === 'globe' ? 'Map data: Natural Earth · Globe view (orthographic projection): drag to spin' : PROJ === 'merc' ? 'Map data: Natural Earth · Mercator projection (sizes near the poles look much too big)' : 'Map data: Natural Earth · Gall-Peters projection (true sizes)') : S.map === 'merc' ? 'Map data: Natural Earth · Mercator projection' :
+  const a = S.map === 'world' ? (PROJ === 'pc' ? 'Map data: Natural Earth · Grid map (equal degrees of latitude and longitude)' : PROJ === 'globe' ? 'Map data: Natural Earth · Globe view (orthographic projection): drag to spin' : PROJ === 'merc' ? 'Map data: Natural Earth · Mercator projection (sizes near the poles look much too big)' : 'Map data: Natural Earth · Gall-Peters projection (true sizes)') : S.map === 'merc' ? 'Map data: Natural Earth · Mercator projection' :
     S.map === 'uk' ? 'Contains OS data © Crown copyright and database right 2024 · Source: Office for National Statistics (OGL) · Natural Earth' :
       `© OpenStreetMap contributors · Heights: OS Terrain 50 © Crown copyright · OS-style map, British National Grid square ${cur().L.sq || 'ST'}`;
   $('#attrib').textContent = a + ' · Version ' + VERSION;
@@ -1175,7 +1181,7 @@ function drawMapKey() {
     ${hc.has('phys') ? '' : row('<path d="M0-11L10 8H-10z" fill="#2e7d32" stroke="#fff" stroke-width="2"/>', 'Physical feature')}
     ${hc.has('res') || !visibleItems().some(i => i.res) ? '' : row('<rect x="-7" y="-7" width="14" height="14" rx="3" fill="#795548" stroke="#fff" stroke-width="2"/>', 'Natural resource')}
     ${hc.has('line') ? '' : row('<path d="M-12 0H12" stroke="#8d5524" stroke-width="4" stroke-dasharray="1 5" stroke-linecap="round"/>', 'Mountain range')}
-    ${S.map === 'world' && S.layers.world.biomes ? Object.entries(BIOMES).map(([k, b]) => row(`<rect x="-11" y="-11" width="22" height="22" rx="3" fill="${b.c}" stroke="#999"/>`, b.n)).join('') : ''}
+    ${S.map === 'world' && S.layers.world.biomes ? (S.simpleBiomes ? Object.entries(SIMPLE_NAMES).map(([k, n]) => row(`<rect x="-11" y="-11" width="22" height="22" rx="3" fill="${BIOMES[k].c}" stroke="#999"/>`, n)).join('') : Object.entries(BIOMES).map(([k, b]) => row(`<rect x="-11" y="-11" width="22" height="22" rx="3" fill="${b.c}" stroke="#999"/>`, b.n)).join('')) : ''}
     ${S.map === 'world' && S.layers.world.plates ? row('<path d="M-12 0H12" stroke="#c62828" stroke-width="3"/>', 'Plate boundary') : ''}
     ${S.map === 'world' && S.layers.world.climate ? row('<rect x="-11" y="-11" width="22" height="22" fill="rgba(255,112,67,.45)"/>', 'Tropical zone') + row('<rect x="-11" y="-11" width="22" height="22" fill="rgba(102,187,106,.4)"/>', 'Temperate zone') + row('<rect x="-11" y="-11" width="22" height="22" fill="rgba(66,165,245,.5)"/>', 'Polar zone') : ''}
     ${S.map === 'uk' && S.layers.uk.rivers ? row('<path d="M-12 0H12" stroke="#1e88e5" stroke-width="4"/>', 'River') : ''}
@@ -1196,23 +1202,28 @@ const BIOMES = {
   mountain: { n: 'Mountain grassland', c: '#a1887f', f: 'Mountain grasslands are high, cool and windy places with grasses and shrubs, such as the Andes and the plateau of Tibet.' },
   ice: { n: 'Ice sheet', c: '#f2f8fc', f: 'Ice sheets are land covered in thick ice all year round, like most of Antarctica and Greenland.' },
 };
-let biomeData = null, biomeLoading = false;
+// The six biomes taught in Year 5 (Locations): the finer groups are folded into them
+const SIMPLE_BIOME = { rainforest: 'rainforest', tropdry: 'savanna', savanna: 'savanna', desert: 'desert', med: 'tempforest', tempforest: 'tempforest', taiga: 'tempforest', grassland: 'grassland', mountain: 'grassland', tundra: 'tundra', ice: 'ice' };
+const SIMPLE_NAMES = { rainforest: 'Rainforest', savanna: 'Savanna', desert: 'Desert', tempforest: 'Temperate forest', grassland: 'Grassland', tundra: 'Tundra', ice: 'Ice sheet' };
+const biomeKey = k => S.simpleBiomes ? SIMPLE_BIOME[k] : k;
+const biomeInfo = k => S.simpleBiomes ? Object.assign({}, BIOMES[k], { n: SIMPLE_NAMES[k] }) : BIOMES[k];
+let biomeData = null, biomeLoading = null;
 function loadBiomes(m) {
   const fill = () => {
     const g = m.g.querySelector('#w-biomes');
-    if (g.childElementCount) return;
-    for (const [k, d] of Object.entries(biomeData)) if (BIOMES[k]) E('path', { d: reprojD(d), fill: BIOMES[k].c, stroke: 'none', 'data-biome': k }, g);
+    if (g.childElementCount && g.dataset.simple === String(!!S.simpleBiomes)) return;
+    g.replaceChildren(); g.dataset.simple = String(!!S.simpleBiomes);
+    for (const [k, d] of Object.entries(biomeData)) if (BIOMES[k]) { const kk = biomeKey(k); E('path', { d: reprojD(d), fill: BIOMES[kk].c, stroke: 'none', 'data-biome': kk }, g); }
   };
-  if (biomeData) return fill();
-  if (biomeLoading) return;
-  biomeLoading = true;
-  fetch('biomes.json?v=' + VERSION).then(r => r.json()).then(j => { biomeData = j; fill(); }).catch(() => toast('Could not load the biomes layer')).finally(() => { biomeLoading = false; });
+  if (biomeData) { fill(); return Promise.resolve(); }
+  biomeLoading ||= fetch('biomes.json?v=' + VERSION).then(r => r.json()).then(j => { biomeData = j; fill(); }).catch(() => toast('Could not load the biomes layer'));
+  return biomeLoading;
 }
-function biomeAt(p) {
-  const m = cur(); if (!m || S.map !== 'world' || !S.layers.world.biomes) return null;
+function biomeAt(p, force) {
+  const m = cur(); if (!m || S.map !== 'world' || (!S.layers.world.biomes && !force)) return null;
   const pt = DPt(p.x, p.y);
   const e = [...m.g.querySelectorAll('#w-biomes path')].find(x => x.isPointInFill(pt));
-  return e ? BIOMES[e.dataset.biome] : null;
+  return e ? biomeInfo(e.dataset.biome) : null;
 }
 function legendHTML() {
   const row = (svgInner, t) => `<div style="display:flex;align-items:center;gap:12px;font-weight:800;font-size:calc(18px*var(--fs))"><svg width="34" height="34" viewBox="-17 -17 34 34">${svgInner}</svg>${t}</div>`;
@@ -1630,19 +1641,20 @@ function compassAsk() {
     <div class="row"><button class="btn sec" id="skip">Skip</button></div>`);
   panel.querySelectorAll('.rose button').forEach(btn => btn.onclick = () => compassAnswer(+btn.dataset.d, btn));
   $('#skip').onclick = compassNext;
+  revealButton($('#skip').parentNode, () => panel.querySelector(`.rose button[data-d="${pr.ans}"]`), C);
 }
 function compassAnswer(d, btn) {
   if (C.done) return;
   const { a, b, ans } = C.cur;
   C.done = true;
-  const ok = d === ans;
+  const ok = d === ans && !REVEAL;
   if (ok) C.score++;
   btn.classList.add('sel');
   panel.querySelector(`.rose button[data-d="${ans}"]`).classList.add('right');
   drawArrow(a, b, ok ? '#2e9e4f' : '#e53935');
   const word = DIR8[ans];
   const bn = esc(cap1(theName(b.n))), an = esc(theName(a.n));
-  $('#fbox').innerHTML = ok ? `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>${bn} is <b>${word}</b> of ${an}.</div>${teamAwardHTML()}`
+  $('#fbox').innerHTML = REVEAL ? `<div class="fact"><b>Here is the answer</b>${bn} is <b>${word}</b> of ${an}.</div>` : ok ? `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>${bn} is <b>${word}</b> of ${an}.</div>${teamAwardHTML()}`
     : `<div class="fb bad"><span class="em">${pick(NEARLY)}</span>${bn} is <b>${word}</b> of ${an}. Follow the arrow from A to B.</div>`;
   wireAward($('#fbox'));
   const last = C.n !== Infinity && C.idx + 1 >= C.n;
@@ -1715,7 +1727,7 @@ function gridAsk() {
     // keep the place off-centre so children have to use the grid, not the middle of the screen
     fitBox(p.x - span / 2 + (Math.random() - .5) * span * .3, p.y - span / 2 + (Math.random() - .5) * span * .3, span, span, 1.05);
     setPanel(gridHeader() + `
-      <div class="qcard"><p class="q">What is the ${G.lvl}-figure grid reference of ${p.ours ? 'WFA, our school' : 'the ' + esc(POI_SHORT[p.t])}?</p></div>
+      <div class="qcard"><p class="q">What is the ${G.lvl}-figure grid reference of ${p.ours ? 'WFA, our school' : 'the ' + esc(POI_SHORT[p.t]) + (p.n ? ` (${esc(p.n)})` : '')}?</p><p class="hint" style="margin:0">It is circled on the map.</p></div>
       <div class="refbox" id="refbox"></div>
       <div class="ref-legend"><span class="e">Eastings (along)</span><span class="n">Northings (up)</span></div>
       <div class="keypad" id="pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(n => `<button data-k="${n}">${n}</button>`).join('')}<button data-k="back" class="wide">⌫</button><button data-k="ok" id="check" class="ok" disabled>Check</button></div>
@@ -1914,12 +1926,13 @@ function symbolAsk() {
   wireGridHeader();
   panel.querySelectorAll('[data-o]').forEach(b => b.onclick = () => {
     if (G.done) return; G.done = true;
-    const ok = b.dataset.o === t; if (ok) G.score++;
+    const ok = b.dataset.o === t && !REVEAL; if (ok) G.score++;
     panel.querySelectorAll('[data-o]').forEach(x => x.classList.add(x.dataset.o === t ? 'right' : 'wrong'));
-    $('#fbox').innerHTML = ok ? `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>That symbol means ${POI[t].toLowerCase()}.</div>${teamAwardHTML()}` : `<div class="fb bad"><span class="em">${pick(NEARLY)}</span>That symbol means ${POI[t].toLowerCase()}.</div>`;
+    $('#fbox').innerHTML = REVEAL ? `<div class="fact"><b>Here is the answer</b>That symbol means ${POI[t].toLowerCase()}.</div>` : ok ? `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>That symbol means ${POI[t].toLowerCase()}.</div>${teamAwardHTML()}` : `<div class="fb bad"><span class="em">${pick(NEARLY)}</span>That symbol means ${POI[t].toLowerCase()}.</div>`;
     wireAward($('#fbox'));
     const last = G.n !== Infinity && G.idx + 1 >= G.n; const s = $('#skip'); s.textContent = last ? 'Finish' : 'Next ➜'; s.className = 'btn';
   });
+  revealButton($('#skip').parentNode, () => panel.querySelector(`[data-o="${t}"]`), G);
   $('#skip').onclick = gridNext;
 }
 
@@ -1937,7 +1950,7 @@ function choiceButtons(opts, fmt) { return `<div class="answers" id="answers">${
 function finishChoice(ok, rightIdx, html) {
   G.done = true; if (ok && G.tries === 0) G.score++;
   panel.querySelectorAll('#answers [data-o]').forEach(x => x.classList.add(+x.dataset.o === rightIdx ? 'right' : 'wrong'));
-  $('#fbox').innerHTML = (ok ? `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>${html}</div>${teamAwardHTML()}` : `<div class="fb bad"><span class="em">${pick(NEARLY)}</span>${html}</div>`);
+  $('#fbox').innerHTML = REVEAL ? `<div class="fact"><b>Here is the answer</b>${html}</div>` : (ok ? `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>${html}</div>${teamAwardHTML()}` : `<div class="fb bad"><span class="em">${pick(NEARLY)}</span>${html}</div>`);
   wireAward($('#fbox'));
   const s = $('#skip'), last = G.n !== Infinity && G.idx + 1 >= G.n; s.textContent = last ? 'Finish' : 'Next ➜'; s.className = 'btn';
   scrollEnd();
@@ -1969,13 +1982,14 @@ function distanceAsk() {
     <div class="row"><button class="btn sec" id="skip">Skip</button></div>`);
   wireGridHeader();
   $('#skip').onclick = gridNext;
+  revealButton($('#skip').parentNode, () => panel.querySelector(`#answers [data-o="${opts.indexOf(ans)}"]`), G);
   panel.querySelectorAll('#answers [data-o]').forEach(btn => btn.onclick = () => {
     if (G.done) return;
     const v = opts[+btn.dataset.o], ok = v === ans;
     const g = E('g', { class: 'hlx' }, ov);
     E('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: '#111', 'stroke-width': 4, 'stroke-dasharray': '10 6', 'vector-effect': 'non-scaling-stroke' }, g);
     E('text', { 'text-anchor': 'middle', y: -10, 'font-size': 22, 'font-weight': 900, class: 'lbl' }, cs(g, (a.x + b.x) / 2, (a.y + b.y) / 2)).textContent = 'about ' + fmtDist(ans);
-    finishChoice(ok, opts.indexOf(ans), `It is about <b>${fmtDist(ans)}</b> from A to B${d >= 1000 ? ` — that is about ${(d / 1000).toFixed(1)} grid squares` : ''}.`);
+    finishChoice(ok && !REVEAL, opts.indexOf(ans), `It is about <b>${fmtDist(ans)}</b> from A to B${d >= 1000 ? ` — that is about ${(d / 1000).toFixed(1)} grid squares` : ''}.`);
   });
 }
 function contourIndex(m) {
@@ -2025,6 +2039,7 @@ function heightAsk() {
     <div class="row"><button class="btn sec" id="skip">Skip</button></div>`);
   wireGridHeader();
   $('#skip').onclick = gridNext;
+  revealButton($('#skip').parentNode, () => panel.querySelector(`#answers [data-o="${ansIdx}"]`), G);
   panel.querySelectorAll('#answers [data-o]').forEach(btn => btn.onclick = () => {
     if (G.done) return;
     const ok = +btn.dataset.o === ansIdx;
@@ -2034,17 +2049,18 @@ function heightAsk() {
       for (const L of c.lines) E('path', { d: 'M' + L.map(p => p.join(' ')).join('L'), fill: 'none', stroke: '#ff6f00', 'stroke-width': 5, 'vector-effect': 'non-scaling-stroke', class: 'blink' }, g);
       E('text', { x: 24, y: -16, 'font-size': 22, 'font-weight': 900, fill: '#a5571c', class: 'lbl' }, cs(g, P.x, P.y)).textContent = P.h + ' m';
     }
-    finishChoice(ok, ansIdx, kind === 'which' ? `A is on the ${A.h} m contour and B is on the ${B.h} m contour, so <b>${A.h > B.h ? 'A' : 'B'}</b> is higher.` : `Point A is on the <b>${A.h} m</b> contour line.`);
+    finishChoice(ok && !REVEAL, ansIdx, kind === 'which' ? `A is on the ${A.h} m contour and B is on the ${B.h} m contour, so <b>${A.h > B.h ? 'A' : 'B'}</b> is higher.` : `Point A is on the <b>${A.h} m</b> contour line.`);
   });
 }
 
 /* ------------------------------------------------------------ LAT & LONG: read, plot, time zones, true size */
 let GL = null;
-const GLOBE_TASKS = { read: 'Read latitude and longitude', plot: 'Plot latitude and longitude', time: 'Time zones', size: 'True size of countries' };
-const GLOBE_YEARS = { read: 'Years 3-6', plot: 'Years 4-6', time: 'Years 3-6', size: 'Year 5' };
+const GLOBE_TASKS = { read: 'Read latitude and longitude', plot: 'Plot latitude and longitude', mycity: 'Where in the world is…? (my city)', time: 'Time zones', size: 'True size of countries' };
+const GLOBE_YEARS = { read: 'Years 3-6', plot: 'Years 4-6', mycity: 'Year 5 Locations', time: 'Years 3-6', size: 'Year 5' };
 const deg = (v, pos, neg) => v === 0 ? '0°' : Math.abs(v) + '°' + (v > 0 ? pos : neg);
 const fmtLL = (la, lo) => `${deg(la, 'N', 'S')}, ${deg(lo, 'E', 'W')}`;
-const r10 = v => Math.round(v / 10) * 10;
+const llStep = () => S.llRound === 1 ? 1 : 10;            // nearest 10° (default) or nearest degree
+const r10 = v => Math.round(v / llStep()) * llStep();
 function globePlaces() {
   const out = D.world.caps.map(([n, c, lat, lon]) => ({ n, c, lat, lon }));
   for (const it of ITEMS) if (it.m === 'world' && it.k === 'point' && !it.phys && !out.some(o => o.n === it.n)) out.push({ n: it.n, c: '', lat: it.ll[0], lon: it.ll[1] });
@@ -2052,15 +2068,19 @@ function globePlaces() {
 }
 function globeHeader() {
   const pr = GL ? `<span style="float:right;text-transform:none">${GL.n === Infinity ? 'Q' + (GL.idx + 1) : (GL.idx + 1) + ' of ' + GL.n} · ⭐ ${GL.score}</span>` : '';
-  return `<p class="ptitle">Latitude and longitude${pr}</p><div class="chips"><button class="chip on" id="gtaskPick">${GLOBE_TASKS[S.globeTask]} ▾</button></div>`;
+  return `<p class="ptitle">Latitude and longitude${pr}</p><div class="chips"><button class="chip on" id="gtaskPick">${GLOBE_TASKS[S.globeTask]} ▾</button>${['read', 'plot'].includes(S.globeTask) ? `<button class="chip on" id="roundPick">Nearest ${llStep()}° ▾</button>` : ''}</div>`;
 }
 function wireGlobeHeader() {
+  const rp = $('#roundPick');
+  if (rp) rp.onclick = e => openPop(e.currentTarget, `<h3>Round to the nearest</h3><button class="opt ${llStep() === 10 ? 'on' : ''}" data-rd="10">10 degrees<small>Years 3-4</small></button><button class="opt ${llStep() === 1 ? 'on' : ''}" data-rd="1">1 degree<small>Year 5 city cards</small></button>`,
+    p => p.querySelectorAll('[data-rd]').forEach(b => b.onclick = () => { closePop(); S.llRound = +b.dataset.rd; save(); startMode(); }));
   $('#gtaskPick').onclick = e => openPop(e.currentTarget, `<h3>Activity</h3>${Object.entries(GLOBE_TASKS).map(([k, t]) => `<button class="opt ${S.globeTask === k ? 'on' : ''}" data-gt="${k}">${t}<small>${GLOBE_YEARS[k]}</small></button>`).join('')}`,
     p => p.querySelectorAll('[data-gt]').forEach(b => b.onclick = () => { closePop(); S.globeTask = b.dataset.gt; save(); startMode(); }));
 }
 function globeStart() {
   ov.replaceChildren(); clearHL();
   if (S.globeTask === 'size') return sizeStart();
+  if (S.globeTask === 'mycity') return myCityStart();
   if (S.map !== 'world') showMap('world');
   restyle(); refreshDyn();
   const all = globePlaces();
@@ -2069,7 +2089,7 @@ function globeStart() {
     const m = cur();
     pool = all.map(p => { const q = rob(p.lon, p.lat), pt = DPt(q.x, q.y); const z = m.tzPaths.find(e => e.isPointInFill(pt)); return Object.assign({ z: z ? +z.dataset.z : null }, p); })
       .filter(p => p.z !== null && Number.isInteger(p.z) && p.n !== 'London');
-  } else pool = all.filter(p => Math.abs(p.lat - r10(p.lat)) <= 3 && Math.abs(p.lon - r10(p.lon)) <= 3 && Math.abs(p.lat) < 75 && Math.abs(r10(p.lon)) < 180);
+  } else pool = all.filter(p => (llStep() === 1 || (Math.abs(p.lat - r10(p.lat)) <= 3 && Math.abs(p.lon - r10(p.lon)) <= 3)) && Math.abs(p.lat) < 75 && Math.abs(r10(p.lon)) < 180);
   let order = shuffle(pool);
   if (S.globeTask === 'time') {                // spread questions across many time zones, not just Europe
     const byZ = {}; for (const p of order) (byZ[p.z] ||= []).push(p);
@@ -2086,7 +2106,7 @@ function globeNext() {
 }
 function globeFinish(ok, html) {
   GL.done = true; if (ok && GL.tries === 0) GL.score++;
-  $('#fbox').innerHTML = ok ? `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>${html}</div>${teamAwardHTML()}` : `<div class="fb bad"><span class="em">${pick(NEARLY)}</span>${html}</div>`;
+  $('#fbox').innerHTML = REVEAL ? `<div class="fact"><b>Here is the answer</b>${html}</div>` : ok ? `<div class="fb good"><span class="em">${pick(PRAISE)} ✅</span>${html}</div>${teamAwardHTML()}` : `<div class="fb bad"><span class="em">${pick(NEARLY)}</span>${html}</div>`;
   wireAward($('#fbox'));
   const s = $('#skip'), last = GL.n !== Infinity && GL.idx + 1 >= GL.n; s.textContent = last ? 'Finish' : 'Next ➜'; s.className = 'btn';
   scrollEnd();
@@ -2115,12 +2135,13 @@ function globeAsk() {
     globeMark(p, p.n);
     const c = [la, lo], cand = [];
     if (la) cand.push([-la, lo]); if (lo) cand.push([la, -lo]);
-    cand.push([la + 10, lo], [la - 10, lo], [la, lo + 10], [la, lo - 10], [la + 20, lo - 10]);
+    const st = llStep() === 1 ? 3 : 10;
+    cand.push([la + st, lo], [la - st, lo], [la, lo + st], [la, lo - st], [la + 2 * st, lo - st]);
     if (Math.abs(lo) <= 80 && lo !== la) cand.push([lo, la]);
     const seen = new Set([c.join()]), opts = [c];
     for (const o of shuffle(cand)) { if (Math.abs(o[0]) > 80 || Math.abs(o[1]) > 180 || seen.has(o.join())) continue; seen.add(o.join()); opts.push(o); if (opts.length === 4) break; }
     shuffle(opts);
-    setPanel(globeHeader() + `<div class="qcard"><p class="q">What are the latitude and longitude of <b>${esc(placeName(p))}</b>?</p><p class="hint" style="margin:0">To the nearest 10°. Latitude (north or south of the Equator) comes first.</p></div>
+    setPanel(globeHeader() + `<div class="qcard"><p class="q">What are the latitude and longitude of <b>${esc(placeName(p))}</b>?</p><p class="hint" style="margin:0">To the nearest ${llStep() === 1 ? 'degree' : '10°'}. Latitude (north or south of the Equator) comes first.</p></div>
       <div class="answers" id="answers">${opts.map((o, i) => `<button class="btn sec" data-o="${i}">${fmtLL(o[0], o[1])}</button>`).join('')}</div><div id="fbox"></div>
       <div class="row"><button class="btn sec" id="skip">Skip</button></div>`);
     wireGlobeHeader(); $('#skip').onclick = globeNext;
@@ -2129,8 +2150,9 @@ function globeAsk() {
       if (GL.done) return;
       panel.querySelectorAll('#answers [data-o]').forEach(x => x.classList.add(+x.dataset.o === right ? 'right' : 'wrong'));
       llGuides(la, lo);
-      globeFinish(+btn.dataset.o === right, `${esc(p.n)} is at about <b>${fmtLL(la, lo)}</b>: ${la ? Math.abs(la) + '° ' + (la > 0 ? 'north' : 'south') + ' of the Equator' : 'on the Equator'} and ${lo ? Math.abs(lo) + '° ' + (lo > 0 ? 'east' : 'west') + ' of the Prime Meridian' : 'on the Prime Meridian'}.`);
+      globeFinish(+btn.dataset.o === right && !REVEAL, `${esc(p.n)} is at about <b>${fmtLL(la, lo)}</b>: ${la ? Math.abs(la) + '° ' + (la > 0 ? 'north' : 'south') + ' of the Equator' : 'on the Equator'} and ${lo ? Math.abs(lo) + '° ' + (lo > 0 ? 'east' : 'west') + ' of the Prime Meridian' : 'on the Prime Meridian'}.`);
     });
+    revealButton($('#skip').parentNode, () => panel.querySelector(`#answers [data-o="${right}"]`), GL);
   } else {
     setPanel(globeHeader() + `<div class="qcard"><p class="q">Put a pin at</p><div class="big" style="font-size:calc(46px*var(--fs))">${fmtLL(la, lo)}</div><p class="hint" style="margin:0">Find the latitude line first, then the longitude line. Tap where they cross.</p></div>
       <div id="fbox"></div><div class="row"><button class="btn go" id="check" disabled>Check</button></div>
@@ -2147,12 +2169,13 @@ function plotCheck() {
   const ll = robInv(GL.pin.x, GL.pin.y), [la, lo] = GL.ans;
   const dLa = ll.lat - la, dLo = ((ll.lon - lo + 540) % 360) - 180;
   GL.tries++;
-  if (Math.abs(dLa) <= 5 && Math.abs(dLo) <= 5) {
+  const tolDeg = llStep() === 1 ? 2.5 : 5;
+  if (Math.abs(dLa) <= tolDeg && Math.abs(dLo) <= tolDeg) {
     GL.tries--; $('#check').style.display = 'none'; $('#showme').style.display = 'none';
     llGuides(la, lo); globeMark(GL.p, GL.p.n);
     return globeFinish(true, `${fmtLL(la, lo)} is near <b>${esc(placeName(GL.p))}</b>.`);
   }
-  const ns = Math.abs(dLa) > 5 ? (dLa > 0 ? 'south' : 'north') : '', ew = Math.abs(dLo) > 5 ? (dLo > 0 ? 'west' : 'east') : '';
+  const ns = Math.abs(dLa) > tolDeg ? (dLa > 0 ? 'south' : 'north') : '', ew = Math.abs(dLo) > tolDeg ? (dLo > 0 ? 'west' : 'east') : '';
   $('#fbox').innerHTML = `<div class="fb bad"><span class="em">${pick(NEARLY)}</span>Your pin is at about ${fmtLL(r10(ll.lat), r10(ll.lon))}. Move it further ${[ns, ew].filter(Boolean).join(' and ')}.</div>`;
   $('#check').disabled = true;
   if (GL.tries >= 3) plotReveal();
@@ -2185,8 +2208,85 @@ function timeAsk(p) {
     cur().tzPaths.filter(e => +e.dataset.z === z).forEach(e => { const c = e.cloneNode(); c.setAttribute('fill', 'rgba(255,193,7,.45)'); c.setAttribute('class', 'hlx'); ov.appendChild(c); });
     const how = z === 0 ? `${esc(p.n)} is in the same time zone as London, so it is <b>${fmtHour(t)}</b> there too.`
       : `${esc(p.n)} is in time zone GMT${z > 0 ? '+' + z : '−' + -z}, so it is ${Math.abs(z)} hour${Math.abs(z) > 1 ? 's' : ''} ${z > 0 ? 'ahead of' : 'behind'} London. ${fmtHour(base)} ${z > 0 ? '+' : '−'} ${Math.abs(z)} hours = <b>${fmtHour(t)}${day}</b>.`;
-    globeFinish(+btn.dataset.o === right, how + '<br><small>We are using standard time. In summer, some countries move their clocks forward.</small>');
+    globeFinish(+btn.dataset.o === right && !REVEAL, how + '<br><small>We are using standard time. In summer, some countries move their clocks forward.</small>');
   });
+  revealButton($('#skip').parentNode, () => panel.querySelector(`#answers [data-o="${right}"]`), GL);
+}
+
+/* --- "Where in the world is…?" self-check for the Year 5 Locations infographic.
+   Rules match the lessons: coordinates rounded to the nearest degree; direction measured from Bristol
+   (51.45°N, 2.58°W) on an equal-degree map; tropical up to 23° (23° counts), temperate to 66°, polar beyond. */
+const BRISTOL_LL = { lat: 51.45, lon: -2.58 };
+const MY_CITIES = [
+  ['london-w', 'London', 'United Kingdom', 'Europe'], ['moscow', 'Moscow', 'Russia', 'Europe'], ['mumbai', 'Mumbai', 'India', 'Asia'],
+  ['newyork', 'New York', 'United States', 'North America'], ['paris', 'Paris', 'France', 'Europe'], ['rio', 'Rio de Janeiro', 'Brazil', 'South America'],
+  ['singapore', 'Singapore', 'Singapore', 'Asia'], ['sydney', 'Sydney', 'Australia', 'Oceania'], ['tokyo', 'Tokyo', 'Japan', 'Asia'],
+  ['nairobi', 'Nairobi', 'Kenya', 'Africa'],
+];
+function climateZone(lat) { const a = Math.abs(lat); return a <= 23 ? 'Tropical' : a <= 66 ? 'Temperate' : 'Polar'; }
+function directionFrom(a, b) {                 // 8-point direction on an equal-degree map, plus "near halfway?"
+  const br = (Math.atan2(b.lon - a.lon, b.lat - a.lat) * 180 / Math.PI + 360) % 360;
+  const k = Math.round(br / 45) % 8, d = ((br - k * 45) + 540) % 360 - 180, off = Math.abs(d);
+  const other = d > 0 ? (k + 1) % 8 : (k + 7) % 8;
+  return { main: DIR8[k], near: 22.5 - off < 8 ? DIR8[other] : null };
+}
+function myCityStart() {
+  if (S.map !== 'world') showMap('world');
+  ov.replaceChildren(); clearHL(); GL = null;
+  setPanel(globeHeader() + `<div class="qcard"><p class="q">Choose your city to check your infographic.</p><p class="hint" style="margin:0">The map shows where it is, the line from Bristol, its compass direction and its climate zone.</p></div>
+    <div class="chips">${MY_CITIES.map(([id, n]) => `<button class="chip" data-city="${id}">${n}</button>`).join('')}</div>
+    ${PROJ !== 'pc' ? '<button class="btn sec" id="toGrid">📐 Use the grid map, like in our lessons</button>' : ''}
+    <div id="fbox"></div>`);
+  wireGlobeHeader();
+  const tg = $('#toGrid'); if (tg) tg.onclick = () => { setProj('pc'); S.mode = 'globe'; S.globeTask = 'mycity'; startMode(); };
+  panel.querySelectorAll('[data-city]').forEach(b => b.onclick = () => { panel.querySelectorAll('[data-city]').forEach(x => x.classList.toggle('on', x === b)); myCityShow(b.dataset.city); });
+}
+async function myCityShow(id) {
+  const [, n, country, cont] = MY_CITIES.find(c => c[0] === id), it = byId[id];
+  const lat = Math.round(it.ll[0]), lon = Math.round(it.ll[1]);
+  if (PROJ === 'globe') centreOn((lon + BRISTOL_LL.lon) / 2, (lat + BRISTOL_LL.lat) / 2);
+  ov.replaceChildren();
+  const g = E('g', { class: 'hlx' }, ov);
+  const pts = []; for (let i = 0; i <= 60; i++) pts.push([BRISTOL_LL.lon + (lon - BRISTOL_LL.lon) * i / 60, BRISTOL_LL.lat + (lat - BRISTOL_LL.lat) * i / 60]);
+  E('path', { d: llPath(pts), fill: 'none', stroke: '#e53935', 'stroke-width': 4, 'stroke-dasharray': '12 7', 'vector-effect': 'non-scaling-stroke' }, g);
+  const b = rob(BRISTOL_LL.lon, BRISTOL_LL.lat), c = rob(lon, lat);
+  const mk = (q, t, col) => { const gg = cs(g, q.x, q.y); E('circle', { class: 'pulse', r: 14 }, gg); E('circle', { r: 10, fill: col, stroke: '#fff', 'stroke-width': 3 }, gg); E('text', { x: 16, y: 6, 'font-size': 19, class: 'lbl' }, gg).textContent = t; };
+  if (!b.back) mk(b, 'Bristol', '#1565c0');
+  if (!c.back) mk(c, n, '#e53935');
+  const x0 = Math.min(b.x, c.x), y0 = Math.min(b.y, c.y), w = Math.abs(b.x - c.x), h = Math.abs(b.y - c.y);
+  if (PROJ !== 'globe') fitBox(x0 - 200, y0 - 200, w + 400, h + 400, 1.25);
+  const dir = directionFrom(BRISTOL_LL, { lat, lon });
+  const hemi = (lat === 0 ? 'On the Equator' : lat > 0 ? 'Northern' : 'Southern') + ', ' + (lon === 0 ? 'on the Prime Meridian' : lon > 0 ? 'Eastern' : 'Western');
+  await loadBiomes(cur());
+  const prev = S.simpleBiomes; S.simpleBiomes = true; loadBiomes(cur());
+  const bio = biomeAt(rob(it.ll[1], it.ll[0]), true); S.simpleBiomes = prev; loadBiomes(cur());
+  const code = Object.keys(D.world.countries).find(k => D.world.countries[k].n === country || (country === 'United States' && k === 'USA'));
+  $('#fbox').innerHTML = `<div class="info">${code ? flagImg(D.world.countries[code].f, 60, 'Flag of ' + country) : ''}<h2>${esc(n)}</h2><div class="sub">${esc(country)} · ${esc(cont)}</div>
+    <dl><dt>Latitude and longitude (nearest degree)</dt><dd style="font-size:28px">${fmtLL(lat, lon)}</dd>
+    <dt>Hemispheres</dt><dd>${hemi}</dd>
+    <dt>Direction from Bristol</dt><dd style="font-size:26px">${cap1(dir.main)}</dd>
+    ${dir.near ? `<dd class="hint">It is close to halfway, so <b>${dir.near}</b> is fine too.</dd>` : ''}
+    <dt>Climate zone</dt><dd>${climateZone(lat)}</dd>
+    ${bio ? `<dt>Biome</dt><dd>${esc(bio.n)}</dd>` : ''}</dl></div>
+    <p class="hint">Use this to check your infographic. It is not the answers: you still explain why!</p>
+    <button class="btn sec" id="printCity">🖨️ Print this view</button>`;
+  $('#printCity').onclick = printSheet;
+  scrollEnd();
+}
+
+/* --- teacher tools: pause the board for discussion */
+function setPause(on) {
+  let el = $('#pauseVeil');
+  if (!on) { if (el) el.remove(); return; }
+  el = H(`<div id="pauseVeil"><div class="pbox"><div style="font-size:64px">⏸</div><b>Paused</b><p>Talk to your partner about it.</p><button class="btn" id="resumeBtn">▶ Carry on</button></div></div>`);
+  document.body.appendChild(el);
+  $('#resumeBtn').onclick = () => setPause(false);
+}
+let REVEAL = false;                           // set while a teacher reveals an answer without scoring it
+function revealButton(where, rightBtn, state) {
+  const b = H('<button class="btn sec" id="revealBtn">👁 Reveal the answer</button>');
+  where.after(b);
+  b.onclick = () => { if (state.done) return; REVEAL = true; state.tries = 1; rightBtn().click(); REVEAL = false; b.remove(); };
 }
 
 /* --- true size: a Mercator map with a shape you can drag towards or away from the Equator */
@@ -2317,7 +2417,12 @@ function printSheet() {
   clone.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   const div = document.createElement('div'); div.id = 'print';
   div.innerHTML = `<div class="ph"><img src="../logo.png" alt=""><div><h1>${esc(title)}</h1><p>Name: ________________________ &nbsp; Date: ______________</p></div></div>`;
-  div.appendChild(clone);
+  if (strokes.length) {                       // pen drawings go on the printed map too
+    const wrap = document.createElement('div'); wrap.style.cssText = `position:relative;width:${w}mm;height:${h}mm;margin:4mm auto`;
+    clone.style.margin = '0'; wrap.appendChild(clone);
+    const img = new Image(); img.src = ink.toDataURL('image/png'); img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
+    wrap.appendChild(img); div.appendChild(wrap);
+  } else div.appendChild(clone);
   div.insertAdjacentHTML('beforeend', `<ol class="pq">${qs.map(q => q.startsWith('<div') ? q : `<li>${q}</li>`).join('')}</ol>
     <div class="pa"><h2>Answers</h2><ul>${ans.map(a => `<li>${esc(a)}</li>`).join('')}</ul><p class="pf">Map Explorer · Wallscourt Farm Academy · Version ${VERSION}</p></div>`);
   document.body.appendChild(div);
@@ -2489,12 +2594,12 @@ $('#mapBtn').onclick = e => openPop(e.currentTarget, `<h3>Choose a map</h3>
 p => p.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { closePop(); showMap(b.dataset.m); startMode(); }));
 $('#layerBtn').onclick = e => {
   const key = mapKind(), L = S.layers[key];
-  const opts = key === 'world' ? [['names', 'Names'], ['colour', 'Colour the continents'], ['lines', 'Equator, tropics and polar circles'], ['grid', 'Lines of latitude and longitude'], ['tz', 'Time zones'], ['biomes', 'Biomes (rainforest, desert, tundra…)'], ['climate', 'Climate zones (tropical, temperate, polar)'], ['plates', 'Tectonic plate boundaries']]
+  const opts = key === 'world' ? [['names', 'Names'], ['colour', 'Colour the continents'], ['lines', 'Equator, tropics and polar circles'], ['grid', 'Lines of latitude and longitude'], ['tz', 'Time zones'], ['biomes', 'Biomes (rainforest, desert, tundra…)'], ['simpleBiomes', 'Just the six biomes taught in Year 5'], ['climate', 'Climate zones (tropical, temperate, polar)'], ['plates', 'Tectonic plate boundaries']]
     : key === 'uk' ? [['names', 'Names'], ['rivers', 'Rivers and canals'], ['regions', 'Regions of England'], ['counties', 'Counties of England']]
       : [['names', 'Place names and labels'], ['symbols', 'Map symbols'], ['contours', 'Contour lines (height)'], ['tenths', '100 m grid lines (for 6-figure references, when zoomed in)'], ['tenthNums', 'Tenths numbers (0–9) along the edges']];
-  openPop(e.currentTarget, `<h3>Show on the map</h3>${opts.map(([k, t]) => `<label class="tog"><input type="checkbox" data-l="${k}" ${L[k] ? 'checked' : ''}>${t}</label>`).join('')}${key === 'local' ? '<button class="opt" id="popKey">🔑 Map key</button>' : ''}`,
+  openPop(e.currentTarget, `<h3>Show on the map</h3>${opts.map(([k, t]) => `<label class="tog"><input type="checkbox" data-l="${k}" ${(k === 'simpleBiomes' ? S.simpleBiomes : L[k]) ? 'checked' : ''}>${t}</label>`).join('')}${key === 'local' ? '<button class="opt" id="popKey">🔑 Map key</button>' : ''}`,
     p => {
-      p.querySelectorAll('[data-l]').forEach(c => c.onchange = () => { L[c.dataset.l] = c.checked; save(); restyle(); refreshDyn(); onViewChange(); drawMapKey(); });
+      p.querySelectorAll('[data-l]').forEach(c => c.onchange = () => { if (c.dataset.l === 'simpleBiomes') S.simpleBiomes = c.checked; else L[c.dataset.l] = c.checked; save(); restyle(); refreshDyn(); onViewChange(); drawMapKey(); });
       const k = p.querySelector('#popKey'); if (k) k.onclick = () => { closePop(); showKey(); };
     });
   const r = e.currentTarget.getBoundingClientRect(), pp = $('#pop'); pp.style.left = (r.right - pp.offsetWidth) + 'px';
@@ -2539,6 +2644,7 @@ $('#projBtn').onclick = e => {
     <button class="opt ${PROJ === 'gp' ? 'on' : ''}" data-proj="gp">🌍 Gall-Peters<small>true sizes</small></button>
     <button class="opt ${PROJ === 'merc' ? 'on' : ''}" data-proj="merc">🗺️ Mercator<small>like online maps</small></button>
     <button class="opt ${PROJ === 'globe' ? 'on' : ''}" data-proj="globe">🌐 Globe<small>drag to spin</small></button>
+    <button class="opt ${PROJ === 'pc' ? 'on' : ''}" data-proj="pc">📐 Grid map<small>equal degrees, for compass work</small></button>
     <p style="margin:4px 0 0;font-size:15px;font-weight:700;color:#4a6577;max-width:420px">A globe is the only map with nothing stretched, but you can only see half the Earth at once. Gall-Peters shows every country at its true size, but stretches their shapes. Mercator keeps shapes but makes places near the poles look much too big: Greenland looks as big as Africa, but Africa is about 14 times bigger.</p>`,
   p => p.querySelectorAll('[data-proj]').forEach(b => b.onclick = () => { closePop(); setProj(b.dataset.proj); }));
   const r = e.currentTarget.getBoundingClientRect(), pp = $('#pop'); pp.style.left = Math.max(10, r.right - pp.offsetWidth) + 'px';
@@ -2547,6 +2653,9 @@ $('#setBtn').onclick = () => openModal(`<h2>Settings</h2>
   <div class="setrow"><span>Questions in a set</span><div class="chips">${[5, 10, 15, 20, 0].map(n => `<button class="chip ${S.count === n ? 'on' : ''}" data-c="${n}">${n || '∞'}</button>`).join('')}</div></div>
   <div class="setrow"><span>Include earlier years as revision</span><div class="chips"><button class="chip ${S.revision ? 'on' : ''}" data-rev="1">Yes</button><button class="chip ${!S.revision ? 'on' : ''}" data-rev="0">No</button></div></div>
   <div class="setrow"><span>Zoom to the right area for each question</span><div class="chips"><button class="chip ${S.autoZoom ? 'on' : ''}" data-az="1">Yes</button><button class="chip ${!S.autoZoom ? 'on' : ''}" data-az="0">No</button></div></div>
+  <div class="setrow"><span>Large labels on the map</span><div class="chips"><button class="chip ${S.bigLabels ? 'on' : ''}" data-bl="1">Yes</button><button class="chip ${!S.bigLabels ? 'on' : ''}" data-bl="0">No</button></div></div>
+  <div class="setrow"><span>Link to this exact view<br><small style="font-weight:700;color:#4a6577">for a slide or QR code</small></span><div class="chips"><button class="chip" id="copyLink">🔗 Copy link</button></div></div>
+  <div id="linkOut" style="font-size:14px;word-break:break-all;color:#0f6e9c;font-weight:700"></div>
   <div class="setrow"><span>Extra-large text</span><div class="chips"><button class="chip ${S.big ? 'on' : ''}" data-big="1">Yes</button><button class="chip ${!S.big ? 'on' : ''}" data-big="0">No</button></div></div>
   <div class="setrow"><span>Grid references</span><div class="chips">${[[0, 'By year'], [4, '4-figure'], [6, '6-figure']].map(([v, t]) => `<button class="chip ${S.gridLevel === v ? 'on' : ''}" data-gl="${v}">${t}</button>`).join('')}</div></div>
   <p style="margin-top:18px;font-size:15px">Map Explorer · Version ${VERSION}. No pupil information is stored. Settings are saved on this computer only.<br>
@@ -2558,6 +2667,11 @@ $('#setBtn').onclick = () => openModal(`<h2>Settings</h2>
   grp('data-az', v => S.autoZoom = v === '1');
   grp('data-big', v => { S.big = v === '1'; document.body.classList.toggle('big', S.big); });
   grp('data-gl', v => S.gridLevel = +v);
+  grp('data-bl', v => { S.bigLabels = v === '1'; svg.classList.toggle('biglabels', S.bigLabels); declutter(); });
+  b.querySelector('#copyLink').onclick = () => {
+    const url = viewLink(); b.querySelector('#linkOut').textContent = url;
+    try { navigator.clipboard.writeText(url).then(() => toast('Link copied')); } catch (e) { /* shown below instead */ }
+  };
   b.querySelector('#closeSet').onclick = () => { closeModal(); startMode(); };
 });
 
@@ -2634,9 +2748,68 @@ ink.addEventListener('wheel', e => { if (tool === 'spot') { e.preventDefault(); 
 /* ------------------------------------------------------------ panel toggle */
 $('#panelToggle').onclick = () => { S.panelOpen = !S.panelOpen; save(); $('#panel').classList.toggle('closed', !S.panelOpen); setTimeout(resize, 220); };
 
+/* ------------------------------------------------------------ links: open the same view on every device
+   e.g. ?year=5&mode=latlong&task=read&round=1&map=world&proj=grid&layers=grid,lines&place=Nairobi
+   See LINKS.md for every option. */
+const MODE_ALIAS = { explore: 'explore', find: 'find', os: 'grid', grid: 'grid', compass: 'compass', latlong: 'globe', globe: 'globe' };
+const MAP_ALIAS = { world: 'world', uk: 'uk', wfa: 'local:school', school: 'local:school', gorge: 'local:gorge', bristol: 'local:gorge', penyfan: 'local:penyfan', london: 'local:london' };
+const PROJ_ALIAS = { gp: 'gp', gallpeters: 'gp', merc: 'merc', mercator: 'merc', globe: 'globe', grid: 'pc', pc: 'pc' };
+const LAYER_ALIAS = {
+  grid: ['world', 'grid'], latlong: ['world', 'grid'], lines: ['world', 'lines'], tropics: ['world', 'lines'], zones: ['world', 'climate'], climate: ['world', 'climate'],
+  biomes: ['world', 'biomes'], timezones: ['world', 'tz'], tz: ['world', 'tz'], plates: ['world', 'plates'], colour: ['world', 'colour'],
+  counties: ['uk', 'counties'], regions: ['uk', 'regions'], rivers: ['uk', 'rivers'], contours: ['local', 'contours'], symbols: ['local', 'symbols'],
+  names: ['*', 'names'], places: ['*', 'markers'],
+};
+function applyLink() {
+  const P = new URLSearchParams(location.search);
+  if (![...P.keys()].some(k => k !== 'v')) return null;
+  if (P.get('preset') === 'locations') {         // Year 5 Locations enquiry
+    S.year = 5; S.revision = false; S.simpleBiomes = true; S.llRound = 1;
+    Object.assign(S.layers.world, { grid: true, lines: true, names: true, markers: true });
+  }
+  const y = P.get('year'); if (y) S.year = y === 'all' ? 0 : clamp(+y || 5, 1, 6);
+  const md = MODE_ALIAS[P.get('mode')]; if (md) S.mode = md;
+  const mp = MAP_ALIAS[P.get('map')]; if (mp) S.map = mp;
+  const t = P.get('task');
+  if (t && S.mode === 'grid' && GRID_TASKS[t]) S.gridTask = t;
+  if (t && S.mode === 'globe' && GLOBE_TASKS[t]) S.globeTask = t;
+  if (P.get('level')) S.gridLevel = +P.get('level') === 4 ? 4 : 6;
+  const tn = P.get('tenths'); if (TENTHS[tn]) { S.layers.local.tenths = tn !== 'none'; S.layers.local.tenthNums = tn === 'all'; }
+  if (P.get('round')) S.llRound = +P.get('round') === 1 ? 1 : 10;
+  if (P.get('count')) S.count = +P.get('count') || 0;
+  if (P.get('biomes6')) S.simpleBiomes = P.get('biomes6') !== '0';
+  if (P.get('labels') === 'big') S.bigLabels = true;
+  for (const [key, val] of [['layers', true], ['hide', false]]) for (const l of (P.get(key) || '').split(',').filter(Boolean)) {
+    const a = LAYER_ALIAS[l.trim().toLowerCase()]; if (!a) continue;
+    for (const g of a[0] === '*' ? ['world', 'uk', 'local'] : [a[0]]) S.layers[g][a[1]] = val;
+  }
+  if (S.year === null) S.year = 0;
+  save();
+  return { proj: PROJ_ALIAS[(P.get('proj') || '').replace(/[^a-z]/gi, '').toLowerCase()], place: P.get('place'), view: P.get('view'), city: P.get('city') };
+}
+function viewLink() {                          // a link that reopens exactly this view
+  const P = new URLSearchParams();
+  P.set('year', S.year ? S.year : 'all');
+  P.set('mode', { explore: 'explore', find: 'find', grid: 'os', compass: 'compass', globe: 'latlong' }[S.mode]);
+  if (S.mode === 'grid') P.set('task', S.gridTask);
+  if (S.mode === 'globe') P.set('task', S.globeTask);
+  const mp = Object.entries(MAP_ALIAS).find(([, v]) => v === (S.map === 'merc' ? 'world' : S.map)); P.set('map', mp ? mp[0] : 'world');
+  if (S.map === 'world' && PROJ !== 'gp') P.set('proj', { merc: 'mercator', globe: 'globe', pc: 'grid' }[PROJ]);
+  const L = S.layers[mapKind()] || {}, on = Object.entries(LAYER_ALIAS).filter(([, [g, k]]) => (g === mapKind() || g === '*') && L[k]).map(([n]) => n);
+  if (on.length) P.set('layers', [...new Set(on)].join(','));
+  if (S.map.startsWith('local')) { P.set('level', gridLevel()); P.set('tenths', tenthsMode()); }
+  if (S.mode === 'globe') P.set('round', llStep());
+  if (S.simpleBiomes) P.set('biomes6', '1');
+  if (S.bigLabels) P.set('labels', 'big');
+  if (PROJ !== 'globe') P.set('view', [Math.round(V.cx), Math.round(V.cy), +(fitK(V.b.w, V.b.h) / V.k).toFixed(2)].join(','));
+  return location.origin + location.pathname + '?' + P.toString().replace(/%2C/g, ',');
+}
+
 /* ------------------------------------------------------------ start */
 buildDefs();
+const LINK = applyLink();
 document.body.classList.toggle('big', S.big);
+svg.classList.toggle('biglabels', !!S.bigLabels);
 $('#panel').classList.toggle('closed', !S.panelOpen);
 updateTop(); drawTeams();
 new ResizeObserver(() => resize()).observe($('#mapWrap'));
@@ -2644,5 +2817,10 @@ resize();
 if (!['world', 'uk'].includes(S.map) && !D.local.some(l => 'local:' + l.id === S.map)) S.map = 'world';
 if (!['explore', 'find', 'grid', 'compass', 'globe'].includes(S.mode)) S.mode = 'explore';
 showMap(S.map);
-startMode();
+if (LINK && LINK.proj && LINK.proj !== 'gp' && S.map === 'world') setProj(LINK.proj); else startMode();
+if (LINK) {
+  if (LINK.view) { const [x, y, z] = LINK.view.split(',').map(Number); if (isFinite(x) && isFinite(y) && z > 0) goTo(x, y, fitK(V.b.w, V.b.h) / z, 0); }
+  if (LINK.place) { const r = searchPlaces(LINK.place)[0]; if (r) { cardTitle = 'You searched for…'; r.act(); } }
+  if (LINK.city && S.mode === 'globe' && S.globeTask === 'mycity') { const c = MY_CITIES.find(c => norm(c[1]) === norm(LINK.city) || c[0] === LINK.city); if (c) { panel.querySelector(`[data-city="${c[0]}"]`)?.classList.add('on'); myCityShow(c[0]); } }
+}
 if (S.year === null) yearModal(true);

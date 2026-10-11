@@ -439,6 +439,11 @@ ITEMS = [
          f='Brasília is the capital of Brazil. It was built as a brand-new city in the 1950s, in the middle of the country.'),
     dict(id='atacama', n='Atacama Desert', k='point', p=[-24.5, -69.3], tol=350, y=[4], m='world', phys=True,
          f='The Atacama Desert in Chile is one of the driest places on Earth. Some parts have had almost no rain for hundreds of years.'),
+    # Year 5 Locations enquiry: Bristol (where directions are measured from) and Nairobi (worked example)
+    dict(id='bristol-w', n='Bristol', k='point', p=[51.45, -2.58], tol=150, y=[5], m='world',
+         f='Bristol is our nearest city. In the Locations enquiry we measure directions to other cities from here: about 51°N, 3°W.'),
+    dict(id='nairobi', n='Nairobi', k='point', p=[-1.2921, 36.8219], tol=200, y=[5], m='world', cap=True,
+         f='Nairobi is the capital of Kenya, just south of the Equator. It is about 1,800 metres above sea level, so it is warm but not too hot.'),
     # Year 5: rivers from source to mouth
     dict(id='thamessource', n='Source of the River Thames', k='point', p=[51.6937, -2.0286], tol=8, y=[5], m='uk', phys=True,
          f='The River Thames starts as a small spring at Thames Head in Gloucestershire. This is its source.'),
@@ -539,9 +544,13 @@ COUNTY_GROUPS = {
 # Local OS-style map extracts (British National Grid, metres).
 LOCAL_MAPS = [
     dict(id='school', name='WFA and Stoke Gifford', e0=359000, n0=175000, e1=365000, n1=181000, raw='school',
-         years=[1, 2, 3, 4, 5, 6], sq='ST', contour=10),
+         years=[1, 2, 3, 4, 5, 6], sq='ST', contour=10,
+         landmarks=[('Beaufort Grange', 51.496372, -2.5581991), ('Exhibition and Conference Centre (UWE)', 51.5028678, -2.5522004),
+                    ('The Plaza', 51.5003574, -2.5507336), ('Bristol Robotics Laboratory', 51.5015586, -2.5519127)]),
     dict(id='gorge', name='Clifton and the Avon Gorge', e0=355000, n0=170000, e1=361000, n1=176000, raw='gorge',
-         years=[3, 4, 5, 6], views={'Suspension Bridge': [356475, 173067], 'City centre': [358800, 172900]}, sq='ST', contour=10),
+         years=[3, 4, 5, 6], views={'Suspension Bridge': [356475, 173067], 'City centre': [358800, 172900]}, sq='ST', contour=10,
+         landmarks=[('We The Curious', 51.4503, -2.60055), ('M Shed', 51.44756, -2.5984), ('Queen Square', 51.45064, -2.59485),
+                    ('College Green', 51.45241, -2.60099), ('Central Library', 51.45144, -2.60241), ('Bristol Cathedral', 51.45164, -2.60069)]),
     dict(id='london', name='Central London', e0=528000, n0=177000, e1=534000, n1=183000, raw='london',
          years=[1, 2, 3, 4, 5, 6], views={'Westminster': [530200, 179600], 'Tower of London': [533500, 180500]}, sq='TQ', contour=10, thin=2.5, riverbuffer={'River Thames': 115}),
     dict(id='penyfan', name='Pen y Fan, Bannau Brycheiniog', e0=300000, n0=218000, e1=306000, n1=224000, raw='penyfan',

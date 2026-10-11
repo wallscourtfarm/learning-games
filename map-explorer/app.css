@@ -315,3 +315,12 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 #pop .opt.sres small { margin: 0; font-size: 14px; opacity: .75; }
 #pop .nores { margin: 4px 2px; font-size: 16px; font-weight: 700; color: #4a6577; }
 #pop .goto { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+/* pause for discussion */
+#pauseVeil { position: fixed; inset: 0; z-index: 60; background: rgba(10,30,45,.35); display: flex; align-items: center; justify-content: center; }
+#pauseVeil .pbox { background: #fff; border-radius: 28px; padding: 28px 40px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,.3); }
+#pauseVeil b { display: block; font-size: 40px; font-weight: 900; }
+#pauseVeil p { font-size: 22px; font-weight: 700; color: #4a6577; }
+#zPause { font-size: 30px !important; }
+/* large map labels for the board */
+#map.biglabels .cs text { transform: scale(1.35); }

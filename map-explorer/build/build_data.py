@@ -525,6 +525,9 @@ def build_local(spec):
             ee, nn = to_bng.transform(it['p'][1], it['p'][0])
             if e0 + 150 < ee < e1 - 150 and n0 + 150 < nn < n1 - 150:
                 pois.append(dict(t='attraction', x=round(ee - e0), y=round(n1 - nn), n=it['n'], area=10 ** 9, item=it['id']))
+    for nm, la, lo in spec.get('landmarks', []):     # named places the lessons use (from OpenStreetMap)
+        ee, nn = to_bng.transform(lo, la)
+        pois.append(dict(t='attraction', x=round(ee - e0), y=round(n1 - nn), n=nm, area=10 ** 9))
 
     def ad(lst, tol=2.0):
         if not lst:
