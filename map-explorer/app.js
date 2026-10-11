@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '11.10.26g';
+const VERSION = '11.10.26h';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -2807,6 +2807,8 @@ function viewLink() {                          // a link that reopens exactly th
   if (on.length) P.set('layers', [...new Set(on)].join(','));
   if (S.map.startsWith('local')) { P.set('level', gridLevel()); P.set('tenths', tenthsMode()); }
   if (S.mode === 'globe') P.set('round', llStep());
+  const city = S.mode === 'globe' && S.globeTask === 'mycity' && panel.querySelector('[data-city].on');   // the city chosen in the city check
+  if (city) P.set('city', MY_CITIES.find(c => c[0] === city.dataset.city)[1]);
   if (S.simpleBiomes) P.set('biomes6', '1');
   if (S.bigLabels) P.set('labels', 'big');
   if (PROJ !== 'globe') P.set('view', [Math.round(V.cx), Math.round(V.cy), +(fitK(V.b.w, V.b.h) / V.k).toFixed(2)].join(','));
