@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '11.10.26k';
+const VERSION = '11.10.26l';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -1630,14 +1630,24 @@ function compassAsk() {
   const four = fourPoint();
   const q = S.map.startsWith('local') ? `Start at <b>A</b> (${esc(a.n)}). Which direction is <b>B</b> (${esc(b.n)})?` : `Which direction is <b>${esc(theName(b.n))}</b> from <b>${esc(theName(a.n))}</b>?`;
   const positions = DIR8S.map((d, i) => { const r = i * 45 * Math.PI / 180; return { d, i, x: 140 + 102 * Math.sin(r), y: 140 - 102 * Math.cos(r) }; });
+  const dirs = positions.filter(p => !four || p.i % 2 === 0);
+  // as a compass (learning the points) or as a mixed-up list, so children picture the compass themselves
+  const answersHTML = S.compassList
+    ? `<div class="dirlist" id="dirs">${shuffle(dirs.slice()).map(p => `<button class="btn sec" data-d="${p.i}">${cap1(DIR8[p.i])}</button>`).join('')}</div>`
+    : `<div class="rose" id="dirs">${dirs.map(p => `<button data-d="${p.i}" class="${p.i % 2 ? 'sm' : ''}" style="left:${p.x}px;top:${p.y}px">${p.d}</button>`).join('')}</div>`;
   setPanel(`<p class="ptitle">Compass</p>${progressHTML({ idx: C.idx, n: C.n, score: C.score })}
+    <div class="chips"><button class="chip" id="layoutPick">${S.compassList ? '📝 Answers as a list' : '🧭 Answers as a compass'} ▾</button></div>
     <div class="qcard"><p class="q" style="font-size:calc(25px*var(--fs))">${q}</p></div>
-    <div class="rose">${positions.filter(p => !four || p.i % 2 === 0).map(p => `<button data-d="${p.i}" class="${p.i % 2 ? 'sm' : ''}" style="left:${p.x}px;top:${p.y}px">${p.d}</button>`).join('')}</div>
+    ${answersHTML}
     <div id="fbox"></div>
     <div class="row"><button class="btn sec" id="skip">Skip</button></div>`);
-  panel.querySelectorAll('.rose button').forEach(btn => btn.onclick = () => compassAnswer(+btn.dataset.d, btn));
+  panel.querySelectorAll('#dirs button').forEach(btn => btn.onclick = () => compassAnswer(+btn.dataset.d, btn));
   $('#skip').onclick = compassNext;
-  revealButton($('#skip').parentNode, () => panel.querySelector(`.rose button[data-d="${pr.ans}"]`), C);
+  $('#layoutPick').onclick = e => openPop(e.currentTarget, `<h3>Answer buttons</h3>
+    <button class="opt ${!S.compassList ? 'on' : ''}" data-cl="0">🧭 As a compass<small>learning the points</small></button>
+    <button class="opt ${S.compassList ? 'on' : ''}" data-cl="1">📝 As a list<small>children picture the compass</small></button>`,
+    p => p.querySelectorAll('[data-cl]').forEach(x => x.onclick = () => { closePop(); S.compassList = x.dataset.cl === '1'; save(); compassAsk(); }));
+  revealButton($('#skip').parentNode, () => panel.querySelector(`#dirs button[data-d="${pr.ans}"]`), C);
 }
 function compassAnswer(d, btn) {
   if (C.done) return;
@@ -1646,7 +1656,7 @@ function compassAnswer(d, btn) {
   const ok = d === ans && !REVEAL;
   if (ok) C.score++;
   btn.classList.add('sel');
-  panel.querySelector(`.rose button[data-d="${ans}"]`).classList.add('right');
+  panel.querySelector(`#dirs button[data-d="${ans}"]`).classList.add('right');
   drawArrow(a, b, ok ? '#2e9e4f' : '#e53935');
   const word = DIR8[ans];
   const bn = esc(cap1(theName(b.n))), an = esc(theName(a.n));
@@ -2766,7 +2776,7 @@ function applyLink() {
   if (![...P.keys()].some(k => k !== 'v')) return null;
   // a link always starts from the same clean view, so every device shows exactly the same thing
   S.layers = JSON.parse(JSON.stringify(DEFAULTS.layers));
-  Object.assign(S, { simpleBiomes: false, llRound: 10, gridLevel: 0, mapKeyOff: false, findFlags: false, bigLabels: false, revision: true, count: 10 });
+  Object.assign(S, { simpleBiomes: false, llRound: 10, gridLevel: 0, mapKeyOff: false, findFlags: false, bigLabels: false, revision: true, count: 10, compassList: false });
   if (P.get('preset') === 'locations') {         // Year 5 Locations enquiry
     S.year = 5; S.revision = false; S.simpleBiomes = true; S.llRound = 1;
     Object.assign(S.layers.world, { grid: true, lines: true, names: true, markers: true });
@@ -2784,6 +2794,7 @@ function applyLink() {
   if (P.get('count')) S.count = +P.get('count') || 0;
   if (P.get('biomes6')) S.simpleBiomes = P.get('biomes6') !== '0';
   if (P.get('labels') === 'big') S.bigLabels = true;
+  if (P.get('rose')) S.compassList = P.get('rose') === 'off';
   for (const [key, val] of [['layers', true], ['hide', false]]) for (const l of (P.get(key) || '').split(',').filter(Boolean)) {
     const a = LAYER_ALIAS[l.trim().toLowerCase()]; if (!a) continue;
     for (const g of a[0] === '*' ? ['world', 'uk', 'local'] : [a[0]]) S.layers[g][a[1]] = val;
@@ -2809,6 +2820,7 @@ function viewLink() {                          // a link that reopens exactly th
   if (city) P.set('city', MY_CITIES.find(c => c[0] === city.dataset.city)[1]);
   if (S.simpleBiomes) P.set('biomes6', '1');
   if (S.bigLabels) P.set('labels', 'big');
+  if (S.mode === 'compass' && S.compassList) P.set('rose', 'off');
   if (PROJ !== 'globe') P.set('view', [Math.round(V.cx), Math.round(V.cy), +(fitK(V.b.w, V.b.h) / V.k).toFixed(2)].join(','));
   return location.origin + location.pathname + '?' + P.toString().replace(/%2C/g, ',');
 }

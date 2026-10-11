@@ -61,6 +61,7 @@ and `year=5&mode=os&map=wfa&task=give&level=6`, `year=5&mode=os&map=wfa&task=fin
 | `tenths` | `all`, `lines`, `none` | 100 m lines and 0–9 numbers; `none` = estimate, like a real OS map (answers within one tenth count) |
 | `count` | number, `0` = no limit | Questions in a set |
 | `labels` | `big` | Larger labels on the map for the board |
+| `rose` | `on` (default), `off` | Compass quiz answers as a compass, or as a mixed-up list so children picture the compass (added 11.10.26l) |
 | `place` | a place name, e.g. `Nairobi`, `Gloucestershire`, `Stoke Gifford` | Opens Explore centred on that place with its card (uses the search) |
 | `city` | with `task=mycity`: `Cairo`, `London`, `Moscow`, `New York`, `Paris`, `Rio de Janeiro`, `Singapore`, `Sydney`, `Tokyo`, `Nairobi` (worked example) | Opens the city check on that city (Mumbai is an ordinary place, not in the check) |
 | `view` | `x,y,zoom` (made by "Copy link") | Exact map position |

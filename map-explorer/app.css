@@ -324,3 +324,9 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 #zPause { font-size: 30px !important; }
 /* large map labels for the board */
 #map.biglabels .cs text { transform: scale(1.35); }
+
+/* compass answers as a plain list */
+.dirlist { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dirlist .btn { font-size: calc(21px * var(--fs)); min-height: 58px; }
+.dirlist .btn.sel { background: var(--ink); color: #fff; box-shadow: 0 0 0 4px #ffd54a; }
+.dirlist .btn.right { background: var(--good); color: #fff; box-shadow: none; }
