@@ -1,9 +1,38 @@
 # Map Explorer links
 
+This file is the agreement between Map Explorer and anything that links to it (the enquiry builder's slides and
+papers). File: `~/projects/learning-games/map-explorer/LINKS.md` (repo `wallscourtfarm/learning-games`).
+Works from version **11.10.26a** onwards (the version is shown bottom right of the map). Use only the option
+names below; if a lesson needs something that is not here, ask Innes for it to be added rather than guessing.
+
 Base address: `https://games.wallscourt-farm-academy.co.uk/map-explorer/`
 
 Add options after a `?`, joined with `&`. A link opens the same view on every device (handy as a QR code on a slide).
 Teachers can also make a link from what is on screen: **Settings → Link to this exact view → Copy link**.
+
+## How to use these links (read before generating any)
+
+1. **Encode spaces and accents.** `New York` must be `New%20York`, `Queen Square` must be `Queen%20Square`.
+   In Python build links with `urllib.parse.urlencode({...}, quote_via=urllib.parse.quote)`; commas in
+   `layers=` may stay as commas.
+2. **Every link starts from the same clean view** (default layers, nearest 10°, 10 questions, tenths shown…)
+   and then applies only what it asks for, so it looks the same on every device whatever was used before.
+   Without `map=` it opens the world map (or the WFA OS map when `mode=os`). The link's settings are then
+   saved on that device until someone changes them. `preset=locations` sets Year 5 with earlier years off.
+3. **How options combine.** `place=` always opens **Explore** (it is a "show me this place" link) and overrides
+   `mode=`. `city=` only works with `mode=latlong&task=mycity`. `proj=` only affects the world map. `task=`
+   must belong to the `mode=` it is used with. Unknown options and values are ignored, so a typo fails quietly:
+   always open the link once to check.
+4. **`view=` numbers** are map positions made by Copy link. Do not write them by hand; use `place=` instead.
+5. **QR codes are not made by Map Explorer.** Make them in the generator (for example the `qrcode` Python
+   package) from the finished, encoded link. Keep them at least 3 cm wide on a slide so iPads can scan them.
+6. **Check every link before it goes on a printed slide or paper**: open it on a laptop and an iPad and check
+   the view matches the slide.
+7. **Children's words**: the tool says "quiz" and "practice", never "test". Slide wording beside a QR code
+   should do the same, e.g. "Try it on the map".
+8. **What the child sees** depends on the link: Explore links show a card about the place; quiz links start a
+   set of 10 questions (change with `count=`); the city check waits for the child to pick a city unless
+   `city=` is given.
 
 ## Options
 
@@ -35,8 +64,15 @@ Teachers can also make a link from what is on screen: **Settings → Link to thi
 - L4 longitude and coordinates: `?preset=locations&mode=latlong&task=read&round=1` · `?preset=locations&mode=latlong&task=plot&round=1`
 - L5 climate zones and biomes: `?preset=locations&mode=explore&layers=zones` · `?preset=locations&mode=explore&layers=biomes&biomes6=1`
 - L6 six-figure grid references: `?year=5&mode=os&map=wfa&task=give&level=6` · estimating: `…&tenths=none`
-- L7 real places near school: `?year=5&mode=explore&map=wfa` (Beaufort Grange, UWE Exhibition and Conference Centre, The Plaza and Bristol Robotics Laboratory are named stars) · city centre: `?year=5&mode=explore&map=gorge&place=Queen Square`
-- L8–L10 city check: `?preset=locations&mode=latlong&task=mycity&proj=grid&city=Mumbai`
+- L7 real places near school: `?year=5&mode=explore&map=wfa` (Beaufort Grange, UWE Exhibition and Conference Centre, The Plaza and Bristol Robotics Laboratory are named stars) · city centre: `?year=5&mode=explore&map=gorge&place=Queen%20Square`
+- L8–L10 city check: `?preset=locations&mode=latlong&task=mycity&proj=grid` (child picks) or with `&city=Mumbai`, `&city=New%20York`, `&city=Rio%20de%20Janeiro`
+
+Full example, ready to paste:
+`https://games.wallscourt-farm-academy.co.uk/map-explorer/?preset=locations&mode=latlong&task=mycity&proj=grid&city=Rio%20de%20Janeiro`
+
+Tested on 11.10.26 (computer, not yet iPad): every example link on this page was opened and checked
+(mode, task, map, projection, layers and the first question), plus the city check for all ten cities.
+Still open each link on an iPad before printing (rule 6).
 
 ## Rules the city check uses (match the lessons)
 

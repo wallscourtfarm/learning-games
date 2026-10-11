@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '11.10.26a';
+const VERSION = '11.10.26d';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -1696,6 +1696,8 @@ function gridHeader() {
 }
 const GRID_TASKS = { give: 'Give the grid reference', find: 'Find the grid reference', symbols: 'Map symbols', far: 'How far? (scale)', high: 'How high? (contours)' };
 const GRID_TASK_YEARS = { give: 'Years 3-6', find: 'Years 3-6', symbols: 'Years 3-6', far: 'Years 5-6', high: 'Year 6' };
+// only show a place's own name in questions when it reads like a name (not a mast's code number)
+const niceName = p => p.n && !['tower', 'parking'].includes(p.t) && !/\d{3,}/.test(p.n);
 function osPois() {
   const m = cur(), hide = new Set(S.layers.local.hide || []);
   const ps = m.pois.map((p, i) => Object.assign({ i }, p));
@@ -1727,7 +1729,7 @@ function gridAsk() {
     // keep the place off-centre so children have to use the grid, not the middle of the screen
     fitBox(p.x - span / 2 + (Math.random() - .5) * span * .3, p.y - span / 2 + (Math.random() - .5) * span * .3, span, span, 1.05);
     setPanel(gridHeader() + `
-      <div class="qcard"><p class="q">What is the ${G.lvl}-figure grid reference of ${p.ours ? 'WFA, our school' : 'the ' + esc(POI_SHORT[p.t]) + (p.n ? ` (${esc(p.n)})` : '')}?</p><p class="hint" style="margin:0">It is circled on the map.</p></div>
+      <div class="qcard"><p class="q">What is the ${G.lvl}-figure grid reference of ${p.ours ? 'WFA, our school' : 'the ' + esc(POI_SHORT[p.t]) + (niceName(p) ? ` (${esc(p.n)})` : '')}?</p><p class="hint" style="margin:0">It is circled on the map.</p></div>
       <div class="refbox" id="refbox"></div>
       <div class="ref-legend"><span class="e">Eastings (along)</span><span class="n">Northings (up)</span></div>
       <div class="keypad" id="pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(n => `<button data-k="${n}">${n}</button>`).join('')}<button data-k="back" class="wide">⌫</button><button data-k="ok" id="check" class="ok" disabled>Check</button></div>
@@ -2452,6 +2454,7 @@ function buildSearchIndex() {
     add(L.name, 'OS-style map', 5, () => { goMap('local:' + L.id); home(); exploreStart(); });
     for (const p of L.places) add(p.t, 'Place on the ' + L.name + ' OS map', 7, () => searchLocal(L.id, p.x, p.y));
     for (const p of L.names) add(p.t, 'On the ' + L.name + ' OS map', 8, () => searchLocal(L.id, p.x, p.y));
+    for (const p of L.pois) if (p.t === 'attraction') add(p.n, 'Landmark on the ' + L.name + ' OS map', 4, () => searchLocal(L.id, p.x, p.y));
   }
   return out;
 }
@@ -2763,13 +2766,17 @@ const LAYER_ALIAS = {
 function applyLink() {
   const P = new URLSearchParams(location.search);
   if (![...P.keys()].some(k => k !== 'v')) return null;
+  // a link always starts from the same clean view, so every device shows exactly the same thing
+  S.layers = JSON.parse(JSON.stringify(DEFAULTS.layers));
+  Object.assign(S, { simpleBiomes: false, llRound: 10, gridLevel: 0, mapKeyOff: false, findFlags: false, bigLabels: false, revision: true, count: 10 });
   if (P.get('preset') === 'locations') {         // Year 5 Locations enquiry
     S.year = 5; S.revision = false; S.simpleBiomes = true; S.llRound = 1;
     Object.assign(S.layers.world, { grid: true, lines: true, names: true, markers: true });
   }
   const y = P.get('year'); if (y) S.year = y === 'all' ? 0 : clamp(+y || 5, 1, 6);
   const md = MODE_ALIAS[P.get('mode')]; if (md) S.mode = md;
-  const mp = MAP_ALIAS[P.get('map')]; if (mp) S.map = mp;
+  const mp = MAP_ALIAS[P.get('map')];
+  S.map = mp || (S.mode === 'grid' ? 'local:school' : 'world');   // no map given: the world (or the WFA OS map for OS activities)
   const t = P.get('task');
   if (t && S.mode === 'grid' && GRID_TASKS[t]) S.gridTask = t;
   if (t && S.mode === 'globe' && GLOBE_TASKS[t]) S.globeTask = t;
