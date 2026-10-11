@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '11.10.26i';
+const VERSION = '11.10.26j';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -658,7 +658,7 @@ function ensureMap(id) {
   built[cacheKey(id)] = m; return m;
 }
 function showMap(id, keepView) {
-  S.map = id; if (id !== 'merc') save();
+  S.map = id; if (id.startsWith('local')) S.lastLocal = id; if (id !== 'merc') save();
   const m = ensureMap(id);
   layersG.replaceChildren(m.g);
   ov.replaceChildren();
@@ -1441,12 +1441,7 @@ let Q = null;
 const QUIZ_KINDS = { world: ['country', 'continent', 'ocean', 'group', 'point', 'line', 'latline', 'lonline', 'pole', 'hemi'], uk: ['ukcountry', 'region', 'county', 'sea', 'river', 'point', 'line'] };
 function findStart() {
   ov.replaceChildren(); clearHL();
-  if (S.map.startsWith('local')) {
-    setPanel(`<p class="ptitle">Find it!</p><div class="qcard"><p class="q">Find it! uses the world map and the UK map.</p><p class="hint">On the OS maps, try Grid refs or Compass.</p></div>
-      <button class="btn" id="toW">🌍 World map</button><button class="btn" id="toU">🇬🇧 UK map</button>`);
-    $('#toW').onclick = () => { showMap('world'); startMode(); }; $('#toU').onclick = () => { showMap('uk'); startMode(); };
-    return;
-  }
+  if (S.map.startsWith('local')) { showMap('world'); toast('Find it! uses the world map. Choose the UK map from the Map button.'); }
   let pool = visibleItems().filter(i => QUIZ_KINDS[S.map].includes(i.k));
   if (S.findFlags) {
     pool = pool.filter(i => (i.k === 'country' || i.k === 'ukcountry') && flagFor(i));
@@ -1672,11 +1667,9 @@ function compassNext() {
 let G = null;
 function gridStart() {
   ov.replaceChildren(); clearHL();
-  if (!S.map.startsWith('local')) {
-    setPanel(`<p class="ptitle">OS map skills</p><div class="qcard"><p class="q">Grid references, symbols, distance and height are practised on our OS-style maps.</p><p class="hint">They use the real Ordnance Survey grid, so they match paper OS maps. Pen y Fan is best for contours.</p></div>
-      ${D.local.map(l => `<button class="btn" data-local="${l.id}">🗺️ ${esc(l.name)}</button>`).join('')}`);
-    panel.querySelectorAll('[data-local]').forEach(b => b.onclick = () => { showMap('local:' + b.dataset.local); startMode(); });
-    return;
+  if (!S.map.startsWith('local')) {                 // open an OS map straight away: the last one used, or WFA's
+    const last = D.local.some(l => 'local:' + l.id === S.lastLocal) ? S.lastLocal : 'local:school';
+    showMap(last); toast('Opened the OS map: ' + mapLabel(last).replace('OS: ', '') + '. Choose another in the panel.');
   }
   if (S.gridTask === 'far' || S.gridTask === 'high') { G = { idx: 0, n: S.count || Infinity, score: 0, pois: osPois(), task: S.gridTask }; return gridAsk(); }
   const lvl = gridLevel();
@@ -1693,7 +1686,7 @@ function gridHeader() {
   const lvl = gridLevel();
   const pr = G ? `<span style="float:right;text-transform:none">${G.n === Infinity ? 'Q' + (G.idx + 1) : (G.idx + 1) + ' of ' + G.n} · ⭐ ${G.score}</span>` : '';
   return `<p class="ptitle">OS map skills${pr}</p>
-    <div class="chips"><button class="chip on" id="taskPick">${GRID_TASKS[S.gridTask]} ▾</button>${['give', 'find'].includes(S.gridTask) ? `<button class="chip on" id="lvlPick">${lvl}-figure ▾</button>` : ''}${['give', 'find'].includes(S.gridTask) && lvl === 6 ? `<button class="chip ${estimating() ? 'on' : ''}" id="tenPick">Tenths: ${TENTHS[tenthsMode()][0]} ▾</button>` : ''}</div>`;
+    <div class="chips"><button class="chip" id="osMapPick">🗺️ ${esc(mapLabel(S.map).replace('OS: ', ''))} ▾</button><button class="chip on" id="taskPick">${GRID_TASKS[S.gridTask]} ▾</button>${['give', 'find'].includes(S.gridTask) ? `<button class="chip on" id="lvlPick">${lvl}-figure ▾</button>` : ''}${['give', 'find'].includes(S.gridTask) && lvl === 6 ? `<button class="chip ${estimating() ? 'on' : ''}" id="tenPick">Tenths: ${TENTHS[tenthsMode()][0]} ▾</button>` : ''}</div>`;
 }
 const GRID_TASKS = { give: 'Give the grid reference', find: 'Find the grid reference', symbols: 'Map symbols', far: 'How far? (scale)', high: 'How high? (contours)' };
 const GRID_TASK_YEARS = { give: 'Years 3-6', find: 'Years 3-6', symbols: 'Years 3-6', far: 'Years 5-6', high: 'Year 6' };
@@ -1706,6 +1699,9 @@ function osPois() {
   return vis.length >= 4 ? vis : ps;
 }
 function wireGridHeader() {
+  const mpk = $('#osMapPick');
+  if (mpk) mpk.onclick = e => openPop(e.currentTarget, `<h3>Choose an OS map</h3>${D.local.map(l => `<button class="opt ${S.map === 'local:' + l.id ? 'on' : ''}" data-lm="${l.id}">🗺️ ${esc(l.name)}</button>`).join('')}`,
+    p => p.querySelectorAll('[data-lm]').forEach(b => b.onclick = () => { closePop(); showMap('local:' + b.dataset.lm); startMode(); }));
   $('#taskPick').onclick = e => openPop(e.currentTarget, `<h3>Activity</h3>${Object.entries(GRID_TASKS).map(([k, t]) => `<button class="opt ${S.gridTask === k ? 'on' : ''}" data-task="${k}">${t}<small>${GRID_TASK_YEARS[k]}</small></button>`).join('')}`,
     p => p.querySelectorAll('[data-task]').forEach(b => b.onclick = () => { closePop(); S.gridTask = b.dataset.task; save(); gridStart(); }));
   const tp = $('#tenPick'); if (tp) tp.onclick = e => tenthsPicker(e.currentTarget, () => { const c = tp; c.textContent = `Tenths: ${TENTHS[tenthsMode()][0]} ▾`; c.classList.toggle('on', estimating()); });
@@ -2554,6 +2550,7 @@ function startMode() {
   { const m = cur(); if (m && m.L) m.force = null; }
   refreshDyn();
   if (S.map === 'merc' && !(S.mode === 'globe' && S.globeTask === 'size')) showMap('world');
+  if (S.mode !== 'explore' && !S.panelOpen) { S.panelOpen = true; save(); $('#panel').classList.remove('closed'); setTimeout(resize, 220); }
   restyle();
   ({ explore: exploreStart, find: findStart, compass: compassStart, grid: gridStart, globe: globeStart })[S.mode]();
 }
