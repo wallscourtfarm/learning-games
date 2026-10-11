@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '11.10.26d';
+const VERSION = '11.10.26g';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -254,7 +254,8 @@ function applyView() {
   onViewChange();
 }
 function resize() {
-  const r = svg.getBoundingClientRect(); V.W = Math.max(r.width, 1); V.H = Math.max(r.height, 1);
+  const r = svg.getBoundingClientRect(), wasNarrow = V.W < 760; V.W = Math.max(r.width, 1); V.H = Math.max(r.height, 1);
+  if (wasNarrow !== (V.W < 760) && built[cacheKey(S.map)]) buildViewBar();      // short button label on narrow screens
   const c = $('#ink'); c.width = r.width * devicePixelRatio; c.height = r.height * devicePixelRatio; redrawInk();
   applyView();
 }
@@ -717,7 +718,7 @@ function buildViewBar() {
     if (ours) add('WFA', () => fitBox(ours.x - 700, ours.y - 700, 1400, 1400));
     for (const [n, [e, nn]] of Object.entries(m.L.views || {})) add(n, () => fitBox(e - m.L.e0 - 700, m.L.n1 - nn - 700, 1400, 1400));
   }
-  const b = H('<button>🔎 Search / Go to ▾</button>');
+  const b = H(`<button>${V.W < 760 ? '🔎 ▾' : '🔎 Search / Go to ▾'}</button>`);
   b.onclick = e => {
     openPop(e.currentTarget, `<input id="searchBox" type="search" placeholder="Search: country, county, city…" autocomplete="off" spellcheck="false">
       <div id="searchRes"></div>
@@ -2219,11 +2220,14 @@ function timeAsk(p) {
    Rules match the lessons: coordinates rounded to the nearest degree; direction measured from Bristol
    (51.45°N, 2.58°W) on an equal-degree map; tropical up to 23° (23° counts), temperate to 66°, polar beyond. */
 const BRISTOL_LL = { lat: 51.45, lon: -2.58 };
+// The nine infographic cities plus Nairobi (worked example). Biomes are the ones taught in the lessons (agreed
+// with the enquiry; they match the biome data at each city except Cairo, whose exact point is in the Nile strip).
 const MY_CITIES = [
-  ['london-w', 'London', 'United Kingdom', 'Europe'], ['moscow', 'Moscow', 'Russia', 'Europe'], ['mumbai', 'Mumbai', 'India', 'Asia'],
-  ['newyork', 'New York', 'United States', 'North America'], ['paris', 'Paris', 'France', 'Europe'], ['rio', 'Rio de Janeiro', 'Brazil', 'South America'],
-  ['singapore', 'Singapore', 'Singapore', 'Asia'], ['sydney', 'Sydney', 'Australia', 'Oceania'], ['tokyo', 'Tokyo', 'Japan', 'Asia'],
-  ['nairobi', 'Nairobi', 'Kenya', 'Africa'],
+  ['cairo', 'Cairo', 'Egypt', 'Africa', 'Hot desert'], ['london-w', 'London', 'United Kingdom', 'Europe', 'Temperate forest'],
+  ['moscow', 'Moscow', 'Russia', 'Europe', 'Temperate forest'], ['newyork', 'New York', 'United States', 'North America', 'Temperate forest'],
+  ['paris', 'Paris', 'France', 'Europe', 'Temperate forest'], ['rio', 'Rio de Janeiro', 'Brazil', 'South America', 'Rainforest'],
+  ['singapore', 'Singapore', 'Singapore', 'Asia', 'Rainforest'], ['sydney', 'Sydney', 'Australia', 'Oceania', 'Temperate forest'],
+  ['tokyo', 'Tokyo', 'Japan', 'Asia', 'Temperate forest'], ['nairobi', 'Nairobi', 'Kenya', 'Africa', 'Savanna'],
 ];
 function climateZone(lat) { const a = Math.abs(lat); return a <= 23 ? 'Tropical' : a <= 66 ? 'Temperate' : 'Polar'; }
 function directionFrom(a, b) {                 // 8-point direction on an equal-degree map, plus "near halfway?"
@@ -2243,8 +2247,8 @@ function myCityStart() {
   const tg = $('#toGrid'); if (tg) tg.onclick = () => { setProj('pc'); S.mode = 'globe'; S.globeTask = 'mycity'; startMode(); };
   panel.querySelectorAll('[data-city]').forEach(b => b.onclick = () => { panel.querySelectorAll('[data-city]').forEach(x => x.classList.toggle('on', x === b)); myCityShow(b.dataset.city); });
 }
-async function myCityShow(id) {
-  const [, n, country, cont] = MY_CITIES.find(c => c[0] === id), it = byId[id];
+function myCityShow(id) {
+  const [, n, country, cont, biome] = MY_CITIES.find(c => c[0] === id), it = byId[id];
   const lat = Math.round(it.ll[0]), lon = Math.round(it.ll[1]);
   if (PROJ === 'globe') centreOn((lon + BRISTOL_LL.lon) / 2, (lat + BRISTOL_LL.lat) / 2);
   ov.replaceChildren();
@@ -2259,9 +2263,6 @@ async function myCityShow(id) {
   if (PROJ !== 'globe') fitBox(x0 - 200, y0 - 200, w + 400, h + 400, 1.25);
   const dir = directionFrom(BRISTOL_LL, { lat, lon });
   const hemi = (lat === 0 ? 'On the Equator' : lat > 0 ? 'Northern' : 'Southern') + ', ' + (lon === 0 ? 'on the Prime Meridian' : lon > 0 ? 'Eastern' : 'Western');
-  await loadBiomes(cur());
-  const prev = S.simpleBiomes; S.simpleBiomes = true; loadBiomes(cur());
-  const bio = biomeAt(rob(it.ll[1], it.ll[0]), true); S.simpleBiomes = prev; loadBiomes(cur());
   const code = Object.keys(D.world.countries).find(k => D.world.countries[k].n === country || (country === 'United States' && k === 'USA'));
   $('#fbox').innerHTML = `<div class="info">${code ? flagImg(D.world.countries[code].f, 60, 'Flag of ' + country) : ''}<h2>${esc(n)}</h2><div class="sub">${esc(country)} · ${esc(cont)}</div>
     <dl><dt>Latitude and longitude (nearest degree)</dt><dd style="font-size:28px">${fmtLL(lat, lon)}</dd>
@@ -2269,7 +2270,7 @@ async function myCityShow(id) {
     <dt>Direction from Bristol</dt><dd style="font-size:26px">${cap1(dir.main)}</dd>
     ${dir.near ? `<dd class="hint">It is close to halfway, so <b>${dir.near}</b> is fine too.</dd>` : ''}
     <dt>Climate zone</dt><dd>${climateZone(lat)}</dd>
-    ${bio ? `<dt>Biome</dt><dd>${esc(bio.n)}</dd>` : ''}</dl></div>
+    <dt>Biome</dt><dd>${esc(biome)}</dd></dl></div>
     <p class="hint">Use this to check your infographic. It is not the answers: you still explain why!</p>
     <button class="btn sec" id="printCity">🖨️ Print this view</button>`;
   $('#printCity').onclick = printSheet;

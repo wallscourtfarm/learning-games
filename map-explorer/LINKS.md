@@ -24,8 +24,8 @@ Teachers can also make a link from what is on screen: **Settings → Link to thi
    must belong to the `mode=` it is used with. Unknown options and values are ignored, so a typo fails quietly:
    always open the link once to check.
 4. **`view=` numbers** are map positions made by Copy link. Do not write them by hand; use `place=` instead.
-5. **QR codes are not made by Map Explorer.** Make them in the generator (for example the `qrcode` Python
-   package) from the finished, encoded link. Keep them at least 3 cm wide on a slide so iPads can scan them.
+5. **Clickable links, not QR codes** (Innes's choice for the enquiry slides). Put the finished, encoded link
+   behind slide text such as "Try it on the map".
 6. **Check every link before it goes on a printed slide or paper**: open it on a laptop and an iPad and check
    the view matches the slide.
 7. **Children's words**: the tool says "quiz" and "practice", never "test". Slide wording beside a QR code
@@ -33,6 +33,15 @@ Teachers can also make a link from what is on screen: **Settings → Link to thi
 8. **What the child sees** depends on the link: Explore links show a card about the place; quiz links start a
    set of 10 questions (change with `count=`); the city check waits for the child to pick a city unless
    `city=` is given.
+
+## Stable names
+
+Every option name and value on this page is fixed from version 11.10.26a: they will not be renamed or removed,
+because enquiry slides link to them. New options may be added. The links the Locations enquiry publishes:
+`preset=locations` with `mode=latlong&task=size`, `mode=compass&proj=grid`, `mode=explore&layers=grid,lines`,
+`mode=latlong&task=read&round=1`, `mode=latlong&task=plot&round=1`, `mode=explore&layers=zones`,
+`mode=explore&layers=biomes&biomes6=1`, `mode=latlong&task=mycity&proj=grid` (with or without `city=`);
+and `year=5&mode=os&map=wfa&task=give&level=6`, `year=5&mode=os&map=wfa&task=find&level=6`, `year=5&mode=explore&map=wfa`.
 
 ## Options
 
@@ -53,7 +62,7 @@ Teachers can also make a link from what is on screen: **Settings → Link to thi
 | `count` | number, `0` = no limit | Questions in a set |
 | `labels` | `big` | Larger labels on the map for the board |
 | `place` | a place name, e.g. `Nairobi`, `Gloucestershire`, `Stoke Gifford` | Opens Explore centred on that place with its card (uses the search) |
-| `city` | with `task=mycity`: `London`, `Moscow`, `Mumbai`, `New York`, `Paris`, `Rio de Janeiro`, `Singapore`, `Sydney`, `Tokyo`, `Nairobi` | Opens the city check on that city |
+| `city` | with `task=mycity`: `Cairo`, `London`, `Moscow`, `New York`, `Paris`, `Rio de Janeiro`, `Singapore`, `Sydney`, `Tokyo`, `Nairobi` (worked example) | Opens the city check on that city (Mumbai is an ordinary place, not in the check) |
 | `view` | `x,y,zoom` (made by "Copy link") | Exact map position |
 
 ## Ready-made links for the Year 5 Locations enquiry
@@ -63,9 +72,9 @@ Teachers can also make a link from what is on screen: **Settings → Link to thi
 - L3 latitude: `?preset=locations&mode=explore&layers=grid,lines`
 - L4 longitude and coordinates: `?preset=locations&mode=latlong&task=read&round=1` · `?preset=locations&mode=latlong&task=plot&round=1`
 - L5 climate zones and biomes: `?preset=locations&mode=explore&layers=zones` · `?preset=locations&mode=explore&layers=biomes&biomes6=1`
-- L6 six-figure grid references: `?year=5&mode=os&map=wfa&task=give&level=6` · estimating: `…&tenths=none`
+- L6 six-figure grid references: `?year=5&mode=os&map=wfa&task=give&level=6` · find a reference: `?year=5&mode=os&map=wfa&task=find&level=6` · estimating: add `&tenths=none`
 - L7 real places near school: `?year=5&mode=explore&map=wfa` (Beaufort Grange, UWE Exhibition and Conference Centre, The Plaza and Bristol Robotics Laboratory are named stars) · city centre: `?year=5&mode=explore&map=gorge&place=Queen%20Square`
-- L8–L10 city check: `?preset=locations&mode=latlong&task=mycity&proj=grid` (child picks) or with `&city=Mumbai`, `&city=New%20York`, `&city=Rio%20de%20Janeiro`
+- L8–L10 city check: `?preset=locations&mode=latlong&task=mycity&proj=grid` (child picks) or with `&city=Cairo`, `&city=New%20York`, `&city=Rio%20de%20Janeiro`
 
 Full example, ready to paste:
 `https://games.wallscourt-farm-academy.co.uk/map-explorer/?preset=locations&mode=latlong&task=mycity&proj=grid&city=Rio%20de%20Janeiro`
@@ -76,11 +85,10 @@ Still open each link on an iPad before printing (rule 6).
 
 ## Rules the city check uses (match the lessons)
 
-Coordinates rounded to the nearest degree. Direction measured from Bristol (51.45°N, 2.58°W) on an equal-degree map, 8 compass points; within 8° of halfway between two points, both are accepted ("close to halfway, so east is fine too"). Climate zone: tropical up to 23° (23° counts as tropical), temperate over 23° to 66°, polar over 66°. Biome from RESOLVE Ecoregions 2017, folded into the six taught biomes.
+Coordinates rounded to the nearest degree. Direction measured from Bristol (51.45°N, 2.58°W) on an equal-degree map, 8 compass points; within 8° of halfway between two points, both are accepted ("close to halfway, so east is fine too"). Climate zone: tropical up to 23° (23° counts as tropical), temperate over 23° to 66°, polar over 66°. Biome: the one taught for each city (Singapore and Rio rainforest, Nairobi savanna, Cairo hot desert, the rest temperate forest). These agree with the RESOLVE Ecoregions biome data at each city, except Cairo, whose exact point is in the Nile strip.
 
-Checked 11.10.26 against the enquiry's table: all ten cities agree on coordinates, zone, direction and the near-halfway flag.
+Checked 11.10.26 against the enquiry's table: all ten cities (Cairo, London, Moscow, New York, Paris, Rio de Janeiro, Singapore, Sydney, Tokyo, Nairobi) agree on coordinates, hemispheres, zone, direction, near-halfway flag and biome.
 
-Things the enquiry may want to change:
-- **Mumbai's biome**: the biome data puts Mumbai in tropical moist forest (shown as rainforest), not savanna. The rest of the cards agree.
+Notes for the enquiry:
 - **The Plaza**: OpenStreetMap's outline gives ST 618 780 (the enquiry has 619 780; it is on the edge of two squares).
 - WFA is ST 614 777, as in the enquiry. Happy Days Nursery is not in OpenStreetMap, so it is not on the map.

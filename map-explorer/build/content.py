@@ -442,6 +442,8 @@ ITEMS = [
     # Year 5 Locations enquiry: Bristol (where directions are measured from) and Nairobi (worked example)
     dict(id='bristol-w', n='Bristol', k='point', p=[51.45, -2.58], tol=150, y=[5], m='world',
          f='Bristol is our nearest city. In the Locations enquiry we measure directions to other cities from here: about 51°N, 3°W.'),
+    dict(id='cairo', n='Cairo', k='point', p=[30.0444, 31.2357], tol=200, y=[5], m='world', cap=True,
+         f='Cairo is the capital of Egypt, on the River Nile. It is the biggest city in Africa, on the edge of the Sahara desert.'),
     dict(id='nairobi', n='Nairobi', k='point', p=[-1.2921, 36.8219], tol=200, y=[5], m='world', cap=True,
          f='Nairobi is the capital of Kenya, just south of the Equator. It is about 1,800 metres above sea level, so it is warm but not too hot.'),
     # Year 5: rivers from source to mouth
