@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '11.10.26h';
+const VERSION = '11.10.26i';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -2803,8 +2803,9 @@ function viewLink() {                          // a link that reopens exactly th
   if (S.mode === 'globe') P.set('task', S.globeTask);
   const mp = Object.entries(MAP_ALIAS).find(([, v]) => v === (S.map === 'merc' ? 'world' : S.map)); P.set('map', mp ? mp[0] : 'world');
   if (S.map === 'world' && PROJ !== 'gp') P.set('proj', { merc: 'mercator', globe: 'globe', pc: 'grid' }[PROJ]);
-  const L = S.layers[mapKind()] || {}, on = Object.entries(LAYER_ALIAS).filter(([, [g, k]]) => (g === mapKind() || g === '*') && L[k]).map(([n]) => n);
-  if (on.length) P.set('layers', [...new Set(on)].join(','));
+  const L = S.layers[mapKind()] || {}, seenK = new Set();
+  const on = Object.entries(LAYER_ALIAS).filter(([, [g, k]]) => (g === mapKind() || g === '*') && L[k] && !seenK.has(k) && seenK.add(k)).map(([n]) => n);
+  if (on.length) P.set('layers', on.join(','));
   if (S.map.startsWith('local')) { P.set('level', gridLevel()); P.set('tenths', tenthsMode()); }
   if (S.mode === 'globe') P.set('round', llStep());
   const city = S.mode === 'globe' && S.globeTask === 'mycity' && panel.querySelector('[data-city].on');   // the city chosen in the city check
