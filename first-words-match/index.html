@@ -108,7 +108,7 @@ footer{text-align:center;font-size:12px;opacity:.55;padding:6px}
   <div class="row"><button class="play" id="again">Play again</button><button class="play alt" id="end-home">Home</button></div>
 </div>
 
-<footer>Version 15.10.26i</footer>
+<footer>Version 15.10.26j</footer>
 
 <script>
 // [word, category, picture]. A picture is an emoji, several emoji separated by spaces, or an "@" scene.
@@ -126,7 +126,8 @@ const CATS = {
   school:{n:"School", ic:"🏫"},
   body:{n:"My Body", ic:"✋"},
   feel:{n:"How I Feel", ic:"🤒"},
-  phrase:{n:"Useful Phrases", ic:"💬"}
+  phrase:{n:"Useful Phrases", ic:"💬"},
+  tricky:{n:"Tricky Words", ic:"📝"}
 };
 const WORDS = [
  ["hello","greet","img:hello|👋"],["hi","greet","img:hello|👋"],["bye","greet","img:bye|👋 🚪"],["yes","greet","img:yes|✅"],["no","greet","img:no|❌"],
@@ -156,7 +157,8 @@ const WORDS = [
  ["toilet","school","img:toilet|🚽"],["lunch","school","img:lunch|🍱"],["playground","school","img:playground|🛝"],
  ["eyes","body","img:eyes|👁️"],["ears","body","img:ears|👂"],["nose","body","img:nose|👃"],["mouth","body","img:mouth|👄"],["hand","body","img:hand|✋"],["foot","body","img:foot|🦶"],["legs","body","img:legs|🦵"],
  ["hungry","feel","img:hungry|🥺 🍽️"],["thirsty","feel","img:thirsty|🥺 💧"],["tired","feel","img:tired|🥱"],["hurt","feel","img:hurt|🤕"],["ill","feel","img:ill|🤒"],
- ["Please can I go to the toilet?","phrase","img:toilet_please|🙋 🚽"],["I don't know","phrase","img:dont_know|🤷"],["I don't understand","phrase","img:dont_understand|😕 ❓"],["Please can I have a drink?","phrase","img:drink_please|🙋 🥤"]
+ ["Please can I go to the toilet?","phrase","img:toilet_please|🙋 🚽"],["I don't know","phrase","img:dont_know|🤷"],["I don't understand","phrase","img:dont_understand|😕 ❓"],["Please can I have a drink?","phrase","img:drink_please|🙋 🥤"],
+ ["I","tricky",null],["to","tricky",null],["into","tricky",null],["the","tricky",null],["is","tricky",null],["his","tricky",null],["of","tricky",null],["he","tricky",null],["she","tricky",null],["we","tricky",null],["me","tricky",null],["be","tricky",null],["you","tricky",null],["are","tricky",null],["her","tricky",null],["was","tricky",null],["all","tricky",null],["they","tricky",null],["my","tricky",null],["by","tricky",null],["ask","tricky",null],["asked","tricky",null],["called","tricky",null],["come","tricky",null],["could","tricky",null],["do","tricky",null],["full","tricky",null],["has","tricky",null],["have","tricky",null],["here","tricky",null],["like","tricky",null],["little","tricky",null],["looked","tricky",null],["love","tricky",null],["Mr","tricky",null],["Mrs","tricky",null],["oh","tricky",null],["once","tricky",null],["our","tricky",null],["out","tricky",null],["people","tricky",null],["pull","tricky",null],["push","tricky",null],["put","tricky",null],["said","tricky",null],["says","tricky",null],["so","tricky",null],["some","tricky",null],["their","tricky",null],["there","tricky",null],["today","tricky",null],["were","tricky",null],["what","tricky",null],["when","tricky",null],["where","tricky",null],["your","tricky",null],["back","tricky",null],["came","tricky",null],["down","tricky",null],["from","tricky",null],["just","tricky",null],["that","tricky",null],["them","tricky",null],["then","tricky",null],["this","tricky",null],["time","tricky",null],["very","tricky",null],["went","tricky",null],["will","tricky",null],["with","tricky",null],["about","tricky",null]
 ];
 // Left out on purpose (emoji can't show them clearly): the, a, and, or, with, come, see, want, need
 
@@ -167,13 +169,15 @@ const CLASH_GROUPS = [
  ["eat","hungry","lunch","food"],["drink","thirsty","water","Please can I have a drink?"],
  ["mum","dad","woman","man","family"],["go","walk","run"],
  ["sad","sorry","hurt","ill"],["toilet","Please can I go to the toilet?"],["pen","pencil","write"],
- ["book","read"],["happy","good"],["yes","good"],["no","bad","stop"],["door","open","close"],["boy","man"],["girl","woman"],["plate","hungry"],["school","teacher"],["write","read"]
+ ["book","read"],["happy","good"],["yes","good"],["no","bad","stop"],["door","open","close"],["boy","man"],["girl","woman"],["plate","hungry"],["school","teacher"],["write","read"],
+ ["there","their"],["to","two"],["be","bee"],["our","are"],["were","where"]
 ];
 const clash = (a,b)=>CLASH_GROUPS.some(g=>g.includes(a)&&g.includes(b));
 const MODES = [
  {id:"w2p", t:"Word → Picture", d:"See and hear a word. Find the picture."},
  {id:"p2w", t:"Picture → Word", d:"See a picture. Find the word."},
- {id:"l2p", t:"Listen → Picture", d:"Just listen. Find the picture."}
+ {id:"l2p", t:"Listen → Picture", d:"Just listen. Find the picture."},
+ {id:"l2w", t:"Listen → Word", d:"Just listen. Find the written word. (Needed for Tricky Words.)"}
 ];
 const ROUND = 10;
 
@@ -267,8 +271,15 @@ $("chips").onclick = e=>{
 // ---- game
 let q=[], idx=0, firstTry=true, locked=false, correctFirst=0;
 
+let curMode="w2p";
 function startRound(){
-  const pool = WORDS.filter(w=>prefs.cats.includes(w[1]));
+  let pool = WORDS.filter(w=>prefs.cats.includes(w[1]));
+  curMode = prefs.mode;
+  if(curMode!=="l2w"){
+    // picture games can only use words that have a picture; Tricky Words have none
+    const withPic = pool.filter(w=>w[2]);
+    if(withPic.length>=4) pool = withPic; else curMode="l2w";
+  }
   // favour words the child hasn't got right yet
   const weighted = pool.map(w=>({w, k:Math.random()/(1+2*((store[w[0]]||{}).c||0))})).sort((a,b)=>b.k-a.k);
   q = weighted.slice(0,Math.min(ROUND,pool.length)).map(x=>x.w);
@@ -276,13 +287,25 @@ function startRound(){
   show("game"); nextQ();
 }
 
+function lev(a,b){
+  a=a.toLowerCase(); b=b.toLowerCase();
+  const d=Array.from({length:a.length+1},(_,i)=>[i]); for(let j=1;j<=b.length;j++) d[0][j]=j;
+  for(let i=1;i<=a.length;i++) for(let j=1;j<=b.length;j++) d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+  return d[a.length][b.length];
+}
 function distractors(target){
-  const seen = new Set([target[2]]);
   const out=[];
+  if(curMode==="l2w"){
+    // look-alike words, so the child has to read carefully
+    const pool = WORDS.filter(w=>w[0].toLowerCase()!==target[0].toLowerCase() && !clash(target[0],w[0]));
+    const score = w=>lev(target[0],w[0]) - (w[0][0].toLowerCase()===target[0][0].toLowerCase()?0.6:0) - (w[1]===target[1]?0.4:0) + Math.random()*0.5;
+    return pool.map(w=>({w,k:score(w)})).sort((x,y)=>x.k-y.k).slice(0,3).map(x=>x.w);
+  }
+  const seen = new Set([target[2]]);
   const sameCat = shuffle(WORDS.filter(w=>w[1]===target[1]));
   const rest = shuffle(WORDS.filter(w=>w[1]!==target[1]));
   for(const w of sameCat.concat(rest)){
-    if(w[0]===target[0] || seen.has(w[2]) || clash(target[0],w[0])) continue;
+    if(!w[2] || w[0]===target[0] || seen.has(w[2]) || clash(target[0],w[0])) continue;
     seen.add(w[2]); out.push(w);
     if(out.length===3) break;
   }
@@ -293,7 +316,7 @@ function nextQ(){
   if(idx>=q.length) return endRound();
   const t=q[idx]; firstTry=true; locked=false;
   $("dots").innerHTML = q.map((_,i)=>`<div class="dot ${i<idx?"done":i===idx?"cur":""}"></div>`).join("");
-  const mode=prefs.mode;
+  const mode=curMode;
   const prompt=$("prompt");
   if(mode==="w2p") prompt.innerHTML = `<div class="pword${t[0].length>9?" long":""}">${t[0]}</div><button class="say" aria-label="Hear">🔊</button>`;
   else if(mode==="p2w") prompt.innerHTML = `<div class="pbig">${picHTML(t[2])}</div><button class="say" aria-label="Hear">🔊</button>`;
@@ -302,8 +325,8 @@ function nextQ(){
   const card = prompt.querySelector(".pword,.pbig");
   if(card){ card.style.cursor="pointer"; card.onclick = ()=>say(t[0]); }
   const opts = shuffle([t, ...distractors(t)]);
-  $("opts").innerHTML = opts.map(w=>`<div class="opt" role="button" data-w="${w[0]}">${mode==="p2w"?`<span class="w${w[0].length>9?" long":""}">${w[0]}</span>`:picHTML(w[2])}${mode==="l2p"?"":`<button class="hear" data-say="${w[0].replace(/"/g,"&quot;")}" aria-label="Hear this word">🔊</button>`}</div>`).join("");
-  if(mode==="l2p" || (prefs.auto && mode==="w2p")) setTimeout(()=>say(t[0]),250);
+  $("opts").innerHTML = opts.map(w=>`<div class="opt" role="button" data-w="${w[0]}">${(mode==="p2w"||mode==="l2w")?`<span class="w${w[0].length>9?" long":""}">${w[0]}</span>`:picHTML(w[2])}${(mode==="l2p"||mode==="l2w")?"":`<button class="hear" data-say="${w[0].replace(/"/g,"&quot;")}" aria-label="Hear this word">🔊</button>`}</div>`).join("");
+  if(mode==="l2p" || mode==="l2w" || (prefs.auto && mode==="w2p")) setTimeout(()=>say(t[0]),250);
 }
 
 $("opts").onclick = e=>{
@@ -313,19 +336,19 @@ $("opts").onclick = e=>{
   const t=q[idx];
   if(b.dataset.w===t[0]){
     locked=true; b.classList.add("ok");
-    if(prefs.auto || prefs.mode==="l2p") say(t[0]);
+    if(prefs.auto || curMode==="l2p" || curMode==="l2w") say(t[0]);
     const r = store[t[0]] = store[t[0]]||{c:0,s:0};
     r.s++; if(firstTry){ r.c++; correctFirst++; }
     save();
     setTimeout(()=>{ idx++; nextQ(); }, 1400);
   } else {
     firstTry=false; b.classList.add("no");
-    if(prefs.auto && prefs.mode==="p2w") say(b.dataset.w);
+    if(prefs.auto && curMode==="p2w") say(b.dataset.w);
   }
 };
 
 function endRound(){
-  (store._hist = store._hist||[]).push({s:correctFirst, n:q.length, m:prefs.mode, d:new Date().toISOString().slice(0,10)});
+  (store._hist = store._hist||[]).push({s:correctFirst, n:q.length, m:curMode, d:new Date().toISOString().slice(0,10)});
   store._hist = store._hist.slice(-50); save();
   show("end");
   const n=q.length, s=Math.max(1,Math.round(correctFirst/n*5));
