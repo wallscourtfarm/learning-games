@@ -108,7 +108,7 @@ footer{text-align:center;font-size:12px;opacity:.55;padding:6px}
   <div class="row"><button class="play" id="again">Play again</button><button class="play alt" id="end-home">Home</button></div>
 </div>
 
-<footer>Version 15.10.26j</footer>
+<footer>Version 15.10.26k</footer>
 
 <script>
 // [word, category, picture]. A picture is an emoji, several emoji separated by spaces, or an "@" scene.
@@ -127,7 +127,7 @@ const CATS = {
   body:{n:"My Body", ic:"✋"},
   feel:{n:"How I Feel", ic:"🤒"},
   phrase:{n:"Useful Phrases", ic:"💬"},
-  tricky:{n:"Tricky Words", ic:"📝"}
+  tricky:{n:"Common Exception Words", ic:"📝"}
 };
 const WORDS = [
  ["hello","greet","img:hello|👋"],["hi","greet","img:hello|👋"],["bye","greet","img:bye|👋 🚪"],["yes","greet","img:yes|✅"],["no","greet","img:no|❌"],
@@ -158,7 +158,7 @@ const WORDS = [
  ["eyes","body","img:eyes|👁️"],["ears","body","img:ears|👂"],["nose","body","img:nose|👃"],["mouth","body","img:mouth|👄"],["hand","body","img:hand|✋"],["foot","body","img:foot|🦶"],["legs","body","img:legs|🦵"],
  ["hungry","feel","img:hungry|🥺 🍽️"],["thirsty","feel","img:thirsty|🥺 💧"],["tired","feel","img:tired|🥱"],["hurt","feel","img:hurt|🤕"],["ill","feel","img:ill|🤒"],
  ["Please can I go to the toilet?","phrase","img:toilet_please|🙋 🚽"],["I don't know","phrase","img:dont_know|🤷"],["I don't understand","phrase","img:dont_understand|😕 ❓"],["Please can I have a drink?","phrase","img:drink_please|🙋 🥤"],
- ["I","tricky",null],["to","tricky",null],["into","tricky",null],["the","tricky",null],["is","tricky",null],["his","tricky",null],["of","tricky",null],["he","tricky",null],["she","tricky",null],["we","tricky",null],["me","tricky",null],["be","tricky",null],["you","tricky",null],["are","tricky",null],["her","tricky",null],["was","tricky",null],["all","tricky",null],["they","tricky",null],["my","tricky",null],["by","tricky",null],["ask","tricky",null],["asked","tricky",null],["called","tricky",null],["come","tricky",null],["could","tricky",null],["do","tricky",null],["full","tricky",null],["has","tricky",null],["have","tricky",null],["here","tricky",null],["like","tricky",null],["little","tricky",null],["looked","tricky",null],["love","tricky",null],["Mr","tricky",null],["Mrs","tricky",null],["oh","tricky",null],["once","tricky",null],["our","tricky",null],["out","tricky",null],["people","tricky",null],["pull","tricky",null],["push","tricky",null],["put","tricky",null],["said","tricky",null],["says","tricky",null],["so","tricky",null],["some","tricky",null],["their","tricky",null],["there","tricky",null],["today","tricky",null],["were","tricky",null],["what","tricky",null],["when","tricky",null],["where","tricky",null],["your","tricky",null],["back","tricky",null],["came","tricky",null],["down","tricky",null],["from","tricky",null],["just","tricky",null],["that","tricky",null],["them","tricky",null],["then","tricky",null],["this","tricky",null],["time","tricky",null],["very","tricky",null],["went","tricky",null],["will","tricky",null],["with","tricky",null],["about","tricky",null]
+ ["I","tricky","img:i|👆"],["to","tricky",null],["into","tricky","img:into|🏊"],["the","tricky",null],["is","tricky",null],["his","tricky",null],["of","tricky",null],["he","tricky",null],["she","tricky",null],["we","tricky","img:we|👭"],["me","tricky",null],["be","tricky",null],["you","tricky","img:you|🫵"],["are","tricky",null],["her","tricky",null],["was","tricky",null],["all","tricky",null],["they","tricky",null],["my","tricky",null],["by","tricky",null],["ask","tricky","img:ask|🙋"],["asked","tricky",null],["called","tricky",null],["come","tricky",null],["could","tricky",null],["do","tricky",null],["full","tricky",null],["has","tricky",null],["have","tricky",null],["here","tricky",null],["like","tricky",null],["little","tricky","img:little|🐱"],["looked","tricky",null],["love","tricky","img:love|❤️"],["Mr","tricky",null],["Mrs","tricky",null],["oh","tricky","img:oh|😮"],["once","tricky",null],["our","tricky",null],["out","tricky","img:out|📤"],["people","tricky","img:people|👥"],["pull","tricky","img:pull|🪢"],["push","tricky","img:push|📦"],["put","tricky",null],["said","tricky",null],["says","tricky",null],["so","tricky",null],["some","tricky",null],["their","tricky",null],["there","tricky",null],["today","tricky",null],["were","tricky",null],["what","tricky",null],["when","tricky",null],["where","tricky",null],["your","tricky",null],["back","tricky",null],["came","tricky",null],["down","tricky","img:down|⬇️"],["from","tricky",null],["just","tricky",null],["that","tricky",null],["them","tricky",null],["then","tricky",null],["this","tricky",null],["time","tricky","img:time|🕐"],["very","tricky",null],["went","tricky",null],["will","tricky",null],["with","tricky",null],["about","tricky",null]
 ];
 // Left out on purpose (emoji can't show them clearly): the, a, and, or, with, come, see, want, need
 
@@ -170,14 +170,14 @@ const CLASH_GROUPS = [
  ["mum","dad","woman","man","family"],["go","walk","run"],
  ["sad","sorry","hurt","ill"],["toilet","Please can I go to the toilet?"],["pen","pencil","write"],
  ["book","read"],["happy","good"],["yes","good"],["no","bad","stop"],["door","open","close"],["boy","man"],["girl","woman"],["plate","hungry"],["school","teacher"],["write","read"],
- ["there","their"],["to","two"],["be","bee"],["our","are"],["were","where"]
+ ["there","their"],["pull","push"],["in","out","into","on","under"],["I","you","we"],["little","small","big"],["people","family","friend","we"],["love","happy"],["time","wake"],["to","two"],["be","bee"],["our","are"],["were","where"]
 ];
 const clash = (a,b)=>CLASH_GROUPS.some(g=>g.includes(a)&&g.includes(b));
 const MODES = [
  {id:"w2p", t:"Word → Picture", d:"See and hear a word. Find the picture."},
  {id:"p2w", t:"Picture → Word", d:"See a picture. Find the word."},
  {id:"l2p", t:"Listen → Picture", d:"Just listen. Find the picture."},
- {id:"l2w", t:"Listen → Word", d:"Just listen. Find the written word. (Needed for Tricky Words.)"}
+ {id:"l2w", t:"Listen → Word", d:"Just listen. Find the written word. (Needed for Common Exception Words.)"}
 ];
 const ROUND = 10;
 
