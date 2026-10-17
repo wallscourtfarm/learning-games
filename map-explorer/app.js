@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '17.10.26b';
+const VERSION = '17.10.26c';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -425,7 +425,7 @@ const KIND_TXT = {
 };
 function kindText(it) {
   if (it.kt) return it.kt;
-  if (it.k === 'point') return it.cap ? 'a capital city' : it.phys ? 'a physical feature' : it.res ? 'a place where natural resources are dug from the ground' : it.id === 'school' ? 'our school, WFA' : /city|ton$|ham$|ool$|eds$|ield$|stle$/.test(it.n) || ['bristol', 'exeter', 'bath', 'manchester', 'birmingham', 'liverpool', 'leeds', 'sheffield', 'newcastle', 'mumbai', 'newyork', 'rio', 'singapore', 'sydney'].includes(it.id) ? 'a city' : 'a landmark';
+  if (it.k === 'point') return it.cap ? 'a capital city' : it.phys ? 'a physical feature' : it.res ? 'a place where natural resources are dug from the ground' : it.id === 'school' ? 'our school, WFA' : /city|ton$|ham$|ool$|eds$|ield$|stle$/.test(it.n) || ['bristol', 'exeter', 'bath', 'manchester', 'birmingham', 'liverpool', 'leeds', 'sheffield', 'newcastle', 'mumbai', 'newyork', 'rio', 'singapore', 'sydney', 'murmansk', 'johannesburg', 'delhi', 'xian', 'lagos'].includes(it.id) ? 'a city' : 'a landmark';
   if (it.k === 'line') return it.phys ? 'a mountain range or hills' : 'a landmark';
   return KIND_TXT[it.k] || 'a place';
 }
@@ -2228,7 +2228,7 @@ function timeAsk(p) {
    Rules match the lessons: coordinates rounded to the nearest degree; direction measured from Bristol
    (51.45°N, 2.58°W) on an equal-degree map; tropical up to 23° (23° counts), temperate to 66°, polar beyond. */
 const BRISTOL_LL = { lat: 51.45, lon: -2.58 };
-// The nine infographic cities plus Nairobi (worked example). Biomes are the ones taught in the lessons (agreed
+// The infographic cities (twelve for T1, plus the earlier set) and Nairobi (worked example). Biomes are the ones taught in the lessons (agreed
 // with the enquiry; they match the biome data at each city except Cairo, whose exact point is in the Nile strip).
 const MY_CITIES = [
   ['cairo', 'Cairo', 'Egypt', 'Africa', 'Hot desert'], ['london-w', 'London', 'United Kingdom', 'Europe', 'Temperate forest'],
@@ -2236,6 +2236,9 @@ const MY_CITIES = [
   ['paris', 'Paris', 'France', 'Europe', 'Temperate forest'], ['rio', 'Rio de Janeiro', 'Brazil', 'South America', 'Rainforest'],
   ['singapore', 'Singapore', 'Singapore', 'Asia', 'Rainforest'], ['sydney', 'Sydney', 'Australia', 'Oceania', 'Temperate forest'],
   ['tokyo', 'Tokyo', 'Japan', 'Asia', 'Temperate forest'], ['nairobi', 'Nairobi', 'Kenya', 'Africa', 'Savanna'],
+  ['murmansk', 'Murmansk', 'Russia', 'Europe', 'Tundra'], ['johannesburg', 'Johannesburg', 'South Africa', 'Africa', 'Grassland'],
+  ['delhi', 'Delhi', 'India', 'Asia', 'Grassland'], ['xian', "Xi'an", 'China', 'Asia', 'Grassland'],
+  ['lagos', 'Lagos', 'Nigeria', 'Africa', 'Savanna'], ['mexicocity', 'Mexico City', 'Mexico', 'North America', 'Temperate forest'],
 ];
 function climateZone(lat) { const a = Math.abs(lat); return a <= 23 ? 'Tropical' : a <= 66 ? 'Temperate' : 'Polar'; }
 function directionFrom(a, b) {                 // 8-point direction on an equal-degree map, plus "near halfway?"

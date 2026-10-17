@@ -63,7 +63,7 @@ and `year=5&mode=os&map=wfa&task=give&level=6`, `year=5&mode=os&map=wfa&task=fin
 | `labels` | `big` | Larger labels on the map for the board |
 | `rose` | `on` (default), `off` | Compass quiz answers as a compass, or as a mixed-up list so children picture the compass (added 11.10.26l) |
 | `place` | a place name, e.g. `Nairobi`, `Gloucestershire`, `Stoke Gifford` | Opens Explore centred on that place with its card (uses the search) |
-| `city` | with `task=mycity`: `Cairo`, `London`, `Moscow`, `New York`, `Paris`, `Rio de Janeiro`, `Singapore`, `Sydney`, `Tokyo`, `Nairobi` (worked example) | Opens the city check on that city (Mumbai is an ordinary place, not in the check) |
+| `city` | with `task=mycity`: `Cairo`, `London`, `Moscow`, `New York`, `Paris`, `Rio de Janeiro`, `Singapore`, `Sydney`, `Tokyo`, `Murmansk`, `Johannesburg`, `Delhi`, `Xi'an`, `Lagos`, `Mexico City`, `Nairobi` (worked example) | Opens the city check on that city (Mumbai is an ordinary place, not in the check) |
 | `view` | `x,y,zoom` (made by "Copy link") | Exact map position |
 | `centre` | `longitude,latitude`, e.g. `0,30` | Globe only (`proj=globe`): turns the globe so this point faces the class (added 17.10.26a) |
 | `embed` | `1` | Only the map: no top bar, panel or layer buttons, and the link does not change the settings saved on the device. For a map shown inside a lesson slide page (enquiry-builder `tools/slide-html`) (added 17.10.26a) |
@@ -88,10 +88,12 @@ Still open each link on an iPad before printing (rule 6).
 
 ## Rules the city check uses (match the lessons)
 
-Coordinates rounded to the nearest degree. Direction measured from Bristol (51.45°N, 2.58°W) on an equal-degree map, 8 compass points; within 8° of halfway between two points, both are accepted ("close to halfway, so east is fine too"). Climate zone: tropical up to 23° (23° counts as tropical), temperate over 23° to 66°, polar over 66°. Biome: the one taught for each city (Singapore and Rio rainforest, Nairobi savanna, Cairo hot desert, the rest temperate forest). These agree with the RESOLVE Ecoregions biome data at each city, except Cairo, whose exact point is in the Nile strip.
+Coordinates rounded to the nearest degree. Direction measured from Bristol (51.45°N, 2.58°W) on an equal-degree map, 8 compass points; within 8° of halfway between two points, both are accepted ("close to halfway, so east is fine too"). Climate zone: tropical up to 23° (23° counts as tropical), temperate over 23° to 66°, polar over 66°. Biome: the one taught for each city (Singapore and Rio rainforest, Nairobi and Lagos savanna, Cairo hot desert, Murmansk tundra, Delhi, Johannesburg and Xi'an grassland, the rest temperate forest). These agree with the RESOLVE Ecoregions biome data at each city, except Cairo, whose exact point is in the Nile strip.
 
 Checked 11.10.26 against the enquiry's table: all ten cities (Cairo, London, Moscow, New York, Paris, Rio de Janeiro, Singapore, Sydney, Tokyo, Nairobi) agree on coordinates, hemispheres, zone, direction, near-halfway flag and biome.
 
 Notes for the enquiry:
 - **The Plaza**: OpenStreetMap's outline gives ST 618 780 (the enquiry has 619 780; it is on the edge of two squares).
 - WFA is ST 614 777, as in the enquiry. Happy Days Nursery is not in OpenStreetMap, so it is not on the map.
+
+Checked 17.10.26c: Murmansk (69°N 33°E, north-east), Johannesburg (26°S 28°E, south; south-east also accepted), Delhi (29°N 77°E, east), Xi'an (34°N 109°E, east), Lagos (7°N 3°E, south) and Mexico City (19°N 99°W, west) added; all thirteen cities match the enquiry's table.
