@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '11.10.26l';
+const VERSION = '17.10.26a';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -27,7 +27,9 @@ let S = (() => {
   } catch (e) { /* storage blocked */ }
   return JSON.parse(JSON.stringify(DEFAULTS));
 })();
-function save() { try { localStorage.setItem(STORE, JSON.stringify(S)); } catch (e) { /* ignore */ } }
+// embed=1 (a map inside a lesson slide page) must not change the settings this device keeps for the full tool
+const EMBED = new URLSearchParams(location.search).get('embed') === '1';
+function save() { if (EMBED) return; try { localStorage.setItem(STORE, JSON.stringify(S)); } catch (e) { /* ignore */ } }
 const yr = () => S.year || 0;                      // 0 = all years
 const fourPoint = () => yr() === 1 || yr() === 2;
 const gridLevel = () => S.gridLevel || (yr() === 3 ? 4 : 6);
@@ -2777,6 +2779,7 @@ function applyLink() {
   // a link always starts from the same clean view, so every device shows exactly the same thing
   S.layers = JSON.parse(JSON.stringify(DEFAULTS.layers));
   Object.assign(S, { simpleBiomes: false, llRound: 10, gridLevel: 0, mapKeyOff: false, findFlags: false, bigLabels: false, revision: true, count: 10, compassList: false });
+  if (EMBED) S.mapKeyOff = true;               // a map inside a slide is small: no key box over it
   if (P.get('preset') === 'locations') {         // Year 5 Locations enquiry
     S.year = 5; S.revision = false; S.simpleBiomes = true; S.llRound = 1;
     Object.assign(S.layers.world, { grid: true, lines: true, names: true, markers: true });
@@ -2801,7 +2804,9 @@ function applyLink() {
   }
   if (S.year === null) S.year = 0;
   save();
-  return { proj: PROJ_ALIAS[(P.get('proj') || '').replace(/[^a-z]/gi, '').toLowerCase()], place: P.get('place'), view: P.get('view'), city: P.get('city') };
+  const ce = (P.get('centre') || P.get('center') || '').split(',').map(Number);
+  return { proj: PROJ_ALIAS[(P.get('proj') || '').replace(/[^a-z]/gi, '').toLowerCase()], place: P.get('place'), view: P.get('view'), city: P.get('city'),
+           centre: ce.length === 2 && ce.every(isFinite) ? ce : null };
 }
 function viewLink() {                          // a link that reopens exactly this view
   const P = new URLSearchParams();
@@ -2828,6 +2833,7 @@ function viewLink() {                          // a link that reopens exactly th
 /* ------------------------------------------------------------ start */
 buildDefs();
 const LINK = applyLink();
+document.body.classList.toggle('embed', EMBED);
 document.body.classList.toggle('big', S.big);
 svg.classList.toggle('biglabels', !!S.bigLabels);
 $('#panel').classList.toggle('closed', !S.panelOpen);
@@ -2839,6 +2845,8 @@ if (!['explore', 'find', 'grid', 'compass', 'globe'].includes(S.mode)) S.mode = 
 showMap(S.map);
 if (LINK && LINK.proj && LINK.proj !== 'gp' && S.map === 'world') setProj(LINK.proj); else startMode();
 if (LINK) {
+  if (LINK.centre) centreOn(LINK.centre[0], LINK.centre[1]);   // globe only: [longitude, latitude] in the middle
+  if (EMBED && PROJ === 'globe') home(0);       // the whole globe in view, whatever the box size
   if (LINK.view) { const [x, y, z] = LINK.view.split(',').map(Number); if (isFinite(x) && isFinite(y) && z > 0) goTo(x, y, fitK(V.b.w, V.b.h) / z, 0); }
   if (LINK.place) { const r = searchPlaces(LINK.place)[0]; if (r) { cardTitle = 'You searched for…'; r.act(); } }
   if (LINK.city && S.mode === 'globe' && S.globeTask === 'mycity') { const c = MY_CITIES.find(c => norm(c[1]) === norm(LINK.city) || c[0] === LINK.city); if (c) { panel.querySelector(`[data-city="${c[0]}"]`)?.classList.add('on'); myCityShow(c[0]); } }

@@ -330,3 +330,7 @@ button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulat
 .dirlist .btn { font-size: calc(21px * var(--fs)); min-height: 58px; }
 .dirlist .btn.sel { background: var(--ink); color: #fff; box-shadow: 0 0 0 4px #ffd54a; }
 .dirlist .btn.right { background: var(--good); color: #fff; box-shadow: none; }
+
+/* ---------- embed=1: only the map, for a map placed inside a lesson slide page ---------- */
+body.embed #top, body.embed #panel, body.embed #teamStrip, body.embed #layerBtnWrap { display: none !important; }
+body.embed #attrib { font-size: 10px; opacity: .7; }

@@ -65,6 +65,8 @@ and `year=5&mode=os&map=wfa&task=give&level=6`, `year=5&mode=os&map=wfa&task=fin
 | `place` | a place name, e.g. `Nairobi`, `Gloucestershire`, `Stoke Gifford` | Opens Explore centred on that place with its card (uses the search) |
 | `city` | with `task=mycity`: `Cairo`, `London`, `Moscow`, `New York`, `Paris`, `Rio de Janeiro`, `Singapore`, `Sydney`, `Tokyo`, `Nairobi` (worked example) | Opens the city check on that city (Mumbai is an ordinary place, not in the check) |
 | `view` | `x,y,zoom` (made by "Copy link") | Exact map position |
+| `centre` | `longitude,latitude`, e.g. `0,30` | Globe only (`proj=globe`): turns the globe so this point faces the class (added 17.10.26a) |
+| `embed` | `1` | Only the map: no top bar, panel or layer buttons, and the link does not change the settings saved on the device. For a map shown inside a lesson slide page (enquiry-builder `tools/slide-html`) (added 17.10.26a) |
 
 ## Ready-made links for the Year 5 Locations enquiry
 
