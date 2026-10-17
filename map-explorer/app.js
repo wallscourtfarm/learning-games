@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '17.10.26a';
+const VERSION = '17.10.26b';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -2719,7 +2719,7 @@ function redrawInk() {
     ictx.globalCompositeOperation = 'destination-out'; ictx.beginPath(); ictx.arc(spot.x, spot.y, spot.r, 0, 7); ictx.fill(); ictx.globalCompositeOperation = 'source-over';
   }
   for (const s of strokes) {
-    ictx.strokeStyle = s.c; ictx.lineWidth = 7; ictx.lineCap = ictx.lineJoin = 'round';
+    ictx.strokeStyle = s.c; ictx.lineWidth = 4; ictx.lineCap = ictx.lineJoin = 'round';
     ictx.beginPath(); s.p.forEach(([x, y], i) => i ? ictx.lineTo(x, y) : ictx.moveTo(x, y)); ictx.stroke();
   }
 }
