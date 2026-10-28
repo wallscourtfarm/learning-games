@@ -156,7 +156,7 @@
 </main>
 
 <div class="footer">
-  Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; v22.09.26a
+  Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; v28.10.26a
 </div>
 
 <script src="../lessons-data.js"></script>
@@ -335,6 +335,19 @@ function enterMain() {
     if (live.currentWeek) CURRENT_WEEK = live.currentWeek;
   }
 
+  // A child's personal card QR opens this page as play/#c=<ID>&p=<PIN>. The part after # is never sent to a
+  // server and is removed from the address bar at once. Check it and go straight in (this also replaces any
+  // child already signed in on this iPad); if it doesn't work, fall through to the normal ID + PIN screen.
+  let cardFailed = false;
+  const card = /[#&]c=([^&]+)&p=([^&]+)/.exec(location.hash);
+  if (card) {
+    try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
+    const result = await spVerifyPin(BACKEND_URL, decodeURIComponent(card[1]).trim().toUpperCase(), decodeURIComponent(card[2]).trim());
+    if (result.ok) { identifyAs(result.learner, result.token); return; }
+    spClearVerifiedLearner();
+    cardFailed = true;
+  }
+
   // Already proved a PIN once in this tab (e.g. came back from a game) —
   // skip straight past identifying again.
   const verifiedId = spGetVerifiedLearnerId();
@@ -347,6 +360,10 @@ function enterMain() {
 
   $("loading-panel").style.display = "none";
   $("identify-panel").style.display = "block";
+  if (cardFailed) {
+    $("identify-banner").style.display = "block";
+    $("identify-banner").textContent = "That card didn't work — enter your ID and PIN below instead.";
+  }
 
   const uParam = (params.get("u") || "").trim().toUpperCase();
   if (uParam) {
