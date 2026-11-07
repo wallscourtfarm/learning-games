@@ -4,7 +4,7 @@
  * Data: map-data.js (built by build/build_data.py). No pupil data is stored.
  */
 'use strict';
-const VERSION = '17.10.26c';
+const VERSION = '07.11.26a';
 const D = window.MAP_DATA;
 const NS = 'http://www.w3.org/2000/svg';
 const $ = s => document.querySelector(s);
@@ -13,7 +13,7 @@ const $ = s => document.querySelector(s);
 const STORE = 'wfa_map_explorer_v1';
 const DEFAULTS = {
   year: null, map: 'world', mode: 'explore', revision: true, autoZoom: true, count: 10, big: false,
-  teams: 0, scores: [0, 0, 0, 0, 0, 0], gridLevel: 0, gridTask: 'give', globeTask: 'read', panelOpen: true,
+  teams: 0, scores: [0, 0, 0, 0, 0, 0], gridLevel: 0, gridTask: 'give', globeTask: 'read', peelProj: 'merc', panelOpen: true,
   layers: {
     world: { names: true, colour: true, lines: true, grid: false, markers: true, tz: false, climate: false, plates: false, biomes: false },
     uk: { names: true, regions: false, counties: false, rivers: true, markers: true },
@@ -352,9 +352,9 @@ function endPtr(e) {
 svg.addEventListener('pointerup', endPtr);
 svg.addEventListener('pointercancel', endPtr);
 svg.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.clientX, e.clientY, Math.exp(e.deltaY * .0016)); }, { passive: false });
-$('#zIn').onclick = () => { const r = svg.getBoundingClientRect(); zoomAt(r.left + V.W / 2, r.top + V.H / 2, 1 / 1.6); };
-$('#zOut').onclick = () => { const r = svg.getBoundingClientRect(); zoomAt(r.left + V.W / 2, r.top + V.H / 2, 1.6); };
-$('#zHome').onclick = () => home();
+$('#zIn').onclick = () => { if (peelOn) { PEEL.zoom = clamp(PEEL.zoom * 1.4, .6, 3); PEEL.dirty = true; return; } const r = svg.getBoundingClientRect(); zoomAt(r.left + V.W / 2, r.top + V.H / 2, 1 / 1.6); };
+$('#zOut').onclick = () => { if (peelOn) { PEEL.zoom = clamp(PEEL.zoom / 1.4, .6, 3); PEEL.dirty = true; return; } const r = svg.getBoundingClientRect(); zoomAt(r.left + V.W / 2, r.top + V.H / 2, 1.6); };
+$('#zHome').onclick = () => peelOn ? peelHome() : home();
 $('#zPause').onclick = () => setPause(true);
 
 /* ------------------------------------------------------------ shared symbols */
@@ -660,6 +660,7 @@ function ensureMap(id) {
   built[cacheKey(id)] = m; return m;
 }
 function showMap(id, keepView) {
+  peelStop();
   S.map = id; if (id.startsWith('local')) S.lastLocal = id; if (id !== 'merc') save();
   const m = ensureMap(id);
   layersG.replaceChildren(m.g);
@@ -2066,8 +2067,8 @@ function heightAsk() {
 
 /* ------------------------------------------------------------ LAT & LONG: read, plot, time zones, true size */
 let GL = null;
-const GLOBE_TASKS = { read: 'Read latitude and longitude', plot: 'Plot latitude and longitude', mycity: 'Where in the world is…? (my city)', time: 'Time zones', size: 'True size of countries' };
-const GLOBE_YEARS = { read: 'Years 3-6', plot: 'Years 4-6', mycity: 'Year 5 Locations', time: 'Years 3-6', size: 'Year 5' };
+const GLOBE_TASKS = { read: 'Read latitude and longitude', plot: 'Plot latitude and longitude', mycity: 'Where in the world is…? (my city)', time: 'Time zones', peel: 'Globe to flat map', size: 'True size of countries' };
+const GLOBE_YEARS = { read: 'Years 3-6', plot: 'Years 4-6', mycity: 'Year 5 Locations', time: 'Years 3-6', peel: 'Year 5', size: 'Year 5' };
 const deg = (v, pos, neg) => v === 0 ? '0°' : Math.abs(v) + '°' + (v > 0 ? pos : neg);
 const fmtLL = (la, lo) => `${deg(la, 'N', 'S')}, ${deg(lo, 'E', 'W')}`;
 const llStep = () => S.llRound === 1 ? 1 : 10;            // nearest 10° (default) or nearest degree
@@ -2090,6 +2091,7 @@ function wireGlobeHeader() {
 }
 function globeStart() {
   ov.replaceChildren(); clearHL();
+  if (S.globeTask === 'peel') return peelStart();
   if (S.globeTask === 'size') return sizeStart();
   if (S.globeTask === 'mycity') return myCityStart();
   if (S.map !== 'world') showMap('world');
@@ -2387,6 +2389,223 @@ function drawGhost() {
   E('path', { d, class: 'ghost', fill: 'rgba(229,57,53,.5)', stroke: '#b71c1c', 'stroke-width': 2.5, 'vector-effect': 'non-scaling-stroke', style: 'cursor:grab' }, ov);
 }
 
+/* --- globe to flat map: peel a 3D globe open into a flat map and watch Greenland and Africa change size.
+   Plain WebGL (no libraries, works offline). Each point of the Earth is stored as (longitude, latitude); the
+   vertex shader moves it from the globe, onto a cylinder (stretched the way the chosen map stretches it),
+   then unrolls the cylinder flat. */
+const PEEL_MAPS = { merc: 'Mercator', gp: 'Gall-Peters' };
+const PEEL_HOME = { c: -18 * RAD, tilt: .5, zoom: 1 };
+let PEEL = null, peelOn = false;
+function peelInit() {
+  const wrap = H('<div id="peelWrap" hidden><canvas id="peelGL" aria-label="A globe that peels open into a flat map"></canvas><div id="peelSay"></div><div id="peelTip"></div></div>');
+  $('#map').after(wrap);
+  const cv = wrap.querySelector('canvas');
+  const gl = cv.getContext('webgl', { antialias: true }) || cv.getContext('experimental-webgl');
+  const P = { wrap, cv, gl, t: 0, target: 0, playing: false, proj: S.peelProj === 'gp' ? 'gp' : 'merc', projT: S.peelProj === 'gp' ? 1 : 0,
+              spot: true, circles: false, dirty: true, raf: 0, last: 0, ...PEEL_HOME, stage: '' };
+  if (!gl) return P;
+  const VS = `
+    attribute vec2 a_ll;
+    uniform float u_t1, u_t2, u_proj, u_c, u_tilt, u_cz, u_dist, u_f, u_aspect, u_off;
+    varying vec2 v_uv; varying float v_shade, v_cut;
+    const float PI = 3.14159265;
+    void main() {
+      float lam = a_ll.x, phi = a_ll.y;
+      vec3 sph = vec3(cos(phi) * sin(lam), sin(phi), cos(phi) * cos(lam));
+      float yM = log(tan(PI / 4.0 + clamp(phi, -1.466, 1.466) / 2.0));      // Mercator, cut at 84 degrees
+      float yG = 2.0 * sin(phi);                                             // Gall-Peters (equal area)
+      float y = mix(yM, yG, u_proj);
+      float r = 1.0 / max(1.0 - u_t2, 0.0005), a = lam / r;                  // unroll: the cylinder's radius grows to infinity
+      vec3 pl = vec3(r * sin(a), y, r * cos(a) - r + 1.0);
+      vec3 p = mix(sph, pl, u_t1);
+      float tl = u_tilt * (1.0 - u_t1);
+      p = vec3(p.x, p.y * cos(tl) - p.z * sin(tl), p.y * sin(tl) + p.z * cos(tl));
+      float z = p.z - u_cz - u_dist;
+      gl_Position = vec4(p.x * u_f / u_aspect - u_off * z, p.y * u_f, -1.001 * z - 0.2, -z);     // near 0.1, far 200
+      v_uv = vec2((lam + u_c) / (2.0 * PI) + 0.5, 0.5 - phi / PI);
+      vec3 n = vec3(sph.x, sph.y * cos(tl) - sph.z * sin(tl), sph.y * sin(tl) + sph.z * cos(tl));
+      v_shade = mix(0.62 + 0.38 * max(dot(n, normalize(vec3(-0.35, 0.45, 1.0))), 0.0), 1.0, u_t1);
+      v_cut = (1.0 - u_proj) * step(1.466, abs(phi)) * u_t1;                 // Mercator cannot show the poles
+    }`;
+  const FS = `
+    precision mediump float;
+    uniform sampler2D u_tex;
+    varying vec2 v_uv; varying float v_shade, v_cut;
+    void main() {
+      if (v_cut > 0.3) discard;
+      vec3 c = texture2D(u_tex, v_uv).rgb * v_shade;
+      gl_FragColor = vec4(gl_FrontFacing ? c : c * 0.7, 1.0);
+    }`;
+  const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.warn(gl.getShaderInfoLog(s)); return s; };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.warn(gl.getProgramInfoLog(prog)); P.gl = null; return P; }
+  gl.useProgram(prog);
+  const NX = 180, NY = 90, ll = new Float32Array((NX + 1) * (NY + 1) * 2), idx = new Uint16Array(NX * NY * 6);
+  for (let j = 0, k = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) { ll[k++] = (i / NX * 2 - 1) * Math.PI; ll[k++] = (.5 - j / NY) * Math.PI; }
+  for (let j = 0, k = 0; j < NY; j++) for (let i = 0; i < NX; i++) { const a = j * (NX + 1) + i, b = a + NX + 1; idx.set([a, b, a + 1, a + 1, b, b + 1], k); k += 6; }
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, ll, gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog, 'a_ll'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+  P.count = idx.length;
+  P.u = {}; for (const n of ['u_t1', 'u_t2', 'u_proj', 'u_c', 'u_tilt', 'u_cz', 'u_dist', 'u_f', 'u_aspect', 'u_off']) P.u[n] = gl.getUniformLocation(prog, n);
+  P.tex = gl.createTexture();
+  gl.enable(gl.DEPTH_TEST);
+  peelTexture(P);
+  // drag to spin the globe (or slide the flat map), drag up and down to tip the globe, pinch or scroll to zoom
+  const pts = new Map(); let pinch = 0;
+  cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); } });
+  cv.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    if (pts.size === 2) {
+      p.x = e.clientX; p.y = e.clientY; const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch) P.zoom = clamp(P.zoom * d / pinch, .6, 3); pinch = d; P.dirty = true; return;
+    }
+    const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+    const span = P.screenW || cv.clientWidth;                       // how wide the Earth looks on screen just now
+    P.c -= dx / span * (P.flatNow ? 2 * Math.PI : Math.PI);
+    if (P.globeNow) P.tilt = clamp(P.tilt + dy * .006, -1.1, 1.1);
+    P.dirty = true;
+  });
+  const up = e => { pts.delete(e.pointerId); pinch = 0; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => { e.preventDefault(); P.zoom = clamp(P.zoom * Math.exp(-e.deltaY * .0015), .6, 3); P.dirty = true; }, { passive: false });
+  new ResizeObserver(() => { P.dirty = true; }).observe(wrap);
+  return P;
+}
+function peelTexture(P) {                     // the world map the globe wears: latitude and longitude spaced evenly
+  const W = 4096, Ht = 2048, c = P.canvas || (P.canvas = document.createElement('canvas'));
+  c.width = W; c.height = Ht;
+  const g = c.getContext('2d'), X = lon => (lon + 180) / 360 * W, Y = lat => (90 - lat) / 180 * Ht;
+  g.fillStyle = '#cfe7f5'; g.fillRect(0, 0, W, Ht);
+  P.rings ||= D.world.parts.map(([code, cont, d]) => ({ code, cont, rings: parsePath(d).map(r => r.map(([x, y]) => gpToLL(x, y))) }));
+  const ring = r => { r.forEach((q, i) => i ? g.lineTo(X(q.lon), Y(q.lat)) : g.moveTo(X(q.lon), Y(q.lat))); g.closePath(); };
+  g.lineJoin = 'round';
+  for (const p of P.rings) {
+    const hl = p.code === 'GRL' ? '#d81b60' : p.cont === 'Africa' ? '#f9a825' : null;
+    g.fillStyle = P.spot ? (hl || '#e6dfcc') : (CONT_COL[p.cont] || '#ddd');
+    g.strokeStyle = P.spot && hl ? 'rgba(40,20,10,.6)' : 'rgba(90,90,80,.6)'; g.lineWidth = P.spot && hl ? 2.4 : 1.5;
+    g.beginPath(); p.rings.forEach(ring); g.fill('evenodd'); g.stroke();
+  }
+  g.fillStyle = '#cfe7f5'; g.strokeStyle = 'rgba(90,90,80,.6)'; g.lineWidth = 1.2;
+  g.beginPath(); parsePath(D.world.lakes).forEach(r => ring(r.map(([x, y]) => gpToLL(x, y)))); g.fill('evenodd'); g.stroke();
+  // lines of latitude and longitude every 15 degrees: equal squares on the globe, so you can see each map stretch them
+  g.strokeStyle = 'rgba(31,95,153,.5)'; g.lineWidth = 2.5;
+  for (let lat = -75; lat <= 75; lat += 15) if (lat) { g.beginPath(); g.moveTo(0, Y(lat)); g.lineTo(W, Y(lat)); g.stroke(); }
+  for (let lon = -180; lon < 180; lon += 15) { g.beginPath(); g.moveTo(X(lon), 0); g.lineTo(X(lon), Ht); g.stroke(); }
+  g.strokeStyle = '#d32f2f'; g.lineWidth = 5; g.beginPath(); g.moveTo(0, Y(0)); g.lineTo(W, Y(0)); g.stroke();
+  if (P.circles) {                            // circles that are all exactly the same size on the real Earth
+    const R = 6 * RAD;
+    for (const la of [-60, -30, 0, 30, 60]) for (const lo of [-120, -60, 0, 60, 120]) {
+      const p1 = la * RAD; g.beginPath();
+      for (let k = 0; k <= 72; k++) {
+        const th = k / 72 * 2 * Math.PI, p2 = Math.asin(Math.sin(p1) * Math.cos(R) + Math.cos(p1) * Math.sin(R) * Math.cos(th));
+        const l2 = lo * RAD + Math.atan2(Math.sin(th) * Math.sin(R) * Math.cos(p1), Math.cos(R) - Math.sin(p1) * Math.sin(p2));
+        k ? g.lineTo(X(l2 / RAD), Y(p2 / RAD)) : g.moveTo(X(l2 / RAD), Y(p2 / RAD));
+      }
+      g.closePath(); g.fillStyle = 'rgba(229,57,53,.42)'; g.fill(); g.strokeStyle = '#b71c1c'; g.lineWidth = 4; g.stroke();
+    }
+  }
+  if (P.spot) {
+    g.font = '900 72px Nunito, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 12; g.strokeStyle = 'rgba(255,255,255,.9)';
+    for (const [t, lon, lat, col] of [['Greenland', -41, 73.5, '#7a0b35'], ['Africa', 19, 9, '#6b4200']]) { g.strokeText(t, X(lon), Y(lat)); g.fillStyle = col; g.fillText(t, X(lon), Y(lat)); }
+  }
+  const gl = P.gl; if (!gl) return;
+  gl.bindTexture(gl.TEXTURE_2D, P.tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const an = gl.getExtension('EXT_texture_filter_anisotropic'); if (an) gl.texParameterf(gl.TEXTURE_2D, an.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(an.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+  P.dirty = true;
+}
+const smooth01 = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
+function peelDraw(P) {
+  const gl = P.gl, cv = P.cv, dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(cv.clientWidth * dpr)), h = Math.max(1, Math.round(cv.clientHeight * dpr));
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  const t1 = smooth01(P.t / .5), t2 = smooth01((P.t - .42) / .58), aspect = w / h;
+  // fit the Earth on screen at every step: it starts as a ball 2 wide and ends as a map 2π wide
+  const r = 1 / Math.max(1 - t2, .0005), halfW = 1 + t1 * ((Math.PI / r < Math.PI / 2 ? r * Math.sin(Math.PI / r) : r) - 1);
+  const halfH = 1 + t1 * (1.95 - .95 * P.projT);           // Mercator is 2.95 tall at 84°, Gall-Peters 2
+  const T = Math.tan(22 * RAD), f = 1 / T, bar = cv.clientWidth > 560 ? 84 : 0, sidePad = bar / cv.clientWidth;   // room for the zoom buttons on the left
+  const dist = Math.max(halfH * 1.18 / T, halfW * 1.08 / (T * aspect * (1 - sidePad))) / P.zoom + (1 - t1) * 1.1;
+  P.screenW = halfW * f / dist / aspect * cv.clientWidth; P.flatNow = t2 > .5; P.globeNow = t1 < .5;
+  gl.viewport(0, 0, w, h);
+  gl.clearColor(.933, .961, .98, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  const U = P.u;
+  gl.uniform1f(U.u_t1, t1); gl.uniform1f(U.u_t2, t2); gl.uniform1f(U.u_proj, P.projT); gl.uniform1f(U.u_c, P.c);
+  gl.uniform1f(U.u_tilt, P.tilt); gl.uniform1f(U.u_cz, t1 * t2); gl.uniform1f(U.u_dist, dist); gl.uniform1f(U.u_f, f); gl.uniform1f(U.u_aspect, aspect); gl.uniform1f(U.u_off, bar / cv.clientWidth);
+  gl.drawElements(gl.TRIANGLES, P.count, gl.UNSIGNED_SHORT, 0);
+}
+function peelTick(now) {
+  const P = PEEL; if (!peelOn || !P) return;
+  P.raf = requestAnimationFrame(peelTick);
+  const dt = Math.min((now - (P.last || now)) / 1000, .05); P.last = now;
+  if (P.playing) {
+    const step = dt * .22;                    // about 4½ seconds from globe to flat map
+    P.t = Math.abs(P.target - P.t) <= step ? P.target : P.t + Math.sign(P.target - P.t) * step;
+    if (P.t === P.target) { P.playing = false; P.stage = ''; }
+    const sl = $('#peelSl'); if (sl) sl.value = Math.round(P.t * 1000);
+    P.dirty = true;
+  }
+  const pt = P.proj === 'gp' ? 1 : 0;
+  if (P.projT !== pt) { P.projT = Math.abs(pt - P.projT) < dt * 1.6 ? pt : P.projT + Math.sign(pt - P.projT) * dt * 1.6; P.dirty = true; }
+  if (P.dirty && P.gl) { P.dirty = false; peelDraw(P); }
+  peelWords(P);
+}
+function peelStage(P) { return P.t < .03 ? 'globe' : P.t > .97 ? 'flat' : 'mid'; }
+function peelWords(P) {                       // the label on the map and the explanation in the panel follow the slider
+  const st = peelStage(P), key = st + P.proj + P.circles + P.spot;
+  if (key === P.stage) return;
+  P.stage = key;
+  const map = PEEL_MAPS[P.proj];
+  $('#peelSay').textContent = st === 'globe' ? '🌐 Globe' : st === 'flat' ? `🗺️ ${map} map` : '🌐 ➜ 🗺️ Peeling the globe open…';
+  $('#peelTip').textContent = st === 'flat' ? 'Drag to slide the map' : 'Drag to spin the globe';
+  const go = $('#peelGo'); if (go && !P.playing) go.textContent = P.t > .5 ? '◀ Wrap it back up' : '▶ Peel it open';
+  const fb = $('#fbox'); if (!fb) return;
+  const circ = P.circles, spot = P.spot;
+  let html;
+  if (st === 'globe') html = `<div class="fact"><b>On the globe</b>${spot ? 'Every place is its true size and shape. Africa is about <b>14 times bigger</b> than Greenland.' : 'Every place is its true size and shape.'}${circ ? ' All the red circles are exactly the same size.' : ''}</div>`;
+  else if (st === 'mid') html = `<div class="fact"><b>Peeling it open…</b>A ball can't lie flat without stretching. Watch the land near the North and South Poles being pulled wider to fill the gaps.</div>`;
+  else if (P.proj === 'merc') html = `<div class="fact"><b>Mercator map</b>${spot ? 'Now Greenland looks about as big as Africa, even a little bigger! Really, Africa is 14 times bigger. ' : ''}Mercator stretches places near the poles more and more. It can't show the North and South Poles at all.${circ ? ' The circles near the poles have grown much bigger, but they are still round: shapes stay right, which is why sailors liked this map.' : ''}</div>`;
+  else html = `<div class="fact"><b>Gall-Peters map</b>${spot ? 'Africa looks 14 times bigger than Greenland, just like on the globe: every place is its true size. But the shapes are wrong. Africa looks long and thin, and Greenland looks squashed.' : 'Every place is its true size, but the shapes are stretched or squashed.'}${circ ? ' Each circle still covers the same amount of land, but they have been squashed or stretched into ovals.' : ''}</div>`;
+  if (st === 'flat') html += `<div class="fact" style="background:var(--soft)"><b style="color:var(--blue-d)">Talk about it</b>${P.proj === 'merc' ? 'Now try the Gall-Peters map. Which map would you use to compare the size of countries?' : 'Why do you think we use flat maps, even though every flat map gets something wrong?'}</div>`;
+  fb.innerHTML = html;
+}
+function peelStart() {
+  if (S.map !== 'world') showMap('world');
+  ov.replaceChildren(); clearHL(); GL = null;
+  const P = PEEL || (PEEL = peelInit());
+  setPanel(globeHeader() + `<div class="qcard"><p class="q">A globe is the only map that shows every place at its <b>true size and shape</b>.</p>
+    <p class="hint" style="margin:0">Peel it open to make a flat map, and watch what happens to <b style="color:#c2185b">Greenland</b> and <b style="color:#b07000">Africa</b>.</p></div>
+    <button class="btn" id="peelGo">▶ Peel it open</button>
+    <label class="peelsl"><span>🌐 Globe</span><input type="range" id="peelSl" min="0" max="1000" value="${Math.round(P.t * 1000)}" aria-label="From globe to flat map"><span>🗺️ Flat</span></label>
+    <p class="ptitle">Flat map</p>
+    <div class="chips">${Object.entries(PEEL_MAPS).map(([k, n]) => `<button class="chip ${P.proj === k ? 'on' : ''}" data-pj="${k}">${n}</button>`).join('')}</div>
+    <div class="chips"><button class="chip ${P.spot ? 'on' : ''}" id="peelSpot">🔦 Greenland and Africa</button><button class="chip ${P.circles ? 'on' : ''}" id="peelCirc">⭕ Same-size circles</button></div>
+    <div id="fbox"></div>`);
+  wireGlobeHeader();
+  if (!P.gl) { $('#fbox').innerHTML = `<div class="fact"><b>Sorry</b>This device can't show the 3D globe. Try the "True size of countries" activity instead.</div>`; return; }
+  $('#peelGo').onclick = () => { P.target = P.t > .5 ? 0 : 1; P.playing = true; $('#peelGo').textContent = P.target ? '▶ Peeling…' : '◀ Wrapping…'; P.stage = ''; };
+  $('#peelSl').oninput = e => { P.t = e.target.value / 1000; P.playing = false; P.dirty = true; };
+  panel.querySelectorAll('[data-pj]').forEach(b => b.onclick = () => { P.proj = b.dataset.pj; S.peelProj = P.proj; save(); panel.querySelectorAll('[data-pj]').forEach(x => x.classList.toggle('on', x === b)); if (P.t < .03) { P.target = 1; P.playing = true; } });
+  $('#peelSpot').onclick = e => { P.spot = !P.spot; e.currentTarget.classList.toggle('on', P.spot); peelTexture(P); };
+  $('#peelCirc').onclick = e => { P.circles = !P.circles; e.currentTarget.classList.toggle('on', P.circles); peelTexture(P); };
+  P.wrap.hidden = false; document.body.classList.add('peeling');
+  peelOn = true; P.stage = ''; P.dirty = true; P.last = 0;
+  cancelAnimationFrame(P.raf); P.raf = requestAnimationFrame(peelTick);
+}
+function peelStop() {
+  if (!peelOn) return;
+  peelOn = false; document.body.classList.remove('peeling');
+  if (PEEL) { PEEL.wrap.hidden = true; PEEL.playing = false; cancelAnimationFrame(PEEL.raf); }
+}
+function peelHome() { Object.assign(PEEL, PEEL_HOME); PEEL.dirty = true; }
+
 /* ------------------------------------------------------------ printable worksheets */
 function printSheet() {
   const m = cur(); if (!m || S.map === 'merc') return toast('Choose the world, UK or an OS map first');
@@ -2560,6 +2779,7 @@ function searchLocal(id, x, y) {
 }
 /* ------------------------------------------------------------ mode switching */
 function startMode() {
+  peelStop();
   document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === S.mode));
   Q = C = G = null;
   { const m = cur(); if (m && m.L) m.force = null; }
@@ -2781,7 +3001,7 @@ function applyLink() {
   if (![...P.keys()].some(k => k !== 'v')) return null;
   // a link always starts from the same clean view, so every device shows exactly the same thing
   S.layers = JSON.parse(JSON.stringify(DEFAULTS.layers));
-  Object.assign(S, { simpleBiomes: false, llRound: 10, gridLevel: 0, mapKeyOff: false, findFlags: false, bigLabels: false, revision: true, count: 10, compassList: false });
+  Object.assign(S, { simpleBiomes: false, llRound: 10, gridLevel: 0, mapKeyOff: false, findFlags: false, bigLabels: false, revision: true, count: 10, compassList: false, peelProj: 'merc' });
   if (EMBED) S.mapKeyOff = true;               // a map inside a slide is small: no key box over it
   if (P.get('preset') === 'locations') {         // Year 5 Locations enquiry
     S.year = 5; S.revision = false; S.simpleBiomes = true; S.llRound = 1;
@@ -2801,6 +3021,7 @@ function applyLink() {
   if (P.get('biomes6')) S.simpleBiomes = P.get('biomes6') !== '0';
   if (P.get('labels') === 'big') S.bigLabels = true;
   if (P.get('rose')) S.compassList = P.get('rose') === 'off';
+  { const fl = PROJ_ALIAS[(P.get('flat') || '').replace(/[^a-z]/gi, '').toLowerCase()]; if (fl === 'merc' || fl === 'gp') S.peelProj = fl; }
   for (const [key, val] of [['layers', true], ['hide', false]]) for (const l of (P.get(key) || '').split(',').filter(Boolean)) {
     const a = LAYER_ALIAS[l.trim().toLowerCase()]; if (!a) continue;
     for (const g of a[0] === '*' ? ['world', 'uk', 'local'] : [a[0]]) S.layers[g][a[1]] = val;
@@ -2829,6 +3050,7 @@ function viewLink() {                          // a link that reopens exactly th
   if (S.simpleBiomes) P.set('biomes6', '1');
   if (S.bigLabels) P.set('labels', 'big');
   if (S.mode === 'compass' && S.compassList) P.set('rose', 'off');
+  if (S.mode === 'globe' && S.globeTask === 'peel') P.set('flat', PEEL && PEEL.proj === 'gp' ? 'gallpeters' : 'mercator');
   if (PROJ !== 'globe') P.set('view', [Math.round(V.cx), Math.round(V.cy), +(fitK(V.b.w, V.b.h) / V.k).toFixed(2)].join(','));
   return location.origin + location.pathname + '?' + P.toString().replace(/%2C/g, ',');
 }

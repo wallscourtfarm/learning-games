@@ -50,7 +50,7 @@ and `year=5&mode=os&map=wfa&task=give&level=6`, `year=5&mode=os&map=wfa&task=fin
 | `preset` | `locations` | Year 5 Locations setup: Year 5 only (no earlier years), the six biomes, nearest-degree latitude and longitude, latitude/longitude lines, Equator, tropics and polar circles |
 | `year` | `1`–`6`, `all` | Year group |
 | `mode` | `explore`, `find`, `os`, `compass`, `latlong` | Activity tab |
-| `task` | with `mode=os`: `give`, `find`, `symbols`, `far`, `high` · with `mode=latlong`: `read`, `plot`, `mycity`, `time`, `size` | Activity inside the tab |
+| `task` | with `mode=os`: `give`, `find`, `symbols`, `far`, `high` · with `mode=latlong`: `read`, `plot`, `mycity`, `time`, `peel` (globe to flat map, added 07.11.26a), `size` | Activity inside the tab |
 | `map` | `world`, `uk`, `wfa` (school area), `gorge` (Clifton and city centre), `penyfan`, `london` | Map |
 | `proj` | `gallpeters` (default), `mercator`, `globe`, `grid` | World map projection. `grid` = equal degrees of latitude and longitude (plate carrée), as used in the Locations lessons for compass directions |
 | `layers` | comma list: `grid` (latitude/longitude lines), `lines` (Equator, tropics, polar circles), `zones` (climate zones), `biomes`, `timezones`, `plates`, `colour`, `names`, `places`, `counties`, `regions`, `rivers`, `contours`, `symbols` | Turn layers on |
@@ -66,6 +66,7 @@ and `year=5&mode=os&map=wfa&task=give&level=6`, `year=5&mode=os&map=wfa&task=fin
 | `city` | with `task=mycity`: `Cairo`, `London`, `Moscow`, `New York`, `Paris`, `Rio de Janeiro`, `Singapore`, `Sydney`, `Tokyo`, `Murmansk`, `Johannesburg`, `Delhi`, `Xi'an`, `Lagos`, `Mexico City`, `Nairobi` (worked example) | Opens the city check on that city (Mumbai is an ordinary place, not in the check) |
 | `view` | `x,y,zoom` (made by "Copy link") | Exact map position |
 | `centre` | `longitude,latitude`, e.g. `0,30` | Globe only (`proj=globe`): turns the globe so this point faces the class (added 17.10.26a) |
+| `flat` | `mercator` (default), `gallpeters` | With `task=peel`: which flat map the globe peels into (added 07.11.26a) |
 | `embed` | `1` | Only the map: no top bar, panel or layer buttons, and the link does not change the settings saved on the device. For a map shown inside a lesson slide page (enquiry-builder `tools/slide-html`) (added 17.10.26a) |
 
 ## Ready-made links for the Year 5 Locations enquiry
