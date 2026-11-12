@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spelling Games — Wallscourt Farm Academy</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎯</text></svg>">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/wallscourtfarm/wfa-shared@main/web/wfa.css">
+<style>
+  :root { --max-w: 900px; --blue:#1798d3; --blue-dark:#0f6f9e; --navy:#12263a; --muted:#5b7a8a; }
+  .panel{
+    background:#fff; border-radius:16px; padding:20px 22px 24px; margin-bottom:22px;
+    box-shadow:0 8px 20px rgba(18,38,58,.08);
+  }
+  .hello{ font-size:18px; font-weight:800; margin-bottom:4px; }
+  .hello span{ color:var(--blue); }
+  .subtle{ font-size:13px; color:var(--muted); margin:0 0 14px; }
+
+  .year-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:12px; }
+  @media (max-width:560px){ .year-grid{ grid-template-columns:repeat(3,1fr); } }
+  .year-btn{
+    font-family:inherit; font-size:22px; font-weight:800; padding:20px 0; border-radius:16px;
+    border:none; cursor:pointer; background:var(--blue); color:#fff; box-shadow:0 6px 0 var(--blue-dark);
+  }
+  .year-btn small{ display:block; font-size:12px; font-weight:700; opacity:.85; }
+  .year-btn:active{ transform:translateY(4px); box-shadow:0 2px 0 var(--blue-dark); }
+
+  .rule-mini{ background:#eef7fc; border-radius:12px; padding:10px 12px; margin-bottom:8px; font-size:13.5px; line-height:1.4; }
+  .rule-mini b{ display:block; color:var(--blue-dark); margin-bottom:2px; }
+  .word-tags{ display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .word-tags span{ background:#f1f5f8; border-radius:999px; padding:4px 10px; font-size:13.5px; font-weight:700; }
+
+  .field-label{ display:block; font-size:12.5px; font-weight:700; margin:14px 0 5px; color:var(--muted); }
+  select{
+    width:100%; font-size:16px; padding:11px 12px; border-radius:10px;
+    border:2px solid #cfe2ec; outline:none; font-family:inherit; background:#fff; color:var(--navy);
+  }
+  .link-btn{
+    display:block; text-align:center; width:100%; margin-top:14px; font-size:13px; color:var(--muted);
+    background:none; border:none; cursor:pointer; text-decoration:underline; font-family:inherit;
+  }
+
+  .games-heading{ font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); margin:0 0 10px; }
+  a.card.off, div.card.off{ opacity:.55; cursor:default; pointer-events:none; background:#f5f8fa; }
+  .card .avail-note{ font-size:11.5px; font-weight:700; margin-top:4px; }
+  .card:not(.off) .avail-note{ color:#2fbf71; }
+  .card.off .avail-note{ color:#93a7b3; }
+  .empty-hint{ font-size:13.5px; color:var(--muted); padding:8px 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-content">
+    <img class="logo" src="https://cdn.jsdelivr.net/gh/wallscourtfarm/wfa-shared@main/web/wfa_logo.webp" alt="Wallscourt Farm Academy">
+    <div>
+      <h1>🎯 Spelling Games</h1>
+      <p>Tap your year group, then pick a game. No sign-in needed.</p>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- Step 1: pick a year group -->
+  <div class="panel" id="year-panel">
+    <div class="hello">Which year are you in?</div>
+    <p class="subtle">You'll get this week's spelling rule and words for your year.</p>
+    <div class="year-grid" id="year-grid"></div>
+  </div>
+
+  <!-- Step 2: this week's rule, words and games -->
+  <div id="main-panel" style="display:none;">
+    <div class="panel">
+      <div class="hello"><span id="year-name"></span> spelling</div>
+      <p class="subtle" id="week-name"></p>
+      <div id="rules"></div>
+      <div class="word-tags" id="words"></div>
+
+      <div id="week-picker">
+        <label class="field-label" for="pick-week">Want an earlier week?</label>
+        <select id="pick-week"></select>
+      </div>
+      <button class="link-btn" id="change-year">Change year group</button>
+    </div>
+
+    <div class="games-heading">Games</div>
+    <div class="grid" id="games-grid"></div>
+
+    <div class="games-heading" style="margin-top:22px;">Practise a common pattern (anytime)</div>
+    <div class="grid">
+      <a class="card" href="patterns/index.html">
+        <div class="card-icon">🧩</div>
+        <h3>Spelling Patterns</h3>
+        <p class="avail-note" style="color:#2fbf71;">✓ K/CK, CH/TCH, doubling consonants, plurals and more</p>
+      </a>
+    </div>
+  </div>
+</main>
+
+<div class="footer">
+  Wallscourt Farm Academy &mdash; Part of Cabot Learning Federation &middot; WFA-12.11.26a
+</div>
+
+<script src="../lessons-data.js"></script>
+<script src="../spelling-pool.js"></script>
+<script src="open.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let year = "", term = "", week = "";
+
+$("year-grid").innerHTML = OPEN_YEARS.map(y =>
+  `<button class="year-btn" data-year="${y}"><small>Year</small>${y.slice(1)}</button>`).join("");
+$("year-grid").querySelectorAll(".year-btn").forEach(b =>
+  b.addEventListener("click", () => chooseYear(b.dataset.year)));
+
+function weekLabel(t, w) { return `${TERM_LABELS[t] || t}, Week ${w.replace("W", "")}`; }
+
+function chooseYear(y, t, w) {
+  year = y;
+  const weeks = spGetAvailableWeeksForYear(year, CURRENT_WEEK);
+  const wanted = weeks.find(x => x.term === t && x.week === w);
+  const pick = wanted || openDefaultWeek(year);
+  term = pick ? pick.term : CURRENT_WEEK.term;
+  week = pick ? pick.week : CURRENT_WEEK.week;
+
+  $("pick-week").innerHTML = weeks.length
+    ? weeks.slice().reverse().map(x => `<option value="${x.term}|${x.week}" ${x.term === term && x.week === week ? "selected" : ""}>${weekLabel(x.term, x.week)}</option>`).join("")
+    : "";
+  $("week-picker").style.display = weeks.length > 1 ? "block" : "none";
+  render();
+}
+
+function render() {
+  const pool = spGetWeekPool(year, term, week);
+  $("year-name").textContent = "Year " + year.slice(1);
+  const isThisWeek = term === CURRENT_WEEK.term && week === CURRENT_WEEK.week;
+  $("week-name").textContent = pool.words.length
+    ? weekLabel(term, week) + (isThisWeek ? " — this week" : "")
+    : "There are no Year " + year.slice(1) + " spelling words for this week yet. These games still work:";
+  $("rules").innerHTML = pool.rules.map(r =>
+    `<div class="rule-mini"><b>${esc(r.focus || "This week's pattern")}</b>${esc(r.explanation)}</div>`).join("");
+  $("words").innerHTML = pool.words.map(w => `<span>${esc(w)}</span>`).join("");
+
+  const q = new URLSearchParams({ u: OPEN_PLAYER_ID, y: year, t: term, w: week }).toString();
+  try { history.replaceState(null, "", location.pathname + "?" + q); } catch (e) {}
+
+  $("games-grid").innerHTML = GAMES.map(game => {
+    const ok = !game.isAvailable || game.isAvailable(year, term, week);
+    const tag = `<div class="card-icon">${game.icon}</div><h3>${game.label}</h3><p class="avail-note">${ok ? "✓ Ready to play" : "Not this week"}</p>`;
+    return ok ? `<a class="card" href="${game.path}?${q}">${tag}</a>` : `<div class="card off">${tag}</div>`;
+  }).join("");
+
+  $("year-panel").style.display = "none";
+  $("main-panel").style.display = "block";
+}
+
+$("pick-week").addEventListener("change", () => {
+  const v = $("pick-week").value;
+  if (!v) return;
+  [term, week] = v.split("|");
+  render();
+});
+$("change-year").addEventListener("click", () => {
+  try { history.replaceState(null, "", location.pathname); } catch (e) {}
+  $("main-panel").style.display = "none";
+  $("year-panel").style.display = "block";
+});
+
+// Coming back from a game keeps the year (and week) that was picked.
+const params = new URLSearchParams(location.search);
+if (OPEN_YEARS.includes(params.get("y"))) chooseYear(params.get("y"), params.get("t"), params.get("w"));
+</script>
+</body>
+</html>
